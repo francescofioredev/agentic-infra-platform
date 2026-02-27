@@ -3,3 +3,10 @@
 
 # Local Claude Code settings (personal permissions, not for distribution)
 .claude/settings.local.json
+/.idea/.gitignore
+/.idea/agentic-infra-platform.iml
+/.idea/aws.xml
+/.idea/copilot.data.migration.ask2agent.xml
+/.idea/misc.xml
+/.idea/modules.xml
+/.idea/vcs.xml
