@@ -18,31 +18,31 @@ This subsystem is classified as **high-risk** because it produces and executes a
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                    Code Generation Tools Subsystem                    │
+│                    Code Generation Tools Subsystem                   │
 │                                                                      │
-│  ┌────────────┐   ┌────────────┐   ┌────────────┐   ┌────────────┐ │
-│  │  Code      │──>│  Code      │──>│  Test      │──>│  Code      │ │
-│  │  Generator │   │  Reviewer  │   │  Runner    │   │  Executor  │ │
-│  │  (LLM)    │   │  (LLM)    │   │  (Sandbox) │   │  (Sandbox) │ │
-│  └─────┬──────┘   └─────┬──────┘   └─────┬──────┘   └─────┬──────┘ │
-│        │                │                │                │         │
-│        └────────────────┴────────────────┴────────────────┘         │
+│  ┌────────────┐   ┌────────────┐   ┌────────────┐   ┌────────────┐   │
+│  │  Code      │──>│  Code      │──>│  Test      │──>│  Code      │   │
+│  │  Generator │   │  Reviewer  │   │  Runner    │   │  Executor  │   │
+│  │  (LLM)     │   │  (LLM)     │   │  (Sandbox) │   │  (Sandbox) │   │
+│  └─────┬──────┘   └─────┬──────┘   └─────┬──────┘   └─────┬──────┘   │
+│        │                │                │                │          │
+│        └────────────────┴────────────────┴────────────────┘          │
 │                              │                                       │
 │                    ┌─────────┴──────────┐                            │
 │                    │  Reflection Loop   │                            │
 │                    │  Controller        │                            │
 │                    └────────────────────┘                            │
 │                                                                      │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  MCP Server (FastMCP)                                        │   │
-│  │  Tools: generate_code | execute_code | review_code |         │   │
-│  │         run_tests | refine_code                              │   │
-│  └──────────────────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────────────────┐    │
+│  │  MCP Server (FastMCP)                                        │    │
+│  │  Tools: generate_code | execute_code | review_code |         │    │
+│  │         run_tests | refine_code                              │    │
+│  └──────────────────────────────────────────────────────────────┘    │
 │                                                                      │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  Sandbox Manager (Firecracker / gVisor)                      │   │
-│  │  Resource Limits | Network Isolation | Filesystem Jailing    │   │
-│  └──────────────────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────────────────┐    │
+│  │  Sandbox Manager (Firecracker / gVisor)                      │    │
+│  │  Resource Limits | Network Isolation | Filesystem Jailing    │    │
+│  └──────────────────────────────────────────────────────────────┘    │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -57,8 +57,8 @@ The pipeline follows a linear-then-iterative flow: **Prompt --> Generate --> Rev
 ```
  ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
  │  Prompt  │────>│ Generate │────>│  Review  │────>│   Test   │
- │ (User    │     │ (LLM)   │     │ (Critic) │     │ (Sandbox)│
- │  Spec)   │     │         │     │          │     │          │
+ │ (User    │     │ (LLM)    │     │ (Critic) │     │ (Sandbox)│
+ │  Spec)   │     │          │     │          │     │          │
  └──────────┘     └──────────┘     └────┬─────┘     └────┬─────┘
                                         │                │
                                         │   ┌────────────┘
@@ -302,22 +302,22 @@ All code execution occurs inside a sandbox that enforces the **Least Privilege**
 │  ┌─────────────────────────────────────────────────────┐ │
 │  │  Sandbox Manager                                    │ │
 │  │                                                     │ │
-│  │  ┌──────────────┐  ┌──────────────┐                │ │
-│  │  │ MicroVM A    │  │ MicroVM B    │   ...          │ │
-│  │  │ (Firecracker)│  │ (Firecracker)│                │ │
-│  │  │              │  │              │                │ │
-│  │  │  ┌────────┐  │  │  ┌────────┐  │                │ │
-│  │  │  │ User   │  │  │  │ User   │  │                │ │
-│  │  │  │ Code   │  │  │  │ Code   │  │                │ │
-│  │  │  └────────┘  │  │  └────────┘  │                │ │
-│  │  │              │  │              │                │ │
-│  │  │  Resources:  │  │  Resources:  │                │ │
-│  │  │  CPU: 1 core │  │  CPU: 1 core │                │ │
-│  │  │  RAM: 256MB  │  │  RAM: 256MB  │                │ │
-│  │  │  Disk: 100MB │  │  Disk: 100MB │                │ │
-│  │  │  Net: NONE   │  │  Net: NONE   │                │ │
-│  │  │  Time: 30s   │  │  Time: 30s   │                │ │
-│  │  └──────────────┘  └──────────────┘                │ │
+│  │  ┌──────────────┐  ┌──────────────┐                 │ │
+│  │  │ MicroVM A    │  │ MicroVM B    │   ...           │ │
+│  │  │ (Firecracker)│  │ (Firecracker)│                 │ │
+│  │  │              │  │              │                 │ │
+│  │  │  ┌────────┐  │  │  ┌────────┐  │                 │ │
+│  │  │  │ User   │  │  │  │ User   │  │                 │ │
+│  │  │  │ Code   │  │  │  │ Code   │  │                 │ │
+│  │  │  └────────┘  │  │  └────────┘  │                 │ │
+│  │  │              │  │              │                 │ │
+│  │  │  Resources:  │  │  Resources:  │                 │ │
+│  │  │  CPU: 1 core │  │  CPU: 1 core │                 │ │
+│  │  │  RAM: 256MB  │  │  RAM: 256MB  │                 │ │
+│  │  │  Disk: 100MB │  │  Disk: 100MB │                 │ │
+│  │  │  Net: NONE   │  │  Net: NONE   │                 │ │
+│  │  │  Time: 30s   │  │  Time: 30s   │                 │ │
+│  │  └──────────────┘  └──────────────┘                 │ │
 │  └─────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -596,16 +596,16 @@ The security review is particularly critical for a code generation system. The r
 │  Generated   │────>│  Code Review Agent (Critic, p. 65)      │
 │  Code        │     │                                         │
 └──────────────┘     │  1. Static analysis (AST-based)         │
-                     │  2. LLM-based semantic review            │
-                     │  3. Security pattern matching             │
-                     │  4. Style/lint check                      │
+                     │  2. LLM-based semantic review           │
+                     │  3. Security pattern matching           │
+                     │  4. Style/lint check                    │
                      │                                         │
-                     │  Output: ReviewResult                    │
-                     │    - approved: bool                      │
-                     │    - scores: {correctness, security,     │
-                     │               style, efficiency}         │
-                     │    - issues: [{severity, description,    │
-                     │               line, suggestion}]         │
+                     │  Output: ReviewResult                   │
+                     │    - approved: bool                     │
+                     │    - scores: {correctness, security,    │
+                     │               style, efficiency}        │
+                     │    - issues: [{severity, description,   │
+                     │               line, suggestion}]        │
                      └─────────────────────────────────────────┘
 ```
 
@@ -641,13 +641,13 @@ Tests can originate from three sources:
                                                 │
                                     ┌───────────┴───────────┐
                                     │                       │
-                               ┌────┴─────┐          ┌─────┴────┐
-                               │  PASS    │          │  FAIL    │
-                               │          │          │          │
-                               │  -> next │          │  -> feed │
-                               │  stage   │          │  back to │
-                               │          │          │  generator│
-                               └──────────┘          └──────────┘
+                               ┌────┴─────┐           ┌─────┴──────┐
+                               │  PASS    │           │  FAIL      │
+                               │          │           │            │
+                               │  -> next │           │  -> feed   │
+                               │  stage   │           │  back to   │
+                               │          │           │  generator │
+                               └──────────┘           └────────────┘
 ```
 
 ### 5.3 Result Interpretation
@@ -999,7 +999,7 @@ The security model for code generation applies **defense-in-depth** (System Over
 │  Layer 1: Pre-Execution Validation                             │
 │  - AST-based import analysis                                   │
 │  - Static security scan (bandit, semgrep)                      │
-│  - Known vulnerability pattern matching                         │
+│  - Known vulnerability pattern matching                        │
 │  - Reject code before it ever reaches the sandbox              │
 ├────────────────────────────────────────────────────────────────┤
 │  Layer 2: Sandbox Isolation (Least Privilege, p. 288)          │
@@ -1008,17 +1008,17 @@ The security model for code generation applies **defense-in-depth** (System Over
 │  - Read-only rootfs + tmpfs workspace                          │
 │  - No host PID/network/IPC namespace sharing                   │
 ├────────────────────────────────────────────────────────────────┤
-│  Layer 3: Resource Limits                                       │
+│  Layer 3: Resource Limits                                      │
 │  - cgroup CPU, memory, pids limits                             │
 │  - Wall-clock timeout with SIGKILL                             │
 │  - tmpfs disk quota                                            │
 ├────────────────────────────────────────────────────────────────┤
-│  Layer 4: Network Isolation                                     │
+│  Layer 4: Network Isolation                                    │
 │  - Network disabled by default (no veth)                       │
 │  - Optional allowlist-only egress via proxy                    │
-│  - Network access requires HITL approval (p. 213)             │
+│  - Network access requires HITL approval (p. 213)              │
 ├────────────────────────────────────────────────────────────────┤
-│  Layer 5: Output Sanitization (Untrusted, p. 289)             │
+│  Layer 5: Output Sanitization (Untrusted, p. 289)              │
 │  - Strip ANSI escape codes                                     │
 │  - Truncate to maximum output size                             │
 │  - Remove filesystem paths, system metadata                    │
@@ -1065,11 +1065,11 @@ Human-in-the-loop gates (p. 207-215) are placed at decision points where the ris
 │  execution   │     │  - Formats context │     │  - Sees code     │
 │              │     │  - Sets timeout    │     │  - Sees risk     │
 │              │     │  - Queues request  │     │  - Approves or   │
-│              │     │                    │     │    denies         │
+│              │     │                    │     │    denies        │
 └──────────────┘     └────────┬───────────┘     └────────┬─────────┘
                               │                          │
-                              │  ┌──────────────────┐    │
-                              └─>│  Decision         │<──┘
+                              │  ┌────────────────────┐  │
+                              └─>│  Decision          │<─┘
                                  │                    │
                                  │  approved -> exec  │
                                  │  denied -> block   │

@@ -24,12 +24,12 @@ AgentForge uses a **Hierarchical Supervisor** topology across three levels, with
 
 ```
                     ┌─────────────────────────┐
-                    │   Platform Orchestrator  │  Level 0 — Global routing
-                    │   (LLM-based router)     │  via cheap/fast model
+                    │   Platform Orchestrator │  Level 0 — Global routing
+                    │   (LLM-based router)    │  via cheap/fast model
                     └────────────┬────────────┘
                                  │
-               ┌─────────────────┼─────────────────┐
-               │                 │                 │
+               ┌─────────────────┼────────────────┐
+               │                 │                │
       ┌────────┴───────┐ ┌───────┴──────┐ ┌───────┴────────┐
       │  Team Alpha    │ │  Team Beta   │ │  Team Gamma    │  Level 1 — Team
       │  Supervisor    │ │  Supervisor  │ │  Supervisor    │  coordination

@@ -25,21 +25,21 @@ The **Team Orchestrator** is the core composition engine of the AgentForge platf
 The Team Orchestrator operates at **Level 1** of the platform hierarchy (see System Overview, Section 3.1). It receives dispatched requests from the Level 0 Platform Orchestrator and coordinates Level 2 Worker Agents to fulfill them.
 
 ```
-                        ┌──────────────────────────┐
+                        ┌───────────────────────────┐
                         │  Platform Orchestrator    │  Level 0
                         │  (routes request to team) │
-                        └────────────┬─────────────┘
+                        └────────────┬──────────────┘
                                      │
                     ┌────────────────┼────────────────┐
-                    │                │                 │
-           ┌────────┴────────┐ ┌────┴──────┐ ┌───────┴────────┐
+                    │                │                │
+           ┌────────┴─────────┐ ┌────┴──────┐ ┌───────┴────────┐
            │ Team Orchestrator│ │  Team     │ │  Team          │  Level 1
-           │  Alpha          │ │  Beta     │ │  Gamma         │
-           │  (THIS DOC)     │ │           │ │                │
-           └──┬───┬───┬──────┘ └───────────┘ └────────────────┘
+           │  Alpha           │ │  Beta     │ │  Gamma         │
+           │  (THIS DOC)      │ │           │ │                │
+           └──┬───┬───┬───────┘ └───────────┘ └────────────────┘
               │   │   │
              ┌┘   │   └┐
-             A1   A2   A3   Worker Agents                        Level 2
+             A1   A2   A3   Worker Agents                         Level 2
 ```
 
 **Core responsibilities**:
@@ -211,7 +211,7 @@ A single supervisor agent receives all tasks, delegates to workers, and aggregat
                  ┌─────────────────────┐
                  │     Supervisor      │
                  │  (routes & aggreg.) │
-                 └──┬──────┬──────┬───┘
+                 └──┬──────┬──────┬────┘
                     │      │      │
                ┌────┘      │      └────┐
                │           │           │
@@ -249,12 +249,12 @@ All agents can communicate with any other agent. No single coordinator. Agents n
           └──┬───┬──┘
              │   │
      ┌───────┘   └───────┐
-     │                    │
+     │                   │
 ┌────┴────┐          ┌───┴─────┐
 │Agent B  │◄────────►│Agent C  │
 └────┬────┘          └───┬─────┘
-     │                    │
-     └───────┐   ┌────────┘
+     │                   │
+     └───────┐   ┌───────┘
              │   │
           ┌──┴───┴──┐
           │Agent D  │
@@ -287,15 +287,15 @@ Multiple levels of supervisors forming a tree. A top-level supervisor delegates 
                     │  Top Supervisor   │  Level 0
                     └───────┬───────────┘
                             │
-               ┌────────────┼────────────┐
-               │                         │
-      ┌────────┴────────┐     ┌──────────┴──────────┐
+               ┌────────────┼─────────────┐
+               │                          │
+      ┌────────┴─────────┐     ┌──────────┴──────────┐
       │ Sub-Supervisor A │     │ Sub-Supervisor B    │  Level 1
-      └──┬─────────┬────┘     └──┬─────────┬────────┘
+      └──┬─────────┬─────┘     └──┬─────────┬────────┘
          │         │              │         │
-    ┌────┴──┐ ┌────┴──┐    ┌─────┴──┐ ┌────┴──┐
-    │Wkr A1 │ │Wkr A2 │    │Wkr B1  │ │Wkr B2 │      Level 2
-    └───────┘ └───────┘    └────────┘ └───────┘
+    ┌────┴──┐ ┌────┴──┐     ┌─────┴──┐ ┌────┴──┐
+    │Wkr A1 │ │Wkr A2 │     │Wkr B1  │ │Wkr B2 │        Level 2
+    └───────┘ └───────┘     └────────┘ └───────┘
 ```
 
 **When to use**: Large, complex tasks requiring domain specialization at multiple levels. Each sub-supervisor owns a domain (e.g., "research" vs. "writing").
@@ -360,19 +360,19 @@ Multiple agents process the same input independently, and an aggregator collects
 ```
                     ┌──────────────┐
                     │  Dispatcher  │
-                    └──┬───┬───┬──┘
+                    └──┬───┬───┬───┘
                        │   │   │           (same input to all)
               ┌────────┘   │   └────────┐
               │            │            │
-         ┌────┴────┐  ┌───┴─────┐  ┌───┴─────┐
-         │Agent A  │  │Agent B  │  │Agent C  │
-         │(model X)│  │(model Y)│  │(model Z)│
-         └────┬────┘  └───┬─────┘  └───┬─────┘
+         ┌────┴────┐   ┌───┴─────┐  ┌───┴─────┐
+         │Agent A  │   │Agent B  │  │Agent C  │
+         │(model X)│   │(model Y)│  │(model Z)│
+         └────┬────┘   └───┬─────┘  └───┬─────┘
               │            │            │
               └────────┐   │   ┌────────┘
                        │   │   │
                     ┌──┴───┴───┴──┐
-                    │  Aggregator  │    (majority vote / scoring)
+                    │  Aggregator │     (majority vote / scoring)
                     └─────────────┘
 ```
 
@@ -777,9 +777,9 @@ DAG visualization:
   ┌────────┐   ┌────────┐   ┌────────┐
   │ step-1 │   │ step-2 │   │ step-3 │    Parallel: no dependencies
   └───┬────┘   └───┬────┘   └───┬────┘
-      │            │             │
-      └─────┬──────┘             │
-            │                    │
+      │            │            │
+      └─────┬──────┘            │
+            │                   │
        ┌────┴────┐          ┌───┴─────┐
        │ step-4  │          │ step-5  │    Parallel: independent groups
        └────┬────┘          └───┬─────┘
@@ -972,9 +972,9 @@ Execution waves:
   Wave 2: [step-6]                   ← waits for 4,5
 
 Timeline:
-  t=0   ┌─step-1─┐  ┌──step-2──┐  ┌─step-3──────────┐
+  t=0   ┌─step-1─┐  ┌──step-2──┐  ┌─step-3────────────┐
   t=1   └────────┘  └──────────┘  │                   │
-  t=2                              └──────────────────┘
+  t=2                             └───────────────────┘
   t=3            ┌──step-4──┐           ┌──step-5──┐
   t=4            └──────────┘           └──────────┘
   t=5                    ┌─────step-6─────┐

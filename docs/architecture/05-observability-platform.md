@@ -503,101 +503,101 @@ The platform provides four tiers of dashboards, each targeting a different audie
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    EXECUTIVE OVERVIEW                                │
+│                    EXECUTIVE OVERVIEW                               │
 │  Audience: Leadership    Refresh: 1 hour    Scope: Platform-wide    │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│  ┌─────────────┐  ┌──────────────┐  ┌───────────┐  ┌────────────┐ │
-│  │ Task Success│  │  Avg Latency │  │ Total Cost│  │  Error Rate│ │
-│  │   94.2%     │  │   2.3s       │  │  $127/day │  │   1.8%     │ │
-│  │   ▲ +1.1%  │  │   ▼ -180ms  │  │   ▼ -$12  │  │   ▼ -0.3% │ │
-│  └─────────────┘  └──────────────┘  └───────────┘  └────────────┘ │
+│  ┌─────────────┐  ┌──────────────┐  ┌───────────┐  ┌────────────┐   │
+│  │ Task Success│  │  Avg Latency │  │ Total Cost│  │  Error Rate│   │
+│  │   94.2%     │  │   2.3s       │  │  $127/day │  │   1.8%     │   │
+│  │   ▲ +1.1%   │  │   ▼ -180ms   │  │   ▼ -$12  │  │   ▼ -0.3%  │   │
+│  └─────────────┘  └──────────────┘  └───────────┘  └────────────┘   │
 │                                                                     │
 │  7-Day Trend:                                                       │
-│  Success ████████████████████████████████████░░ 94.2%              │
-│  Latency ██████████░░░░░░░░░░░░░░░░░░░░░░░░░░ 2.3s               │
-│  Cost    ████████████████░░░░░░░░░░░░░░░░░░░░ $127/d              │
+│  Success ████████████████████████████████████░░ 94.2%               │
+│  Latency ██████████░░░░░░░░░░░░░░░░░░░░░░░░░░ 2.3s                  │
+│  Cost    ████████████████░░░░░░░░░░░░░░░░░░░░ $127/d                │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────┐
-│                   TEAM OPERATIONS                                    │
+│                   TEAM OPERATIONS                                   │
 │  Audience: Team Leads    Refresh: 1 min     Scope: Per-team         │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  Team: analytics (3 agents)                                         │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │  Requests/min   Latency (p50/p95/p99)   Token Burn Rate    │   │
-│  │     12.4            1.2s / 3.8s / 8.1s      ~2400 tok/req  │   │
-│  └─────────────────────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │  Requests/min   Latency (p50/p95/p99)   Token Burn Rate     │    │
+│  │     12.4            1.2s / 3.8s / 8.1s      ~2400 tok/req   │    │
+│  └─────────────────────────────────────────────────────────────┘    │
 │                                                                     │
 │  Agent Breakdown:                                                   │
-│  ┌──────────────┬─────────┬──────────┬──────────┬───────────────┐  │
-│  │ Agent        │ Success │ Latency  │ Tokens   │ Errors (1h)   │  │
-│  ├──────────────┼─────────┼──────────┼──────────┼───────────────┤  │
-│  │ DataFetch-A1 │  97.1%  │  890ms   │   800    │     2         │  │
-│  │ Analysis-A2  │  91.3%  │  3.8s    │  2750    │     8         │  │
-│  │ Report-A3    │  95.8%  │  1.2s    │  1200    │     3         │  │
-│  └──────────────┴─────────┴──────────┴──────────┴───────────────┘  │
+│  ┌──────────────┬─────────┬──────────┬──────────┬───────────────┐   │
+│  │ Agent        │ Success │ Latency  │ Tokens   │ Errors (1h)   │   │
+│  ├──────────────┼─────────┼──────────┼──────────┼───────────────┤   │
+│  │ DataFetch-A1 │  97.1%  │  890ms   │   800    │     2         │   │
+│  │ Analysis-A2  │  91.3%  │  3.8s    │  2750    │     8         │   │
+│  │ Report-A3    │  95.8%  │  1.2s    │  1200    │     3         │   │
+│  └──────────────┴─────────┴──────────┴──────────┴───────────────┘   │
 │                                                                     │
 │  Active Guardrail Interventions (last 1h): 3                        │
-│  ├── no-pii-output: 2 (blocked)                                    │
-│  └── sql-injection-guard: 1 (blocked)                              │
+│  ├── no-pii-output: 2 (blocked)                                     │
+│  └── sql-injection-guard: 1 (blocked)                               │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    TRACE EXPLORER                                    │
+│                    TRACE EXPLORER                                   │
 │  Audience: Engineers     Refresh: Real-time  Scope: Per-request     │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│  Trace: tr-8f3a2b  Duration: 5.2s  Tokens: 3550  Cost: $0.013     │
+│  Trace: tr-8f3a2b  Duration: 5.2s  Tokens: 3550  Cost: $0.013       │
 │                                                                     │
 │  Timeline (Gantt):                                                  │
 │  0s        1s        2s        3s        4s        5s               │
-│  |─────────|─────────|─────────|─────────|─────────|               │
+│  |─────────|─────────|─────────|─────────|─────────|                │
 │  [==Router==]                                                       │
 │     [=======Supervisor=Planning==========================]          │
 │        [==DataFetch-A1==]                                           │
 │           [sql_query]                                               │
 │                    [========Analysis-A2================]            │
 │                       [python_exec]                                 │
-│                                [===LLM:interpret===]               │
-│                                                   [=Agg=]          │
-│                                                      [GR]          │
+│                                [===LLM:interpret===]                │
+│                                                   [=Agg=]           │
+│                                                      [GR]           │
 │                                                                     │
 │  Decision Log (this trace):                                         │
-│  14:32:18.442  ROUTE   -> team-analytics (conf: 0.94)              │
-│  14:32:18.630  PLAN    -> [fetch, analyze, report]                 │
-│  14:32:19.100  TOOL    -> sql_query (DataFetch-A1)                 │
-│  14:32:19.800  TOOL    -> python_exec (Analysis-A2)                │
-│  14:32:21.000  LLM     -> interpret results (sonnet)               │
-│  14:32:23.100  GUARD   -> no-pii-output: compliant                 │
-│  14:32:23.200  GOAL    -> goals_met(): true                        │
+│  14:32:18.442  ROUTE   -> team-analytics (conf: 0.94)               │
+│  14:32:18.630  PLAN    -> [fetch, analyze, report]                  │
+│  14:32:19.100  TOOL    -> sql_query (DataFetch-A1)                  │
+│  14:32:19.800  TOOL    -> python_exec (Analysis-A2)                 │
+│  14:32:21.000  LLM     -> interpret results (sonnet)                │
+│  14:32:23.100  GUARD   -> no-pii-output: compliant                  │
+│  14:32:23.200  GOAL    -> goals_met(): true                         │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    SAFETY & COMPLIANCE                               │
+│                    SAFETY & COMPLIANCE                              │
 │  Audience: Safety Team   Refresh: 1 min     Scope: Platform-wide    │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  Guardrail Interventions (24h): 47                                  │
-│  ┌────────────────────────────────────────────────────────────┐    │
-│  │  ▏        *                                                │    │
-│  │  ▏       * *     Interventions/hour                        │    │
-│  │  ▏  *  *   *  *                                            │    │
-│  │  ▏ * **     ** * *    *                                    │    │
-│  │  ▏*              * ** * *  *                               │    │
-│  │  ▏─────────────────────────────────── threshold: 5/hr     │    │
-│  │  └──────────────────────────────────────────── time ──►   │    │
-│  └────────────────────────────────────────────────────────────┘    │
+│  ┌────────────────────────────────────────────────────────────┐     │
+│  │  ▏        *                                                │     │
+│  │  ▏       * *     Interventions/hour                        │     │
+│  │  ▏  *  *   *  *                                            │     │
+│  │  ▏ * **     ** * *    *                                    │     │
+│  │  ▏*              * ** * *  *                               │     │
+│  │  ▏─────────────────────────────────── threshold: 5/hr      │     │
+│  │  └──────────────────────────────────────────── time ──►    │     │
+│  └────────────────────────────────────────────────────────────┘     │
 │                                                                     │
-│  Policy Breakdown:               HITL Escalations (24h): 3         │
-│  no-pii-output:        18        ├── high-stakes-decision: 2       │
-│  sql-injection-guard:  12        └── unrecoverable-error: 1        │
+│  Policy Breakdown:               HITL Escalations (24h): 3          │
+│  no-pii-output:        18        ├── high-stakes-decision: 2        │
+│  sql-injection-guard:  12        └── unrecoverable-error: 1         │
 │  content-safety:        9                                           │
-│  rate-limit-guard:      5        Safety Score: 98.7% compliant     │
+│  rate-limit-guard:      5        Safety Score: 98.7% compliant      │
 │  forbidden-action:      3                                           │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
@@ -833,9 +833,9 @@ ALERT_RULES: list[AlertRule] = [
 ### 6.4 Alert Lifecycle
 
 ```
-┌──────────┐     ┌───────────┐     ┌─────────────┐     ┌──────────┐
+┌──────────┐     ┌───────────┐     ┌──────────────┐     ┌──────────┐
 │ Pending  │────>│  Firing   │────>│ Acknowledged │────>│ Resolved │
-└──────────┘     └───────────┘     └─────────────┘     └──────────┘
+└──────────┘     └───────────┘     └──────────────┘     └──────────┘
                       │                                       │
                       │            ┌──────────┐               │
                       └───────────>│Suppressed│───────────────┘
@@ -886,7 +886,7 @@ Example: Execution graph for trace tr-8f3a2b
   │DataFetch  │ │ Analysis-A2  │
   │Agent A1   │ │              │
   │model:haiku│ │ model:sonnet │
-  └─────┬─────┘ └──┬───────┬──┘
+  └─────┬─────┘ └──┬───────┬───┘
         │          │       │
         ▼          ▼       ▼
   ┌──────────┐ ┌────────┐ ┌────────────┐
@@ -1082,31 +1082,31 @@ CREATE TABLE exception_log (
 ### 8.5 Storage Tier Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────┐
 │                     HOT TIER                             │
-│  Storage: ClickHouse (NVMe SSD)                         │
+│  Storage: ClickHouse (NVMe SSD)                          │
 │  Data: Last 24 hours at full resolution                  │
 │  Access: Real-time dashboards, live alerting             │
 │  Query latency target: < 100ms for standard queries      │
-├─────────────────────────────────────────────────────────┤
+├──────────────────────────────────────────────────────────┤
 │                     WARM TIER                            │
 │  Storage: ClickHouse (SSD)                               │
 │  Data: 1 day - 90 days at pre-aggregated resolution      │
 │  Access: Historical dashboards, trend analysis           │
 │  Query latency target: < 1s                              │
-├─────────────────────────────────────────────────────────┤
+├──────────────────────────────────────────────────────────┤
 │                     COLD TIER                            │
 │  Storage: Object Store (S3 / MinIO) as Parquet files     │
 │  Data: 90 days - 3 years (audit log retained longer)     │
-│  Access: Compliance audits, forensic investigation        │
-│  Query latency target: < 30s (ad-hoc via Trino/DuckDB)  │
-├─────────────────────────────────────────────────────────┤
-│                    ARCHIVE TIER                           │
+│  Access: Compliance audits, forensic investigation       │
+│  Query latency target: < 30s (ad-hoc via Trino/DuckDB)   │
+├──────────────────────────────────────────────────────────┤
+│                    ARCHIVE TIER                          │
 │  Storage: Glacier / cold object store                    │
 │  Data: > 3 years (decision audit log only)               │
 │  Access: Legal holds, regulatory compliance              │
 │  Query latency: Minutes to hours                         │
-└─────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -1650,8 +1650,8 @@ Response:
 ### 12.4 Self-Monitoring Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                  AgentForge Subsystems                         │
+┌───────────────────────────────────────────────────────────────┐
+│                  AgentForge Subsystems                        │
 │  (Agent Builder, Team Orchestrator, Guardrails, etc.)         │
 │                                                               │
 │  Each subsystem embeds:                                       │
@@ -1665,28 +1665,28 @@ Response:
 └───────────────┼───────────────────────────────────────────────┘
                 │
                 ▼
-┌──────────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────────┐
 │              OTel Collector Cluster (3 replicas)              │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐                   │
-│  │ Receiver │  │ Processor│  │ Exporter │                    │
-│  │ (gRPC)   │──│ (batch,  │──│ (OTLP,   │                   │
-│  │          │  │  filter, │  │  Click-   │                   │
-│  │          │  │  sample) │  │  House)   │                   │
-│  └──────────┘  └──────────┘  └──────────┘                   │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐                     │
+│  │ Receiver │  │ Processor│  │ Exporter │                     │
+│  │ (gRPC)   │──│ (batch,  │──│ (OTLP,   │                     │
+│  │          │  │  filter, │  │  Click-  │                     │
+│  │          │  │  sample) │  │  House)  │                     │
+│  └──────────┘  └──────────┘  └──────────┘                     │
 │                                    │                          │
 │  Meta-metrics emitter ─────────────┼── obs.* metrics          │
 └────────────────────────────────────┼──────────────────────────┘
                                      │
                     ┌────────────────┼───────────────┐
                     ▼                ▼               ▼
-             ┌───────────┐   ┌───────────┐   ┌───────────┐
-             │ClickHouse │   │   Tempo   │   │  Grafana  │
-             │ (metrics, │   │  (traces) │   │(dashboards│
-             │  logs,    │   │           │   │  alerts)  │
-             │  decisions│   │           │   │           │
-             └───────────┘   └───────────┘   └───────────┘
-                    │                              │
-                    └──────────┬───────────────────┘
+             ┌───────────┐     ┌───────────┐   ┌───────────┐
+             │ClickHouse │     │   Tempo   │   │  Grafana  │
+             │ (metrics, │     │  (traces) │   │(dashboards│
+             │  logs,    │     │           │   │  alerts)  │
+             │  decisions│     │           │   │           │
+             └───────────┘     └───────────┘   └───────────┘
+                    │                               │
+                    └──────────┬────────────────────┘
                                ▼
                     ┌───────────────────┐
                     │ Alert Evaluator   │  Evaluates alert rules
