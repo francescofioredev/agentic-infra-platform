@@ -9,45 +9,45 @@ AgentForge is an **Agentic Orchestration & Monitoring Platform** that provides a
 │                          AgentForge Platform                             │
 │                                                                          │
 │  ┌─────────────────────────────── Core ─────────────────────────────┐    │
-│  │                                                                   │    │
-│  │  ┌──────────┐ ┌──────────────┐ ┌──────────┐ ┌───────────────┐   │    │
-│  │  │  Agent   │ │    Team      │ │  Tool &  │ │  Guardrail    │   │    │
-│  │  │  Builder │ │ Orchestrator │ │   MCP    │ │   System      │   │    │
-│  │  └──────────┘ └──────────────┘ │  Manager │ └───────────────┘   │    │
+│  │                                                                  │    │
+│  │  ┌──────────┐ ┌──────────────┐ ┌──────────┐ ┌───────────────┐    │    │
+│  │  │  Agent   │ │    Team      │ │  Tool &  │ │  Guardrail    │    │    │
+│  │  │  Builder │ │ Orchestrator │ │   MCP    │ │   System      │    │    │
+│  │  └──────────┘ └──────────────┘ │  Manager │ └───────────────┘    │    │
 │  │                                └──────────┘                      │    │
-│  │  ┌──────────┐ ┌──────────────┐ ┌──────────┐ ┌───────────────┐   │    │
-│  │  │ Prompt   │ │ Evaluation   │ │  Code    │ │  Cost &       │   │    │
-│  │  │ Registry │ │ Framework    │ │  Gen     │ │  Resource Mgr │   │    │
-│  │  └──────────┘ └──────────────┘ └──────────┘ └───────────────┘   │    │
-│  └───────────────────────────────────────────────────────────────────┘    │
+│  │  ┌──────────┐ ┌──────────────┐ ┌──────────┐ ┌───────────────┐    │    │
+│  │  │ Prompt   │ │ Evaluation   │ │  Code    │ │  Cost &       │    │    │
+│  │  │ Registry │ │ Framework    │ │  Gen     │ │  Resource Mgr │    │    │
+│  │  └──────────┘ └──────────────┘ └──────────┘ └───────────────┘    │    │
+│  └──────────────────────────────────────────────────────────────────┘    │
 │                                                                          │
 │  ┌───────────────────────── Infrastructure ─────────────────────────┐    │
-│  │                                                                   │    │
+│  │                                                                  │    │
 │  │  ┌──────────────────┐ ┌──────────────────┐ ┌─────────────────┐   │    │
 │  │  │  Memory &        │ │  Multi-Provider  │ │  Event Bus      │   │    │
 │  │  │  Context Mgmt    │ │  LLM Management  │ │  (pub/sub)      │   │    │
 │  │  └──────────────────┘ └──────────────────┘ └─────────────────┘   │    │
-│  │                                                                   │    │
+│  │                                                                  │    │
 │  │  ┌──────────────────┐ ┌──────────────────┐ ┌─────────────────┐   │    │
 │  │  │  IAM & Access    │ │  Scheduling &    │ │  Replay &       │   │    │
 │  │  │  Control         │ │  Background Jobs │ │  Debugging      │   │    │
 │  │  └──────────────────┘ └──────────────────┘ └─────────────────┘   │    │
-│  └───────────────────────────────────────────────────────────────────┘    │
+│  └──────────────────────────────────────────────────────────────────┘    │
 │                                                                          │
 │  ┌──────────────────────── User-Facing ─────────────────────────────┐    │
-│  │                                                                   │    │
+│  │                                                                  │    │
 │  │  ┌──────────────────┐ ┌──────────────────┐ ┌─────────────────┐   │    │
 │  │  │  Conversation &  │ │  External        │ │  Testing &      │   │    │
 │  │  │  Session Mgmt    │ │  Integrations    │ │  Simulation     │   │    │
 │  │  └──────────────────┘ └──────────────────┘ └─────────────────┘   │    │
-│  └───────────────────────────────────────────────────────────────────┘    │
+│  └──────────────────────────────────────────────────────────────────┘    │
 │                                                                          │
 │  ┌──────────────────── Deployment & Observability ──────────────────┐    │
 │  │  ┌────────────────────────┐  ┌───────────────────────────────┐   │    │
 │  │  │  Agent Deployment      │  │  Observability Platform       │   │    │
 │  │  │  Pipeline (CI/CD)      │  │  (Tracing/Metrics/Dashboards) │   │    │
 │  │  └────────────────────────┘  └───────────────────────────────┘   │    │
-│  └───────────────────────────────────────────────────────────────────┘    │
+│  └──────────────────────────────────────────────────────────────────┘    │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -82,20 +82,20 @@ AgentForge is an **Agentic Orchestration & Monitoring Platform** that provides a
 The platform uses a three-level hierarchy:
 
 ```
-                    ┌─────────────────────┐
+                    ┌──────────────────────┐
                     │ Platform Orchestrator│  Level 0: Global routing
                     │   (Supervisor)       │  & request dispatch
-                    └─────────┬───────────┘
+                    └─────────┬────────────┘
                               │
               ┌───────────────┼───────────────┐
               │               │               │
-     ┌────────┴──────┐ ┌─────┴──────┐ ┌──────┴────────┐
+     ┌────────┴──────┐ ┌──────┴─────┐ ┌───────┴───────┐
      │ Team Alpha    │ │ Team Beta  │ │ Team Gamma    │  Level 1: Team
      │ Supervisor    │ │ Supervisor │ │ Supervisor    │  coordination
-     └───┬───┬───┬───┘ └────┬───┬──┘ └──┬───┬───┬───┘
-         │   │   │          │   │       │   │   │
-        ┌┘   │   └┐       ┌┘   └┐     ┌┘   │   └┐
-        A1  A2   A3       B1   B2     C1  C2   C3     Level 2: Worker
+     └───┬───┬───┬───┘ └────┬───┬───┘ └──┬───┬───┬────┘
+         │   │   │          │   │        │   │   │
+        ┌┘   │   └┐        ┌┘   └┐      ┌┘   │   └┐
+        A1  A2   A3       B1    B2      C1  C2    C3     Level 2: Worker
                                                         agents
 
     ──── Guardrail Agents observe ALL levels ────────────────────
@@ -159,38 +159,38 @@ User Input
     │
     ▼
 ┌─────────────────────┐
-│ Layer 1: Input       │  Validation, sanitization, PII detection,
-│ Validation           │  prompt injection detection (p. 286)
+│ Layer 1: Input      │  Validation, sanitization, PII detection,
+│ Validation          │  prompt injection detection (p. 286)
 └─────────┬───────────┘
           ▼
 ┌─────────────────────┐
-│ Layer 2: Behavioral  │  System prompt constraints, role boundaries,
-│ Constraints          │  forbidden action lists (p. 286)
+│ Layer 2: Behavioral │  System prompt constraints, role boundaries,
+│ Constraints         │  forbidden action lists (p. 286)
 └─────────┬───────────┘
           ▼
 ┌─────────────────────┐
-│ Layer 3: Tool        │  Least Privilege tool assignment,
-│ Restrictions         │  before_tool_callback validation (p. 288, p. 295)
+│ Layer 3: Tool       │  Least Privilege tool assignment,
+│ Restrictions        │  before_tool_callback validation (p. 288, p. 295)
 └─────────┬───────────┘
           ▼
 ┌─────────────────────┐
-│ Layer 4: Guardrail   │  Dedicated guardrail agents evaluate
-│ Agents               │  actions against policy (p. 292)
+│ Layer 4: Guardrail  │  Dedicated guardrail agents evaluate
+│ Agents              │  actions against policy (p. 292)
 └─────────┬───────────┘
           ▼
 ┌─────────────────────┐
-│ Layer 5: External    │  Content safety APIs, moderation
-│ Moderation           │  classifiers (p. 286)
+│ Layer 5: External   │  Content safety APIs, moderation
+│ Moderation          │  classifiers (p. 286)
 └─────────┬───────────┘
           ▼
 ┌─────────────────────┐
-│ Layer 6: Output      │  PII redaction, format validation,
-│ Filtering            │  safety check before delivery (p. 286)
+│ Layer 6: Output     │  PII redaction, format validation,
+│ Filtering           │  safety check before delivery (p. 286)
 └─────────┬───────────┘
           ▼
 ┌─────────────────────┐
-│ Layer 7: HITL        │  Human escalation for high-stakes
-│ Escalation           │  decisions (p. 207)
+│ Layer 7: HITL       │  Human escalation for high-stakes
+│ Escalation          │  decisions (p. 207)
 └─────────────────────┘
           ▼
     User Output
@@ -333,14 +333,14 @@ System prompts follow a managed lifecycle:
 ## 6. Subsystem Dependencies
 
 ```
-                    ┌──────────────────────────────────────┐
+                    ┌───────────────────────────────────────┐
                     │     Foundational Services             │
                     │                                       │
                     │  Event Bus ◄──── ALL subsystems       │
                     │  Observability ◄── ALL subsystems     │
                     │  IAM & Access Control ◄── ALL APIs    │
-                    │  Multi-Provider LLM ◄── ALL LLM calls│
-                    └──────────────────────────────────────┘
+                    │  Multi-Provider LLM ◄── ALL LLM calls │
+                    └───────────────────────────────────────┘
                                     ▲
                                     │
     ┌───────────────────────────────┼───────────────────────────────┐
@@ -366,7 +366,7 @@ System prompts follow a managed lifecycle:
     │   Cross-Cutting Services      │                               │
     │                               │                               │
     │   Guardrail System ──────────►│   Observability Platform      │
-    │   Memory & Context Mgmt      │                               │
+    │   Memory & Context Mgmt       │                               │
     │   Cost & Resource Manager     │   Replay & Debugging          │
     │   Evaluation Framework        │   Scheduling & Background Jobs│
     └───────────────────────────────┴───────────────────────────────┘

@@ -1,5 +1,23 @@
 # Team Orchestrator — Subsystem Design Document
 
+## Contents
+
+| # | Section | Description |
+|---|---------|-------------|
+| 1 | [Overview & Responsibility](#1-overview--responsibility) | Core mandate, hierarchy position, and design-pattern grounding |
+| 2 | [Team Definition Schema](#2-team-definition-schema) | JSON schema for declaring agents, topology, and routing policy |
+| 3 | [Supported Topologies](#3-supported-topologies) | Sequential, parallel, router-based, and hierarchical topologies |
+| 4 | [Communication Rules Engine](#4-communication-rules-engine) | Intra-team direct calls vs. A2A inter-team protocol selection |
+| 5 | [Task Planning & Delegation](#5-task-planning--delegation) | LLM-driven task decomposition and sub-task dispatch to workers |
+| 6 | [Parallel Execution Model](#6-parallel-execution-model) | Concurrent sub-task fan-out and synchronisation barriers |
+| 7 | [Result Aggregation & Validation](#7-result-aggregation--validation) | Merging worker outputs and validating against the team output schema |
+| 8 | [Inter-Team Communication (A2A Protocol)](#8-inter-team-communication-a2a-protocol) | Cross-team HTTP A2A with mTLS + OAuth2 and retry logic |
+| 9 | [API Surface](#9-api-surface) | REST endpoints for team creation, dispatch, and status queries |
+| 10 | [Failure Modes & Mitigations](#10-failure-modes--mitigations) | Failure taxonomy, retry strategies, and circuit-breaker patterns |
+| 11 | [Instrumentation](#11-instrumentation) | OpenTelemetry spans, metrics, and audit events emitted by the orchestrator |
+
+---
+
 ## 1. Overview & Responsibility
 
 The **Team Orchestrator** is the core composition engine of the AgentForge platform. It is responsible for assembling individual agents into coordinated teams, defining how those agents communicate, decomposing complex tasks into executable plans, running independent subtasks in parallel, and aggregating results into validated final outputs.

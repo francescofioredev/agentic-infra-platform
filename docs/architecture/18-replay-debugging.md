@@ -1,5 +1,24 @@
 # 18 — Replay & Debugging Subsystem
 
+## Contents
+
+| # | Section | Description |
+|---|---------|-------------|
+| 1 | [Overview & Responsibility](#1-overview--responsibility) | Post-mortem and live debugging mandate: replay, time-travel, and what-if |
+| 2 | [Execution Record Schema](#2-execution-record-schema) | Immutable trace record capturing every step, state, and tool call |
+| 3 | [Replay Engine](#3-replay-engine) | Deterministic step-by-step re-execution from stored trace data |
+| 4 | [Time-Travel Debugger](#4-time-travel-debugger) | Rewind to any execution point and inspect full agent state |
+| 5 | [What-If Analysis](#5-what-if-analysis) | Fork execution at any step with modified inputs and compare outcomes |
+| 6 | [Diff Mode](#6-diff-mode) | Side-by-side comparison of two execution traces with delta highlighting |
+| 7 | [Breakpoint System](#7-breakpoint-system) | Conditional breakpoints on agent actions for paused live inspection |
+| 8 | [Step-Through Mode](#8-step-through-mode) | Human-controlled single-step advancement through execution |
+| 9 | [Root Cause Analyzer](#9-root-cause-analyzer) | Automated fault localisation using reflection and error classification |
+| 10 | [API Surface](#10-api-surface) | REST endpoints for trace retrieval, replay sessions, and analysis results |
+| 11 | [Failure Modes & Mitigations](#11-failure-modes--mitigations) | Trace data gaps, non-deterministic replay, and state reconstruction failures |
+| 12 | [Instrumentation](#12-instrumentation) | Replay session metrics, breakpoint hit counts, and root-cause analysis accuracy |
+
+---
+
 ## 1. Overview & Responsibility
 
 The Replay & Debugging subsystem is the **post-mortem investigation and live debugging layer** of the AgentForge platform. It transforms the raw trace data collected by the Observability Platform (subsystem #5) into an interactive, time-travel-capable debugging environment that allows engineers to understand, reproduce, and diagnose any agent behavior -- past or present.

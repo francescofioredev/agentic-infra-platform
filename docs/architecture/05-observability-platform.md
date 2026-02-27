@@ -1,5 +1,26 @@
 # 05 — Observability Platform
 
+## Contents
+
+| # | Section | Description |
+|---|---------|-------------|
+| 1 | [Overview & Responsibility](#1-overview--responsibility) | Telemetry backbone mandate and the Five-Level Evaluation Pyramid |
+| 2 | [Trace Model](#2-trace-model) | Distributed trace structure, span types, and parent-child relationships |
+| 3 | [Metrics Framework](#3-metrics-framework) | Counter, gauge, and histogram metrics with retention and aggregation |
+| 4 | [Decision Audit Log](#4-decision-audit-log) | Immutable structured logs of every routing decision and guardrail intervention |
+| 5 | [Dashboard Design](#5-dashboard-design) | Pre-built and custom dashboard layouts for operators and developers |
+| 6 | [Alerting System](#6-alerting-system) | Threshold, anomaly-detection, and composite alert rules with escalation |
+| 7 | [Trajectory Visualization](#7-trajectory-visualization) | Interactive multi-step trajectory viewer for debugging agent runs |
+| 8 | [Data Model & Storage](#8-data-model--storage) | Storage schema, indexing strategy, and hot/warm/cold tiers |
+| 9 | [Retention & Archival Policies](#9-retention--archival-policies) | TTL rules, compaction, and long-term archival to object storage |
+| 10 | [API Surface](#10-api-surface) | Query, streaming, and export endpoints for trace and metric data |
+| 11 | [Failure Modes & Mitigations](#11-failure-modes--mitigations) | Degraded-mode operation, buffering, and backpressure handling |
+| 12 | [Instrumentation (Meta-Observability)](#12-instrumentation-meta-observability) | How the Observability Platform monitors itself |
+| A | [Appendix A: Pattern Reference Index](#appendix-a-pattern-reference-index) | Cross-reference of PDF pattern citations used in this document |
+| B | [Appendix B: Glossary](#appendix-b-glossary) | Key terms and abbreviations used throughout the document |
+
+---
+
 ## 1. Overview & Responsibility
 
 The Observability Platform is the foundational telemetry backbone of the AgentForge Agentic Orchestration Platform. Every other subsystem depends on it for logging, tracing, and metrics emission (see system overview dependency rules: "Observability Platform has zero dependencies — foundational service"). Its mandate is to answer three questions at any moment in time:

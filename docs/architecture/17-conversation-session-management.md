@@ -1,5 +1,24 @@
 # Subsystem 17: Conversation & Session Management
 
+## Contents
+
+| # | Section | Description |
+|---|---------|-------------|
+| 1 | [Overview & Responsibility](#1-overview--responsibility) | User-facing interaction layer: session lifecycle, channels, and streaming |
+| 2 | [Session Schema](#2-session-schema) | Durable session record: channel, state machine, history, and metadata |
+| 3 | [Session Lifecycle State Machine](#3-session-lifecycle-state-machine) | States and transitions from creation to terminal close |
+| 4 | [Multi-Channel Architecture](#4-multi-channel-architecture) | Unified message model across REST, WebSocket, Slack, Telegram, and widgets |
+| 5 | [Conversation Routing](#5-conversation-routing) | LLM-based and rule-based routing of messages to agents or teams |
+| 6 | [Real-Time Streaming](#6-real-time-streaming) | Token-by-token SSE and WebSocket delivery with backpressure control |
+| 7 | [Agent-to-Human Handoff Protocol](#7-agent-to-human-handoff-protocol) | Full-context escalation to human operators and handback flows |
+| 8 | [Session Recovery](#8-session-recovery) | Reconnection, state restore, and message-replay after disconnections |
+| 9 | [Conversation Threading](#9-conversation-threading) | Multi-thread sessions with branching, merging, and isolation |
+| 10 | [API Surface](#10-api-surface) | REST and WebSocket endpoints for session and message management |
+| 11 | [Failure Modes & Mitigations](#11-failure-modes--mitigations) | Dropped connections, routing failures, and handoff timeout handling |
+| 12 | [Instrumentation](#12-instrumentation) | Message latency, active-session count, handoff rate, and streaming metrics |
+
+---
+
 ## 1. Overview & Responsibility
 
 The Conversation & Session Management subsystem is the **user-facing interaction layer** of AgentForge. It owns the full lifecycle of every end-user conversation with the platform: accepting messages from any supported channel, routing them to the correct agent or team, streaming responses in real time, managing session state across connections, orchestrating agent-to-human handoffs, and supporting multiple concurrent conversation threads per user.

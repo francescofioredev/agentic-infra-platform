@@ -1,5 +1,26 @@
 # Subsystem 15: Event Bus
 
+## Contents
+
+| # | Section | Description |
+|---|---------|-------------|
+| 1 | [Overview & Responsibility](#1-overview--responsibility) | Nervous-system mandate: decoupled async event routing across all subsystems |
+| 2 | [Event Schema](#2-event-schema) | CloudEvents-based envelope with payload, routing, and tracing fields |
+| 3 | [Event Catalog](#3-event-catalog) | Canonical registry of all platform event types and their producers/consumers |
+| 4 | [Event Bus Architecture](#4-event-bus-architecture) | NATS JetStream topology, streams, and consumer groups |
+| 5 | [Publishing API](#5-publishing-api) | Typed publish interface with schema validation and idempotency keys |
+| 6 | [Subscription API](#6-subscription-api) | Consumer-group subscriptions with filtering, backpressure, and acknowledgement |
+| 7 | [Delivery Guarantees](#7-delivery-guarantees) | At-least-once semantics, idempotency support, and ordering guarantees |
+| 8 | [Dead Letter Queue](#8-dead-letter-queue) | DLQ capture, alerting, and reprocessing workflow for failed events |
+| 9 | [Event Replay](#9-event-replay) | Replay historical events from any offset for recovery or debugging |
+| 10 | [Event Schema Registry](#10-event-schema-registry) | Version-controlled schema store with backward-compatibility validation |
+| 11 | [API Surface](#11-api-surface) | Management REST endpoints for streams, consumers, DLQ, and replay |
+| 12 | [Failure Modes & Mitigations](#12-failure-modes--mitigations) | Broker unavailability, consumer lag, and DLQ overflow handling |
+| 13 | [Instrumentation](#13-instrumentation) | Publish/consume latency, lag, DLQ depth, and replay metrics |
+| 14 | [Cross-Subsystem Event Flow Examples](#14-cross-subsystem-event-flow-examples) | Concrete end-to-end event flows for key platform scenarios |
+
+---
+
 ## 1. Overview & Responsibility
 
 The Event Bus is the **nervous system** of the AgentForge Agentic Orchestration Platform. It provides a centralized, event-driven communication backbone that decouples all subsystems from direct point-to-point dependencies, enabling asynchronous, reliable, and auditable information flow across the entire platform.

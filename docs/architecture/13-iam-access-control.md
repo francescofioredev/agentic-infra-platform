@@ -1,5 +1,27 @@
 # IAM & Access Control -- Subsystem #12
 
+## Contents
+
+| # | Section | Description |
+|---|---------|-------------|
+| 1 | [Overview & Responsibility](#1-overview--responsibility) | Security backbone mandate: AuthN, AuthZ, multi-tenancy, and audit |
+| 2 | [Multi-Tenancy Model](#2-multi-tenancy-model) | Logical, network, and process-level isolation between tenants |
+| 3 | [RBAC with OPA](#3-rbac-with-opa) | Declarative OPA policies, role hierarchy, and real-time policy evaluation |
+| 4 | [API Key Management](#4-api-key-management) | Key generation, rotation, scoping, and rate-limiting per tenant/agent |
+| 5 | [Agent Identity & Authentication](#5-agent-identity--authentication) | mTLS service accounts, identity certificates, and JWT issuance |
+| 6 | [Permission Scoping for Tools](#6-permission-scoping-for-tools) | Least-privilege tool access enforcement at the IAM layer |
+| 7 | [Token-Based Session Management](#7-token-based-session-management) | JWT lifecycle: issuance, validation, refresh, and revocation |
+| 8 | [Audit Trail](#8-audit-trail) | Append-only, tamper-evident log of every access-control decision |
+| 9 | [Data Models](#9-data-models) | Core entity schemas: Tenant, Role, Policy, APIKey, ServiceAccount, AuditEvent |
+| 10 | [API Endpoints](#10-api-endpoints) | REST endpoints for identity, token, policy, and audit operations |
+| 11 | [Metrics & Alerts](#11-metrics--alerts) | Auth failure rates, policy evaluation latency, and key-rotation alerts |
+| 12 | [Failure Modes & Mitigations](#12-failure-modes--mitigations) | Token-service outage, OPA latency spikes, and key-rotation failures |
+| 13 | [Integration Points](#13-integration-points) | How IAM integrates with every other subsystem |
+| 14 | [Security Hardening](#14-security-hardening) | Defense-in-depth controls: rate limiting, TLS, secret rotation, and pen-test requirements |
+| 15 | [Testing Strategy](#15-testing-strategy) | Unit, integration, and adversarial test plan for IAM correctness |
+
+---
+
 ## 1. Overview & Responsibility
 
 The IAM & Access Control subsystem is the security backbone of the AgentForge platform. It governs authentication, authorization, multi-tenancy isolation, and audit logging for every human user, agent, team, tool invocation, and API call in the system (p. 248, p. 288). Unlike conventional IAM systems that only protect HTTP endpoints, AgentForge IAM must also authenticate and authorize **agent-to-agent communication** (mTLS + OAuth2, p. 248), enforce **least-privilege tool access** for autonomous agents (p. 288), and provide a comprehensive audit trail for compliance reporting (p. 297).

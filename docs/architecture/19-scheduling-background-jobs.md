@@ -1,5 +1,30 @@
 # 19 — Scheduling & Background Jobs
 
+## Contents
+
+| # | Section | Description |
+|---|---------|-------------|
+| 1 | [Overview & Responsibility](#1-overview--responsibility) | Background execution mandate: cron, event-triggered, and deferred agent jobs |
+| 2 | [Job Types](#2-job-types) | Cron, one-shot, event-triggered, interval, and chained job classifications |
+| 3 | [Agent-as-Job](#3-agent-as-job) | How any agent definition becomes a schedulable first-class job |
+| 4 | [Job Queue Architecture](#4-job-queue-architecture) | Priority-aware queue with consumer groups and backpressure |
+| 5 | [Event-Triggered Execution](#5-event-triggered-execution) | Event Bus subscriptions that launch jobs on matching events |
+| 6 | [Concurrency Control](#6-concurrency-control) | Per-tenant and per-job concurrency limits with semaphore enforcement |
+| 7 | [Job Dependencies (DAG Execution)](#7-job-dependencies-dag-execution) | Directed acyclic graph execution with fan-out and fan-in |
+| 8 | [Distributed Locking](#8-distributed-locking) | Leader-election and mutex patterns for singleton job execution |
+| 9 | [Job Lifecycle](#9-job-lifecycle) | State machine from enqueued through running, completed, failed, and archived |
+| 10 | [Retry Policies](#10-retry-policies) | Exponential back-off, dead-letter promotion, and manual requeue flows |
+| 11 | [Job Scheduler (Core Orchestrator)](#11-job-scheduler-core-orchestrator) | Scheduler loop, clock-skew handling, and priority arbitration |
+| 12 | [Data Models](#12-data-models) | Core schemas: JobDefinition, JobRun, Schedule, Lock, and DLQ entry |
+| 13 | [API Endpoints](#13-api-endpoints) | REST endpoints for job CRUD, manual triggers, and run history |
+| 14 | [Metrics & Alerts](#14-metrics--alerts) | Queue depth, execution latency, failure rate, and DLQ-depth alerts |
+| 15 | [Failure Modes & Mitigations](#15-failure-modes--mitigations) | Scheduler crash, lock expiry, missed cron fires, and poison-pill jobs |
+| 16 | [Security & Multi-Tenancy](#16-security--multi-tenancy) | Per-tenant job isolation, RBAC enforcement, and secret injection |
+| 17 | [Integration Points](#17-integration-points) | How Scheduling integrates with Event Bus, Observability, and Agent Builder |
+| 18 | [Operational Runbook](#18-operational-runbook) | On-call procedures for common scheduler incidents and remediation steps |
+
+---
+
 ## 1. Overview & Responsibility
 
 The Scheduling & Background Jobs subsystem is the platform's execution backbone for all **time-based**, **event-driven**, and **deferred** agent work. It governs how agents and workflows run outside the synchronous request-response cycle -- enabling cron-based recurring tasks, one-shot delayed execution, event-triggered workflows, and interval-based polling agents.

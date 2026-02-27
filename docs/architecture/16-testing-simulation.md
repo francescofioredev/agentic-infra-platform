@@ -1,5 +1,30 @@
 # 16 — Testing & Simulation
 
+## Contents
+
+| # | Section | Description |
+|---|---------|-------------|
+| 1 | [Overview & Responsibility](#1-overview--responsibility) | Pre-production QA mandate: simulated users, chaos, and adversarial testing |
+| 2 | [Simulated Users](#2-simulated-users) | AI-driven persona engine for generating realistic user interaction sequences |
+| 3 | [Tool Mocking Framework](#3-tool-mocking-framework) | Mock MCP servers with configurable responses, delays, and errors |
+| 4 | [Scenario-Based Testing](#4-scenario-based-testing) | Declarative DSL for authoring and executing structured test scenarios |
+| 5 | [Chaos Testing](#5-chaos-testing) | Fault injection (latency, errors, partitions) for resilience verification |
+| 6 | [Red-Team Automation](#6-red-team-automation) | Automated adversarial probing of guardrails and safety controls |
+| 7 | [Load Testing](#7-load-testing) | Concurrent-user load generation and throughput/latency profiling |
+| 8 | [Regression Testing](#8-regression-testing) | Automated before/after comparison against pinned eval baselines |
+| 9 | [A/B Testing Support](#9-ab-testing-support) | Side-by-side agent variant comparison with statistical significance reporting |
+| 10 | [Test Environment Management](#10-test-environment-management) | Ephemeral test environments, teardown policies, and resource quotas |
+| 11 | [Data Models](#11-data-models) | Core schemas: TestScenario, TestRun, Assertion, TestResult, MockProfile |
+| 12 | [API Endpoints](#12-api-endpoints) | REST endpoints for test authoring, execution, and result retrieval |
+| 13 | [Coverage Metrics](#13-coverage-metrics) | Tool-call coverage, branch coverage, and scenario-gap analysis |
+| 14 | [Metrics & Alerts](#14-metrics--alerts) | Test-suite health, regression detection, and red-team escape-rate alerts |
+| 15 | [Failure Modes & Mitigations](#15-failure-modes--mitigations) | Flaky test handling, environment exhaustion, and simulation drift |
+| 16 | [Instrumentation](#16-instrumentation) | Test execution spans, coverage counters, and chaos-injection audit events |
+| 17 | [Integration Points](#17-integration-points) | How Testing & Simulation integrates with Eval, Deployment, and Guardrails |
+| 18 | [Design Rules Summary](#18-design-rules-summary) | Consolidated list of invariants and design constraints for this subsystem |
+
+---
+
 ## 1. Overview & Responsibility
 
 The Testing & Simulation subsystem is the pre-production quality assurance backbone of the AgentForge platform. It provides the infrastructure for validating agent behavior under realistic, adversarial, and extreme conditions before and during production deployment. Where the Evaluation Framework (Subsystem 8) measures quality against curated evalsets, Testing & Simulation actively generates the conditions under which agents are tested -- synthetic users, mocked tools, injected failures, adversarial attacks, and high-concurrency loads.

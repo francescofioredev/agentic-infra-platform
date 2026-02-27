@@ -1,5 +1,23 @@
 # Subsystem 11: Memory & Context Management
 
+## Contents
+
+| # | Section | Description |
+|---|---------|-------------|
+| 1 | [Overview & Responsibility](#1-overview--responsibility) | Cognitive persistence mandate and the four-layer memory model |
+| 2 | [Memory Architecture: The Four-Layer Model](#2-memory-architecture-the-four-layer-model) | Temp, working, episodic, and semantic memory tiers |
+| 3 | [Agent Memory Management](#3-agent-memory-management) | Per-agent CRUD operations, TTL, and eviction policies |
+| 4 | [Team Shared Memory](#4-team-shared-memory) | Collective knowledge store accessible to all team members |
+| 5 | [Context Window Optimization](#5-context-window-optimization) | Sliding-window pruning, summarisation, and token budget management |
+| 6 | [RAG Integration for Agents and Teams](#6-rag-integration-for-agents-and-teams) | Embedding pipeline, vector retrieval, and context injection |
+| 7 | [Memory Lifecycle Management](#7-memory-lifecycle-management) | Retention policies, invalidation triggers, and privacy-compliant deletion |
+| 8 | [API Surface](#8-api-surface) | REST and gRPC endpoints for read, write, and lifecycle operations |
+| 9 | [Failure Modes & Mitigations](#9-failure-modes--mitigations) | Stale-state, eviction-under-load, and consistency failure patterns |
+| 10 | [Instrumentation](#10-instrumentation) | Memory hit/miss metrics, eviction counters, and OpenTelemetry spans |
+| 11 | [Integration with Existing Subsystems](#11-integration-with-existing-subsystems) | How Memory integrates with Agent Builder, Team Orchestrator, RAG, and IAM |
+
+---
+
 ## 1. Overview & Responsibility
 
 The Memory & Context Management subsystem is the **cognitive persistence layer** of AgentForge. It governs how individual agents and teams remember, retrieve, forget, and optimize information across turns, sessions, and the entire platform lifecycle.

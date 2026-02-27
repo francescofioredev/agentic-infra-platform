@@ -290,20 +290,20 @@ The Reflection pattern implements a generator-critic loop where a Generator LLM 
 
 ```
                     ┌──────────────────────────────┐
-                    │   Optimization Trigger        │
-                    │ (eval score below threshold   │
-                    │  OR scheduled optimization)   │
+                    │   Optimization Trigger       │
+                    │ (eval score below threshold  │
+                    │  OR scheduled optimization)  │
                     └──────────────┬───────────────┘
                                    │
                                    v
                     ┌──────────────────────────────┐
-                    │   Load Current Production     │
-                    │   Prompt + Eval Results +     │
-                    │   Failure Cases               │
+                    │   Load Current Production    │
+                    │   Prompt + Eval Results +    │
+                    │   Failure Cases              │
                     └──────────────┬───────────────┘
                                    │
                      ┌─────────────v──────────────┐
-                     │                             │
+                     │                            │
               ┌──────┴───────┐             ┌──────┴───────┐
               │  Generator   │             │   Critic     │
               │  (cheap LLM) │             │ (strong LLM) │
@@ -312,7 +312,7 @@ The Reflection pattern implements a generator-critic loop where a Generator LLM 
               │  improved    │             │  against     │
               │  prompt      ├────────────►│  rubric      │
               │              │  candidate  │              │
-              └──────┬───────┘             └──────┬───────┘
+              └──────┬───────┘             └───────┬──────┘
                      │                             │
                      │     Loop max N iterations   │
                      │     (p. 67)                 │
@@ -320,14 +320,14 @@ The Reflection pattern implements a generator-critic loop where a Generator LLM 
                                    │
                                    v
                     ┌──────────────────────────────┐
-                    │   Best Candidate Prompt       │
-                    │   Saved as new Draft version  │
+                    │   Best Candidate Prompt      │
+                    │   Saved as new Draft version │
                     └──────────────┬───────────────┘
                                    │
                                    v
                     ┌──────────────────────────────┐
-                    │   Run Full Evalset            │
-                    │   (Evaluation Framework)      │
+                    │   Run Full Evalset           │
+                    │   (Evaluation Framework)     │
                     └──────────────┬───────────────┘
                                    │
                                Pass? ──── No ──► Discard candidate
@@ -336,8 +336,8 @@ The Reflection pattern implements a generator-critic loop where a Generator LLM 
                                    │
                                    v
                     ┌──────────────────────────────┐
-                    │   Promote to Review state     │
-                    │   (HITL gate, p. 211)         │
+                    │   Promote to Review state    │
+                    │   (HITL gate, p. 211)        │
                     └──────────────────────────────┘
 ```
 
@@ -814,9 +814,9 @@ When a user creates a brand new agent (not optimizing an existing one), the Agen
 ```
 Step 1              Step 2              Step 3              Step 4
 ┌──────────┐        ┌──────────┐        ┌──────────┐        ┌──────────┐
-│ Extract   │──gate─>│ Generate │──gate─>│ Safety   │──gate─>│ Eval &   │
-│ Intent &  │        │ Draft    │        │ Review   │        │ Baseline │
-│ Schema    │        │ Prompt   │        │ Pass     │        │ Score    │
+│ Extract  │──gate─>│ Generate │──gate─>│ Safety   │──gate─>│ Eval &   │
+│ Intent & │        │ Draft    │        │ Review   │        │ Baseline │
+│ Schema   │        │ Prompt   │        │ Pass     │        │ Score    │
 └──────────┘        └──────────┘        └──────────┘        └──────────┘
                                                               │
                                                               v

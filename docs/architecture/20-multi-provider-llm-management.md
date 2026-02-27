@@ -1,5 +1,24 @@
 # Subsystem 20: Multi-Provider LLM Management
 
+## Contents
+
+| # | Section | Description |
+|---|---------|-------------|
+| 1 | [Overview & Responsibility](#1-overview--responsibility) | Abstraction-layer mandate: unified LLM interface across all providers |
+| 2 | [Unified LLM Interface](#2-unified-llm-interface) | Single API surface hiding provider differences from all consumers |
+| 3 | [Provider Registry & Model Catalog](#3-provider-registry--model-catalog) | Registry of supported providers, models, and their capabilities |
+| 4 | [Provider Adapter Pattern](#4-provider-adapter-pattern) | Adapter abstraction translating unified requests to provider-specific formats |
+| 5 | [Routing & Selection Engine](#5-routing--selection-engine) | Task-based, cost-based, and latency-based model selection logic |
+| 6 | [Failover & Circuit Breaker](#6-failover--circuit-breaker) | Provider outage detection, automatic failover, and circuit-breaker state |
+| 7 | [API Key Pool Management](#7-api-key-pool-management) | Multi-key rotation, rate-limit tracking, and key-health monitoring |
+| 8 | [Cost Tracking & Optimization](#8-cost-tracking--optimization) | Per-request token accounting and budget enforcement |
+| 9 | [Feature Compatibility Matrix](#9-feature-compatibility-matrix) | Matrix of which providers support tools, vision, JSON mode, etc. |
+| 10 | [API Surface](#10-api-surface) | REST endpoints for LLM calls, provider health, and cost reporting |
+| 11 | [Failure Modes & Mitigations](#11-failure-modes--mitigations) | Provider outages, rate-limit exhaustion, and model deprecation handling |
+| 12 | [Instrumentation](#12-instrumentation) | Request latency, token usage, provider error rates, and cost-per-tenant metrics |
+
+---
+
 ## 1. Overview & Responsibility
 
 The Multi-Provider LLM Management subsystem is the **abstraction layer** between the AgentForge platform and the heterogeneous landscape of LLM providers. No agent, team, or platform service calls a provider API directly; all LLM traffic is mediated by this subsystem. It presents a single, unified interface to consumers while handling the full complexity of provider differences, failover, key management, cost optimization, and feature translation behind the scenes.

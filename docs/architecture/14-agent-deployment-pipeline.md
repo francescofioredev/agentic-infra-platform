@@ -1,5 +1,23 @@
 # 14 — Agent Deployment Pipeline (CI/CD)
 
+## Contents
+
+| # | Section | Description |
+|---|---------|-------------|
+| 1 | [Overview & Responsibility](#1-overview--responsibility) | CI/CD mandate: every agent in production is an immutable, evaluated artifact |
+| 2 | [Agent Artifact Schema](#2-agent-artifact-schema) | Versioned artifact bundle: prompt, tools, guardrails, and eval criteria |
+| 3 | [Build Pipeline](#3-build-pipeline) | Six-stage pipeline from source commit to staging deployment |
+| 4 | [Deployment Strategies](#4-deployment-strategies) | Blue/green, canary (1%→100%), and shadow deployment patterns |
+| 5 | [Environment Management](#5-environment-management) | Dev, staging, and production environment configuration and promotion gates |
+| 6 | [Rollback Mechanism](#6-rollback-mechanism) | Automated rollback triggers and sub-60-second recovery SLA |
+| 7 | [Team Deployment](#7-team-deployment) | Coordinated multi-agent team rollout with dependency ordering |
+| 8 | [Integration Points](#8-integration-points) | How the pipeline integrates with Agent Builder, Prompt Registry, and Eval |
+| 9 | [API Surface](#9-api-surface) | REST endpoints for pipeline triggers, status, and artifact queries |
+| 10 | [Failure Modes & Mitigations](#10-failure-modes--mitigations) | Failed eval gates, rollback storms, and artifact corruption recovery |
+| 11 | [Instrumentation](#11-instrumentation) | Deployment duration, canary error rates, and rollback frequency metrics |
+
+---
+
 ## 1. Overview & Responsibility
 
 The Agent Deployment Pipeline is the **continuous integration and continuous deployment (CI/CD) subsystem** for the AgentForge platform. It treats every agent as a holistic deployable artifact -- a versioned, immutable snapshot of prompt, tools, guardrail policies, memory configuration, model configuration, and evaluation criteria -- and moves that artifact through a deterministic pipeline of validation, testing, evaluation, staging, and deployment gates before it reaches production traffic.
