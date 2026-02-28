@@ -75,7 +75,7 @@ ADK provides native primitives for **every** pattern in this architecture:
 
 ### 2.2 Decision B — Runtime Language: Python 3.11+ (asyncio) for Agents, Go for Infra
 
-**Agent runtime**: Python 3.11+ with `asyncio`.
+**Agent runtime**: Python ≥3.13 with `asyncio`.
 
 - ADK, FastAPI, FastMCP, LiteLLM, OpenTelemetry SDK, all LLM client libraries are Python-first
 - All pattern book code examples are Python
@@ -86,16 +86,17 @@ ADK provides native primitives for **every** pattern in this architecture:
 
 | Component | Language | Reason |
 |-----------|----------|--------|
-| Agent Executor (runtime) | Python 3.11+ | ADK, MCP, LLM clients |
+| Agent Executor (runtime) | Python ≥3.13 | ADK, MCP, LLM clients |
 | API Gateway / Control Plane | Python (FastAPI) | Consistency; auto-generated OpenAPI |
 | Event Bus consumer workers | Python (asyncio) | NATS JetStream Python client |
 | MCP Servers | Python (FastMCP) | Native FastMCP framework |
 | Metrics sidecar | Go | High-throughput, low-latency scraping |
 | API Gateway (edge) | Go or Nginx | Connection handling performance |
 
-**Python version specifics**:
-- Minimum: Python 3.11 (required by ADK; `asyncio` improvements; `tomllib`)
-- Target: Python 3.12 (improved `asyncio` performance, `ExceptionGroup` for concurrent error handling)
+**Python version policy**:
+- Minimum: Python 3.13 (released Oct 2024; ~16 months of ecosystem adoption; free-threaded mode experimental; improved `asyncio` error reporting)
+- Target: Python 3.14 once ADK and core dependencies confirm compatibility (released Oct 2025; evaluate Q2 2026)
+- Never pin to a patch version in `pyproject.toml` — use `python = ">=3.13"`
 - Dependency management: `uv` (fast resolver) + `pyproject.toml`
 - Type safety: `mypy` strict mode on all platform services
 

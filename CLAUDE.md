@@ -43,7 +43,7 @@ AgentForge is a **Hierarchical Supervisor** multi-agent platform (three levels):
 ### Key Architectural Decisions
 
 - **Agent framework**: Google ADK (`LoopAgent`, `LlmAgent`, `AgentTool`, `MCPToolset`) wrapped by an `AgentRuntime` abstraction layer for portability
-- **Runtime language**: Python 3.12 + asyncio for all agent services; Go acceptable only for infra sidecars (metrics, edge gateway)
+- **Runtime language**: Python ≥3.13 + asyncio for all agent services (3.14 once ADK confirms compatibility); Go acceptable only for infra sidecars (metrics, edge gateway)
 - **Container orchestration**: Kubernetes (EKS/GKE/AKS) with Istio service mesh, Helm charts, Argo Rollouts for canary
 - **Agent process model**: Intra-team workers run **in-process** within the Team Supervisor Pod (ADK `AgentTool`, p. 133); inter-team calls use **A2A HTTP** between separate Pods via Istio mTLS
 - **MCP server deployment**: STDIO subprocess in dev; standalone stateless K8s Deployment (HTTP+SSE) in production, HPA-scaled
