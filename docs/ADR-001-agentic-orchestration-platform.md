@@ -524,16 +524,19 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 ## Open Questions
 
 1. **Prompt optimization governance**: What is the approval workflow for AI-optimized prompts? Fully automated, or human-in-the-loop approval gate?
-2. **Code execution sandbox**: Which sandboxing technology for code generation agents? (Firecracker, gVisor, Wasm, Docker?)
-3. **Multi-tenancy isolation**: How are agent teams isolated across tenants? Network-level, process-level, or logical isolation? (Addressed in 13-iam-access-control.md with three-tier model)
-4. **A2A vs. internal messaging**: For co-located agents, should we use A2A HTTP or an internal message bus for lower latency? (Event Bus subsystem 15 provides internal messaging via NATS JetStream)
+2. **Code execution sandbox**: gVisor selected for production; Wasmtime under evaluation as lighter alternative. (Addressed in 21-runtime-deployment-environment.md)
+3. **Multi-tenancy isolation**: Three-tier model — Namespace (standard), dedicated Node Pool (professional), dedicated cluster (enterprise). (Addressed in 13-iam-access-control.md and 21-runtime-deployment-environment.md)
+4. **A2A vs. internal messaging**: **Resolved** — Intra-team: in-process ADK AgentTool (p. 133). Inter-team: A2A HTTP via Istio mTLS (p. 240). (Addressed in 21-runtime-deployment-environment.md)
 5. **Guardrail agent model**: Should guardrail agents use the same model as the agents they monitor, or a different one to reduce bias?
-6. **Event bus technology**: NATS JetStream vs. Redis Streams for the event bus — final selection pending load testing (Addressed in 15-event-bus.md)
+6. **Event bus technology**: **Resolved** — NATS JetStream. (Addressed in 15-event-bus.md)
 7. **Canary traffic granularity**: Should canary deployments split at the request level or at the user/session level? (Addressed in 14-agent-deployment-pipeline.md)
 8. **Chaos testing in production**: Should chaos experiments be allowed in production environments with safeguards, or strictly limited to staging? (Addressed in 16-testing-simulation.md)
 9. **Conversation history retention**: How long should full conversation transcripts be retained vs. summarized versions? (Addressed in 17-conversation-session-management.md)
 10. **Replay storage costs**: What is the acceptable storage budget for execution snapshots? Tiered retention mitigates but needs sizing. (Addressed in 18-replay-debugging.md)
 11. **LLM provider SLAs**: What minimum SLA should be required from LLM providers to be included in the provider registry? (Addressed in 20-multi-provider-llm-management.md)
+12. **Agent framework**: **Resolved** — Google ADK as execution engine, wrapped by AgentForge `AgentRuntime` abstraction layer. (Addressed in 21-runtime-deployment-environment.md)
+13. **Container orchestration**: **Resolved** — Kubernetes (EKS/GKE/AKS) with Helm + Argo Rollouts. (Addressed in 21-runtime-deployment-environment.md)
+14. **Multi-region deployment**: Single-region in v1. Active-active multi-region deferred to v2.
 
 ---
 
@@ -587,3 +590,4 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 | 18 | Replay & Debugging | 18-replay-debugging.md |
 | 19 | Scheduling & Background Jobs | 19-scheduling-background-jobs.md |
 | 20 | Multi-Provider LLM Management | 20-multi-provider-llm-management.md |
+| 21 | Runtime & Deployment Environment | 21-runtime-deployment-environment.md |

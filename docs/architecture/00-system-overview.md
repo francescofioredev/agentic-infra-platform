@@ -74,6 +74,7 @@ AgentForge is an **Agentic Orchestration & Monitoring Platform** that provides a
 | 17 | **Replay & Debugging** | Execution replay, time-travel, what-if analysis, root cause analysis | Evaluation (p. 308), Exception Handling (p. 209), Reflection (p. 65) |
 | 18 | **Scheduling & Background Jobs** | Cron-based and event-triggered agent execution, job queues | Planning (p. 107), Prioritization (p. 326), Goal Setting (p. 185) |
 | 19 | **Multi-Provider LLM Management** | Unified LLM interface, failover, cost routing, API key pools | Resource-Aware (p. 257), Routing (p. 25), Exception Handling (p. 208) |
+| 21 | **Runtime & Deployment Environment** | Agent framework (ADK), Kubernetes orchestration, agent process model, MCP server topology | Multi-Agent Collaboration (p. 133), MCP (p. 160), A2A (p. 240), Resource-Aware (p. 258) |
 
 ## 3. Core Architecture Principles
 
@@ -309,26 +310,32 @@ System prompts follow a managed lifecycle:
 
 | Component | Recommended Technology | Rationale |
 |-----------|----------------------|-----------|
-| Agent Runtime | Python (asyncio) | Ecosystem maturity for LLM integrations |
+| **Agent Framework** | **Google ADK** (wrapped by AgentRuntime abstraction) | Native MCP (p. 161), A2A, LoopAgent/LlmAgent/AgentTool map 1:1 to Hierarchical Supervisor (p. 133) |
+| **Container Orchestration** | **Kubernetes** (EKS / GKE / AKS) | HPA, Namespace isolation per tenant, NetworkPolicy for mTLS, rolling deploys for CI/CD |
+| **Agent Process Model** | **In-process workers** (intra-team) + **A2A HTTP** (inter-team) | Direct function calls via AgentTool intra-team (p. 133); A2A mTLS inter-team (p. 240) |
+| Agent Runtime | Python 3.12 (asyncio) | ADK, FastMCP, LLM clients are all Python-first; asyncio for concurrent tool calls |
 | API Layer | FastAPI | Async, auto-generated OpenAPI docs |
-| MCP Servers | FastMCP (p. 162) | Native Python MCP server framework |
-| A2A Protocol | HTTP/2 + SSE | Standard A2A transport (p. 246) |
-| Message Bus | Redis Streams or NATS | Low-latency intra-platform messaging |
+| MCP Servers | FastMCP (p. 162) — HTTP+SSE in prod, STDIO in dev | Native Python MCP server framework; stateless K8s Deployment in production |
+| A2A Protocol | HTTP/2 + SSE over Istio (mTLS) | Standard A2A transport (p. 246); Istio handles certificate lifecycle |
+| Service Mesh | Istio | mTLS for A2A, traffic splitting for canary deployments |
+| Message Bus | NATS JetStream | At-least-once delivery, replay, consumer groups |
 | State Store | PostgreSQL + Redis | Persistent state + ephemeral session state |
 | Vector Store | pgvector or Qdrant | RAG memory for agent knowledge |
 | Time-series DB | ClickHouse or TimescaleDB | High-throughput interaction logging |
 | Tracing | OpenTelemetry | Vendor-neutral distributed tracing |
 | Dashboards | Grafana | Unified metrics/logs/traces visualization |
 | Prompt Storage | Git-backed DB | Version control with full diff history |
-| Code Sandbox | Firecracker / gVisor | Secure code execution isolation |
-| Auth | OAuth2 + mTLS | A2A security (p. 248) |
+| Code Sandbox | gVisor (prod) / Wasmtime (experimental) | Secure code execution isolation |
+| Auth | OAuth2 + mTLS (Istio) | A2A security (p. 248) |
 | IAM / RBAC | OPA (Open Policy Agent) | Declarative, auditable policy engine |
-| Event Bus | NATS JetStream or Redis Streams | At-least-once delivery, replay, consumer groups |
 | Job Scheduler | APScheduler + Redis | Cron + interval + event-triggered scheduling |
 | WebSocket | FastAPI WebSocket + Redis pub/sub | Real-time conversation streaming |
 | LLM Gateway | LiteLLM or custom adapter | Unified interface across providers |
 | Secret Vault | HashiCorp Vault or AWS Secrets Manager | Credential storage with rotation |
+| Deployment tooling | Helm + Argo Rollouts | Chart-based K8s deploys + canary traffic splitting |
 | Load Testing | Locust | Python-native distributed load testing |
+
+*Full runtime and deployment decisions: see `21-runtime-deployment-environment.md`*
 
 ## 6. Subsystem Dependencies
 

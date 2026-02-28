@@ -15,7 +15,8 @@ docs/
     ├── 00-system-overview.md     # Platform vision, topology diagram, data flows
     ├── 01–09-*.md                # Core subsystems (Agent Builder, Team Orchestrator, etc.)
     ├── 10-review-checklist-assessment.md        # Design completeness audit
-    └── 11–20-*.md                # Infrastructure subsystems (IAM, Event Bus, LLM Mgmt, etc.)
+    ├── 11–20-*.md                # Infrastructure subsystems (IAM, Event Bus, LLM Mgmt, etc.)
+    └── 21-runtime-deployment-environment.md    # Agent framework, K8s orchestration, process model
 ```
 
 **Start with `00-system-overview.md`** for the full architecture picture before diving into subsystem docs.
@@ -28,18 +29,26 @@ AgentForge is a **Hierarchical Supervisor** multi-agent platform (three levels):
 - **Level 2 — Worker Agents**: Single-responsibility agents with Least Privilege tool access
 - **Cross-cutting — Guardrail Agents**: Monitor all levels via `before_tool_callback`
 
-### 19 Subsystems
+### 20 Subsystems
 
 | Group | Subsystems |
 |-------|-----------|
 | Core | Agent Builder, Team Orchestrator, Tool & MCP Manager, Guardrail System, Observability Platform, Code Generation Tools, Prompt Registry, Evaluation Framework, Cost & Resource Manager |
 | Infrastructure | Memory & Context Mgmt, External Integrations Hub, IAM & Access Control, Agent Deployment Pipeline, Event Bus, Testing & Simulation |
 | User-Facing | Conversation & Session Mgmt, Replay & Debugging, Scheduling & Background Jobs, Multi-Provider LLM Management |
+| Runtime | **Runtime & Deployment Environment** (agent framework, container orchestration, process model) |
 
 **Foundational services** (no inter-dependencies, started first): Event Bus, Observability, IAM, Multi-Provider LLM.
 
 ### Key Architectural Decisions
 
+- **Agent framework**: Google ADK (`LoopAgent`, `LlmAgent`, `AgentTool`, `MCPToolset`) wrapped by an `AgentRuntime` abstraction layer for portability
+- **Runtime language**: Python 3.12 + asyncio for all agent services; Go acceptable only for infra sidecars (metrics, edge gateway)
+- **Container orchestration**: Kubernetes (EKS/GKE/AKS) with Istio service mesh, Helm charts, Argo Rollouts for canary
+- **Agent process model**: Intra-team workers run **in-process** within the Team Supervisor Pod (ADK `AgentTool`, p. 133); inter-team calls use **A2A HTTP** between separate Pods via Istio mTLS
+- **MCP server deployment**: STDIO subprocess in dev; standalone stateless K8s Deployment (HTTP+SSE) in production, HPA-scaled
+- **Guardrail deployment**: In-process `before_tool_callback` (standard tenants, ~10ms); dedicated Pod (regulated industries, ~100ms)
+- **Multi-tenancy isolation**: K8s Namespace per tenant (standard) → dedicated Node Pool (professional) → dedicated cluster (enterprise)
 - **Agent communication**: Intra-team via direct function calls / AgentTool; inter-team via A2A HTTP protocol with mTLS + OAuth2
 - **Tool protocol**: MCP (STDIO for dev, HTTP+SSE for production); every agent gets only its required tools (Least Privilege)
 - **Security model**: Six-layer defense-in-depth (input validation → behavioral constraints → tool restrictions → guardrail agents → external moderation → output filtering) + HITL escalation
