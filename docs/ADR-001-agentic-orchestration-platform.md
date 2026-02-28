@@ -591,3 +591,4 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 | 19 | Scheduling & Background Jobs | 19-scheduling-background-jobs.md |
 | 20 | Multi-Provider LLM Management | 20-multi-provider-llm-management.md |
 | 21 | Runtime & Deployment Environment | 21-runtime-deployment-environment.md |
+| 22 | Cost Analysis | 22-cost-analysis.md |
