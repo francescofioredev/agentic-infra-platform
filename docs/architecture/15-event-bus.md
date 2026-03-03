@@ -50,42 +50,42 @@ The design follows the principle from Multi-Agent Collaboration (p. 127): avoid 
 │  ┌────────────────────────────────────────────────────────────────────────┐  │
 │  │                       Event Router (Core)                              │  │
 │  │                                                                        │  │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                 │  │
-│  │  │  Topic:       │  │  Topic:       │  │  Topic:       │    ...         │  │
-│  │  │  agent.*      │  │  team.*       │  │  guardrail.*  │                │  │
-│  │  │  (partitioned │  │  (partitioned │  │  (partitioned │                │  │
-│  │  │   by agent_id)│  │   by team_id) │  │   by policy)  │                │  │
-│  │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘                 │  │
-│  │         │                  │                  │                         │  │
+│  │  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐               │  │
+│  │  │  Topic:       │  │  Topic:       │  │  Topic:       │    ...        │  │
+│  │  │  agent.*      │  │  team.*       │  │  guardrail.*  │               │  │
+│  │  │  (partitioned │  │  (partitioned │  │  (partitioned │               │  │
+│  │  │   by agent_id)│  │   by team_id) │  │   by policy)  │               │  │
+│  │  └──────┬────────┘  └──────┬────────┘  └──────┬────────┘               │  │
+│  │         │                  │                  │                        │  │
 │  │  ┌──────┴──────────────────┴──────────────────┴──────────────────────┐ │  │
 │  │  │              Stream Engine (Redis Streams / NATS JetStream)       │ │  │
 │  │  │  - Persistent message log    - Consumer group management          │ │  │
 │  │  │  - At-least-once delivery    - Partition-ordered processing       │ │  │
 │  │  │  - Configurable retention    - Backpressure handling              │ │  │
-│  │  └──────────────────────────────────────────────────────────────────┘ │  │
+│  │  └───────────────────────────────────────────────────────────────────┘ │  │
 │  └────────────────────────────────────────────────────────────────────────┘  │
 │                                                                              │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────────┐  │
-│  │ Schema Registry   │  │ Dead Letter Queue │  │ Event Replay Engine     │  │
-│  │                    │  │                    │  │                         │  │
-│  │ - Schema store     │  │ - Failed events    │  │ - Time-range replay    │  │
-│  │ - Version mgmt     │  │ - Retry scheduler  │  │ - Event-type replay   │  │
-│  │ - Compatibility    │  │ - Manual review UI  │  │ - Consumer replay     │  │
-│  │ - Validation       │  │ - Alerting          │  │ - Idempotency guard   │  │
-│  └──────────────────┘  └──────────────────┘  └──────────────────────────┘  │
+│  ┌──────────────────┐  ┌────────────────────┐  ┌───────────────────────┐     │
+│  │ Schema Registry  │  │ Dead Letter Queue  │  │ Event Replay Engine   │     │
+│  │                  │  │                    │  │                       │     │
+│  │ - Schema store   │  │ - Failed events    │  │ - Time-range replay   │     │
+│  │ - Version mgmt   │  │ - Retry scheduler  │  │ - Event-type replay   │     │
+│  │ - Compatibility  │  │ - Manual review UI │  │ - Consumer replay     │     │
+│  │ - Validation     │  │ - Alerting         │  │ - Idempotency guard   │     │
+│  └──────────────────┘  └────────────────────┘  └───────────────────────┘     │
 │                                                                              │
 │  ┌──────────────────────────────────────────────────────────────────────┐    │
-│  │                    Instrumentation Layer                              │    │
+│  │                    Instrumentation Layer                             │    │
 │  │  - Publish latency    - Consumer lag    - DLQ depth                  │    │
 │  │  - Event throughput   - Schema errors   - Replay operations          │    │
 │  └──────────────────────────────────────────────────────────────────────┘    │
 └──────────────────────────────────────────────────────────────────────────────┘
          │                         │                         │
-    ┌────┴────────┐         ┌──────┴──────┐          ┌──────┴──────┐
+    ┌────┴─────────┐         ┌─────┴────────┐          ┌─────┴───────┐
     │  Publishers  │         │  Subscribers │          │  Admin API  │
     │  (all 14     │         │  (all 14     │          │  (ops team) │
     │  subsystems) │         │  subsystems) │          │             │
-    └─────────────┘         └─────────────┘          └─────────────┘
+    └──────────────┘         └──────────────┘          └─────────────┘
 ```
 
 ### Relationship to Other Subsystems
@@ -416,56 +416,56 @@ Events are organized into **topics** based on their dot-delimited namespace pref
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    Topic Layout                          │
-│                                                          │
-│  Stream: events:agent       ← agent.created,             │
-│                                agent.deployed,            │
-│                                agent.failed,              │
-│                                agent.rollback             │
-│                                                          │
-│  Stream: events:team        ← team.created,               │
-│                                team.task.submitted,        │
-│                                team.task.completed         │
-│                                                          │
-│  Stream: events:tool        ← tool.invoked,               │
-│                                tool.failed,                │
-│                                tool.result                 │
-│                                                          │
-│  Stream: events:guardrail   ← guardrail.violation,        │
-│                                guardrail.alert,            │
-│                                guardrail.intervention      │
-│                                                          │
-│  Stream: events:prompt      ← prompt.created,             │
-│                                prompt.promoted,            │
-│                                prompt.rollback             │
-│                                                          │
-│  Stream: events:eval        ← eval.started,               │
-│                                eval.completed,             │
-│                                eval.regression_detected    │
-│                                                          │
-│  Stream: events:memory      ← memory.write,               │
-│                                memory.invalidated,         │
-│                                memory.gc_completed         │
-│                                                          │
-│  Stream: events:integration ← integration.call,           │
-│                                integration.error,          │
+│                    Topic Layout                         │
+│                                                         │
+│  Stream: events:agent       ← agent.created,            │
+│                                agent.deployed,          │
+│                                agent.failed,            │
+│                                agent.rollback           │
+│                                                         │
+│  Stream: events:team        ← team.created,             │
+│                                team.task.submitted,     │
+│                                team.task.completed      │
+│                                                         │
+│  Stream: events:tool        ← tool.invoked,             │
+│                                tool.failed,             │
+│                                tool.result              │
+│                                                         │
+│  Stream: events:guardrail   ← guardrail.violation,      │
+│                                guardrail.alert,         │
+│                                guardrail.intervention   │
+│                                                         │
+│  Stream: events:prompt      ← prompt.created,           │
+│                                prompt.promoted,         │
+│                                prompt.rollback          │
+│                                                         │
+│  Stream: events:eval        ← eval.started,             │
+│                                eval.completed,          │
+│                                eval.regression_detected │
+│                                                         │
+│  Stream: events:memory      ← memory.write,             │
+│                                memory.invalidated,      │
+│                                memory.gc_completed      │
+│                                                         │
+│  Stream: events:integration ← integration.call,         │
+│                                integration.error,       │
 │                                integration.webhook_received│
-│                                                          │
-│  Stream: events:budget      ← budget.warning,             │
-│                                budget.exceeded,            │
+│                                                         │
+│  Stream: events:budget      ← budget.warning,           │
+│                                budget.exceeded,         │
 │                                budget.degradation_triggered│
-│                                                          │
-│  Stream: events:deployment  ← deployment.started,         │
+│                                                         │
+│  Stream: events:deployment  ← deployment.started,       │
 │                                deployment.canary_promoted, │
-│                                deployment.rollback         │
-│                                                          │
-│  Stream: events:auth        ← auth.login,                 │
-│                                auth.permission_denied,     │
-│                                auth.key_rotated            │
-│                                                          │
-│  Stream: events:dlq         ← Dead Letter Queue           │
-│                                (failed events from any     │
-│                                 stream)                    │
+│                                deployment.rollback      │
+│                                                         │
+│  Stream: events:auth        ← auth.login,               │
+│                                auth.permission_denied,  │
+│                                auth.key_rotated         │
+│                                                         │
+│  Stream: events:dlq         ← Dead Letter Queue         │
+│                                (failed events from any  │
+│                                 stream)                 │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -1643,32 +1643,32 @@ This is analogous to how the Prompt Registry (subsystem 07) versions prompt temp
 
 ```
 ┌──────────────────────────────────────────────────┐
-│                Schema Registry                    │
-│                                                   │
+│                Schema Registry                   │
+│                                                  │
 │  ┌──────────────────────────────────────────┐    │
-│  │  Schema Store (PostgreSQL)                │    │
-│  │                                           │    │
-│  │  event_type    │ version │ schema (JSON)  │    │
-│  │  ──────────────┼─────────┼───────────────  │    │
-│  │  agent.created │  1.0.0  │ { ... }        │    │
-│  │  agent.created │  1.1.0  │ { ... }        │    │
-│  │  agent.deployed│  1.0.0  │ { ... }        │    │
-│  │  ...           │  ...    │  ...           │    │
+│  │  Schema Store (PostgreSQL)                │   │
+│  │                                           │   │
+│  │  event_type    │ version │ schema (JSON)  │   │
+│  │  ──────────────┼─────────┼───────────────  │  │
+│  │  agent.created │  1.0.0  │ { ... }        │   │
+│  │  agent.created │  1.1.0  │ { ... }        │   │
+│  │  agent.deployed│  1.0.0  │ { ... }        │   │
+│  │  ...           │  ...    │  ...           │   │
 │  └──────────────────────────────────────────┘    │
-│                                                   │
+│                                                  │
 │  ┌──────────────────────────────────────────┐    │
-│  │  Compatibility Checker                    │    │
-│  │                                           │    │
-│  │  - BACKWARD: new schema reads old data    │    │
-│  │  - FORWARD: old schema reads new data     │    │
-│  │  - FULL: both directions                  │    │
+│  │  Compatibility Checker                    │   │
+│  │                                           │   │
+│  │  - BACKWARD: new schema reads old data    │   │
+│  │  - FORWARD: old schema reads new data     │   │
+│  │  - FULL: both directions                  │   │
 │  └──────────────────────────────────────────┘    │
-│                                                   │
+│                                                  │
 │  ┌──────────────────────────────────────────┐    │
-│  │  Validation Cache (Redis)                 │    │
-│  │                                           │    │
-│  │  Compiled JSON Schema validators          │    │
-│  │  cached per event_type + version          │    │
+│  │  Validation Cache (Redis)                 │   │
+│  │                                           │   │
+│  │  Compiled JSON Schema validators          │   │
+│  │  cached per event_type + version          │   │
 │  └──────────────────────────────────────────┘    │
 └──────────────────────────────────────────────────┘
 ```

@@ -44,51 +44,51 @@ Without this subsystem, agents would have no standardized way to receive user in
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
-│                 Conversation & Session Management Subsystem                    │
+│                 Conversation & Session Management Subsystem                   │
 │                                                                               │
-│  ┌─────────────────────────────────────────────────────────────────────────┐  │
-│  │                       Channel Adapters Layer                            │  │
-│  │                                                                         │  │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐  │  │
-│  │  │  REST    │ │WebSocket │ │  Slack   │ │ Telegram │ │  Web Widget  │  │  │
-│  │  │  API     │ │  Server  │ │ Adapter  │ │ Adapter  │ │  Adapter     │  │  │
-│  │  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └──────┬───────┘  │  │
-│  │       │             │            │             │              │          │  │
-│  │       └─────────────┴────────┬───┴─────────────┴──────────────┘          │  │
-│  │                              │                                           │  │
-│  │                   ┌──────────┴──────────┐                                │  │
-│  │                   │  Unified Message    │                                │  │
-│  │                   │  Normalizer         │                                │  │
-│  │                   └──────────┬──────────┘                                │  │
-│  └──────────────────────────────┼──────────────────────────────────────────┘  │
-│                                 │                                              │
+│  ┌──────────────────────────────────────────────────────────────────────────┐ │
+│  │                       Channel Adapters Layer                             │ │
+│  │                                                                          │ │
+│  │  ┌──────────┐  ┌──────────┐ ┌──────────┐  ┌──────────┐ ┌──────────────┐  │ │
+│  │  │  REST    │  │WebSocket │ │  Slack   │  │ Telegram │ │  Web Widget  │  │ │
+│  │  │  API     │  │  Server  │ │ Adapter  │  │ Adapter  │ │  Adapter     │  │ │
+│  │  └────┬─────┘  └────┬─────┘ └────┬─────┘  └────┬─────┘ └──────┬───────┘  │ │
+│  │       │             │            │             │              │          │ │
+│  │       └─────────────┴────────┬───┴─────────────┴──────────────┘          │ │
+│  │                              │                                           │ │
+│  │                   ┌──────────┴──────────┐                                │ │
+│  │                   │  Unified Message    │                                │ │
+│  │                   │  Normalizer         │                                │ │
+│  │                   └──────────┬──────────┘                                │ │
+│  └──────────────────────────────┼───────────────────────────────────────────┘ │
+│                                 │                                             │
 │  ┌──────────────────────────────┼──────────────────────────────────────────┐  │
 │  │                      Core Session Engine                                │  │
 │  │                                                                         │  │
-│  │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────┐  │  │
-│  │  │  Session Manager │  │  Conversation    │  │  Handoff Controller  │  │  │
-│  │  │                  │  │  Router          │  │                      │  │  │
-│  │  │ - create         │  │                  │  │ - agent_to_human     │  │  │
-│  │  │ - activate       │  │ - classify       │  │ - human_to_agent     │  │  │
-│  │  │ - pause          │  │ - route          │  │ - context_transfer   │  │  │
-│  │  │ - resume         │  │ - fallback       │  │ - timeout_watchdog   │  │  │
-│  │  │ - close          │  │ - rebalance      │  │ - safe_default       │  │  │
-│  │  └────────┬─────────┘  └────────┬─────────┘  └──────────┬───────────┘  │  │
-│  │           │                     │                        │              │  │
-│  │  ┌────────┴─────────────────────┴────────────────────────┴───────────┐  │  │
-│  │  │                    Session State Store                             │  │  │
+│  │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────┐   │  │
+│  │  │  Session Manager │  │  Conversation    │  │  Handoff Controller  │   │  │
+│  │  │                  │  │  Router          │  │                      │   │  │
+│  │  │ - create         │  │                  │  │ - agent_to_human     │   │  │
+│  │  │ - activate       │  │ - classify       │  │ - human_to_agent     │   │  │
+│  │  │ - pause          │  │ - route          │  │ - context_transfer   │   │  │
+│  │  │ - resume         │  │ - fallback       │  │ - timeout_watchdog   │   │  │
+│  │  │ - close          │  │ - rebalance      │  │ - safe_default       │   │  │
+│  │  └────────┬─────────┘  └────────┬─────────┘  └──────────┬───────────┘   │  │
+│  │           │                     │                       │               │  │
+│  │  ┌────────┴─────────────────────┴───────────────────────┴────────────┐  │  │
+│  │  │                    Session State Store                            │  │  │
 │  │  │  prefix: session:  │  prefix: conv:  │  prefix: handoff:          │  │  │
 │  │  └───────────────────────────────────────────────────────────────────┘  │  │
 │  └─────────────────────────────────────────────────────────────────────────┘  │
 │                                                                               │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌─────────────────────────────┐ │
-│  │  Stream Emitter  │  │  Thread Manager  │  │  Presence Tracker           │ │
-│  │                  │  │                  │  │                             │ │
-│  │ - SSE push       │  │ - thread_create  │  │ - typing_indicator          │ │
-│  │ - WS push        │  │ - thread_list    │  │ - read_receipt              │ │
-│  │ - webhook push   │  │ - thread_switch  │  │ - online/offline            │ │
-│  │ - token stream   │  │ - thread_archive │  │ - agent_status              │ │
-│  └──────────────────┘  └──────────────────┘  └─────────────────────────────┘ │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌─────────────────────────────┐  │
+│  │  Stream Emitter  │  │  Thread Manager  │  │  Presence Tracker           │  │
+│  │                  │  │                  │  │                             │  │
+│  │ - SSE push       │  │ - thread_create  │  │ - typing_indicator          │  │
+│  │ - WS push        │  │ - thread_list    │  │ - read_receipt              │  │
+│  │ - webhook push   │  │ - thread_switch  │  │ - online/offline            │  │
+│  │ - token stream   │  │ - thread_archive │  │ - agent_status              │  │
+│  └──────────────────┘  └──────────────────┘  └─────────────────────────────┘  │
 └───────────────────────────────────────────────────────────────────────────────┘
          │                       │                       │
     ┌────┴────┐             ┌────┴────┐             ┌────┴────┐
@@ -248,26 +248,26 @@ Sessions follow a strict state machine that governs valid transitions. Every tra
 ### 3.1 State Machine Diagram
 
 ```
-                    ┌──────────────────────────────────────────────────┐
+                    ┌───────────────────────────────────────────────────┐
                     │           Session Lifecycle State Machine         │
-                    │                                                    │
-                    │                                                    │
+                    │                                                   │
+                    │                                                   │
                     │         ┌─────────┐                               │
                     │         │ CREATED │                               │
                     │         └────┬────┘                               │
                     │              │ agent_assigned                     │
                     │              ▼                                    │
-                    │         ┌─────────┐   idle_timeout   ┌────────┐  │
-                    │    ┌───>│ ACTIVE  │────────────────>│ PAUSED │  │
-                    │    │    └────┬────┘                  └───┬────┘  │
+                    │         ┌─────────┐   idle_timeout   ┌────────┐   │
+                    │    ┌───>│ ACTIVE  │─────────────────>│ PAUSED │   │
+                    │    │    └────┬────┘                  └───┬────┘   │
                     │    │         │                           │        │
-                    │    │         │ handoff_initiated          │ user_  │
+                    │    │         │ handoff_initiated         │ user_  │
                     │    │         ▼                           │ returns│
                     │    │    ┌──────────┐                     │        │
                     │    │    │ HANDED   │                     │        │
                     │    │    │ OFF      │                     │        │
                     │    │    └────┬─────┘                     │        │
-                    │    │         │ handback_completed         │        │
+                    │    │         │ handback_completed        │        │
                     │    │         ▼                           │        │
                     │    │    ┌─────────┐                      │        │
                     │    └────│ RESUMED │<─────────────────────┘        │
@@ -279,9 +279,9 @@ Sessions follow a strict state machine that governs valid transitions. Every tra
                     │         ┌─────────┐                               │
                     │         │ CLOSED  │                               │
                     │         └─────────┘                               │
-                    │                                                    │
+                    │                                                   │
                     │  Any state ──── error ───> CLOSED (with reason)   │
-                    └──────────────────────────────────────────────────┘
+                    └───────────────────────────────────────────────────┘
 ```
 
 ### 3.2 State Transition Table
@@ -615,60 +615,60 @@ The platform supports five communication channels, each with different capabilit
                           INBOUND FLOW
    ┌──────────────────────────────────────────────────────────────┐
    │                                                              │
-   │  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────────────┐  │
-   │  │ REST │  │  WS  │  │Slack │  │Telegr│  │ Web Widget   │  │
-   │  │ POST │  │ msg  │  │event │  │update│  │ postMessage  │  │
-   │  └──┬───┘  └──┬───┘  └──┬───┘  └──┬───┘  └──────┬───────┘  │
-   │     │         │         │         │              │           │
-   │     ▼         ▼         ▼         ▼              ▼           │
-   │  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────────────┐  │
-   │  │Adapt.│  │Adapt.│  │Adapt.│  │Adapt.│  │  Adapter     │  │
-   │  │ REST │  │  WS  │  │Slack │  │Telegr│  │  Widget      │  │
-   │  └──┬───┘  └──┬───┘  └──┬───┘  └──┬───┘  └──────┬───────┘  │
-   │     │         │         │         │              │           │
-   │     └─────────┴─────┬───┴─────────┴──────────────┘           │
+   │  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────────────┐    │
+   │  │ REST │  │  WS  │  │Slack │  │Telegr│  │ Web Widget   │    │
+   │  │ POST │  │ msg  │  │event │  │update│  │ postMessage  │    │
+   │  └──┬───┘  └──┬───┘  └──┬───┘  └──┬───┘  └──────┬───────┘    │
+   │     │         │         │         │             │            │
+   │     ▼         ▼         ▼         ▼             ▼            │
+   │  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────────────┐    │
+   │  │Adapt.│  │Adapt.│  │Adapt.│  │Adapt.│  │  Adapter     │    │
+   │  │ REST │  │  WS  │  │Slack │  │Telegr│  │  Widget      │    │
+   │  └──┬───┘  └──┬───┘  └──┬───┘  └──┬───┘  └──────┬───────┘    │
+   │     │         │         │         │             │            │
+   │     └─────────┴─────┬───┴─────────┴─────────────┘            │
    │                     │                                        │
    │                     ▼                                        │
    │           ┌─────────────────┐                                │
    │           │  Input Guardrail│  (p. 286 — validation,         │
    │           │  Pipeline       │   sanitization, PII detection) │
    │           └────────┬────────┘                                │
-   │                    ▼                                        │
+   │                    ▼                                         │
    │           ┌─────────────────┐                                │
    │           │ Unified Message │  Channel-agnostic format       │
-   │           │ (normalized)    │                                 │
+   │           │ (normalized)    │                                │
    │           └────────┬────────┘                                │
-   │                    ▼                                        │
+   │                    ▼                                         │
    │           ┌─────────────────┐                                │
    │           │ Session Manager │  Route to session / create     │
    │           └────────┬────────┘                                │
-   │                    ▼                                        │
+   │                    ▼                                         │
    │           ┌─────────────────┐                                │
    │           │ Conversation    │  Dispatch to agent / team      │
    │           │ Router          │  (p. 25 — LLM routing)         │
    │           └────────┬────────┘                                │
-   │                    ▼                                        │
+   │                    ▼                                         │
    │           ┌─────────────────┐                                │
-   │           │ Agent / Team    │  Process and generate response  │
+   │           │ Agent / Team    │  Process and generate response │
    │           │ Execution       │  (p. 127 — supervisor pattern) │
    │           └────────┬────────┘                                │
-   │                    ▼                                        │
+   │                    ▼                                         │
    │           ┌─────────────────┐                                │
    │           │ Output Guardrail│  (p. 286 — output filtering,   │
-   │           │ Pipeline        │   PII redaction, safety check)  │
+   │           │ Pipeline        │   PII redaction, safety check) │
    │           └────────┬────────┘                                │
-   │                    ▼                                        │
+   │                    ▼                                         │
    │           ┌─────────────────┐                                │
    │           │ Stream Emitter  │  Token-by-token or full        │
-   │           │                 │  response delivery              │
+   │           │                 │  response delivery             │
    │           └────────┬────────┘                                │
-   │                    │                                        │
-   │     ┌──────────────┼──────────────────────────────┐         │
-   │     ▼         ▼         ▼         ▼              ▼          │
-   │  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────────────┐  │
-   │  │ REST │  │  WS  │  │Slack │  │Telegr│  │ Web Widget   │  │
-   │  │ resp │  │ push │  │ API  │  │  API │  │ postMessage  │  │
-   │  └──────┘  └──────┘  └──────┘  └──────┘  └──────────────┘  │
+   │                    │                                         │
+   │     ┌─────────┬────┼────┬─────────┬───────────────┐          │
+   │     ▼         ▼         ▼         ▼               ▼          │
+   │  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────────────┐    │
+   │  │ REST │  │  WS  │  │Slack │  │Telegr│  │ Web Widget   │    │
+   │  │ resp │  │ push │  │ API  │  │  API │  │ postMessage  │    │
+   │  └──────┘  └──────┘  └──────┘  └──────┘  └──────────────┘    │
    │                                                              │
    │                         OUTBOUND FLOW                        │
    └──────────────────────────────────────────────────────────────┘
@@ -1488,13 +1488,13 @@ Agent detects                                        Human operator
 escalation need                                      accepts handoff
      │                                                     │
      ▼                                                     ▼
-┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────────────┐
+┌──────────┐    ┌───────────┐    ┌──────────┐    ┌──────────────────┐
 │ 1. Agent │───>│ 2. Context│───>│ 3. Queue │───>│ 4. Human         │
 │ requests │    │ snapshot  │    │ for human│    │ operator active  │
 │ handoff  │    │ created   │    │ operator │    │                  │
-└──────────┘    └──────────┘    └──────────┘    └────────┬─────────┘
-                                                         │
-                                              ┌──────────┴──────────┐
+└──────────┘    └───────────┘    └──────────┘    └────────┬─────────┘
+                                                          │
+                                              ┌───────────┴─────────┐
                                               │                     │
                                               ▼                     ▼
                                     ┌──────────────┐     ┌──────────────┐
@@ -1504,11 +1504,11 @@ escalation need                                      accepts handoff
                                     └──────────────┘     └──────┬───────┘
                                                                 │
                                                                 ▼
-                                                       ┌──────────────┐
-                                                       │ 6. Agent     │
-                                                       │ resumes with │
-                                                       │ full context │
-                                                       └──────────────┘
+                                                         ┌──────────────┐
+                                                         │ 6. Agent     │
+                                                         │ resumes with │
+                                                         │ full context │
+                                                         └──────────────┘
 ```
 
 ### 7.2 Handoff Context Snapshot
@@ -1963,31 +1963,31 @@ Client Reconnect Flow (WebSocket):
 ### 8.3 State Persistence Strategy
 
 ```
-┌─────────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────────┐
 │                 State Persistence Layers                      │
 │                                                               │
-│  ┌──────────────────────────────┐                            │
-│  │ Layer 1: In-Process Memory   │  Token stream buffers,     │
-│  │ (volatile)                   │  active WebSocket refs,    │
-│  │                               │  typing indicator state    │
-│  └──────────────┬───────────────┘                            │
+│  ┌──────────────────────────────┐                             │
+│  │ Layer 1: In-Process Memory   │  Token stream buffers,      │
+│  │ (volatile)                   │  active WebSocket refs,     │
+│  │                              │  typing indicator state     │
+│  └──────────────┬───────────────┘                             │
 │                 │ every message                               │
 │                 ▼                                             │
-│  ┌──────────────────────────────┐                            │
-│  │ Layer 2: Redis               │  Session state, routing,   │
-│  │ (fast, semi-durable)         │  active timers, recent     │
-│  │                               │  conversation window       │
-│  └──────────────┬───────────────┘                            │
+│  ┌──────────────────────────────┐                             │
+│  │ Layer 2: Redis               │  Session state, routing,    │
+│  │ (fast, semi-durable)         │  active timers, recent      │
+│  │                              │  conversation window        │
+│  └──────────────┬───────────────┘                             │
 │                 │ every 10 messages or on state change        │
 │                 ▼                                             │
-│  ┌──────────────────────────────┐                            │
+│  ┌──────────────────────────────┐                             │
 │  │ Layer 3: PostgreSQL          │  Full conversation history, │
-│  │ (durable, source of truth)   │  session snapshots, user   │
-│  │                               │  profiles, handoff records  │
-│  └──────────────────────────────┘                            │
+│  │ (durable, source of truth)   │  session snapshots, user    │
+│  │                              │  profiles, handoff records  │
+│  └──────────────────────────────┘                             │
 │                                                               │
 │  Recovery priority: PostgreSQL > Redis > In-Process           │
-└─────────────────────────────────────────────────────────────┘
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ### 8.4 Session Recovery Manager
@@ -2105,32 +2105,32 @@ Users can maintain multiple concurrent conversations, each as a separate thread.
 ### 9.1 Threading Model
 
 ```
-┌─────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────┐
 │                  User: Jane Doe                      │
-│                                                       │
-│  ┌──────────────────────────────────────────────┐    │
-│  │ Conversation: conv_001                        │    │
-│  │                                                │    │
-│  │  ┌────────────────────┐  ┌──────────────────┐ │    │
-│  │  │ Thread: thr_001    │  │ Thread: thr_002  │ │    │
-│  │  │ "Billing inquiry"  │  │ "Feature request"│ │    │
-│  │  │ Agent: support     │  │ Agent: product   │ │    │
-│  │  │ Status: active     │  │ Status: paused   │ │    │
-│  │  │ Messages: 12       │  │ Messages: 5      │ │    │
-│  │  └────────────────────┘  └──────────────────┘ │    │
-│  └──────────────────────────────────────────────────┘  │
-│                                                       │
-│  ┌──────────────────────────────────────────────┐    │
-│  │ Conversation: conv_002 (different channel)    │    │
-│  │                                                │    │
-│  │  ┌────────────────────┐                       │    │
-│  │  │ Thread: thr_003    │                       │    │
-│  │  │ "API integration"  │                       │    │
-│  │  │ Agent: developer   │                       │    │
-│  │  │ Status: active     │                       │    │
-│  │  └────────────────────┘                       │    │
-│  └──────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────┘
+│                                                      │
+│  ┌────────────────────────────────────────────────┐  │
+│  │ Conversation: conv_001                         │  │
+│  │                                                │  │
+│  │  ┌────────────────────┐  ┌───────────────────┐ │  │
+│  │  │ Thread: thr_001    │  │ Thread: thr_002   │ │  │
+│  │  │ "Billing inquiry"  │  │ "Feature request" │ │  │
+│  │  │ Agent: support     │  │ Agent: product    │ │  │
+│  │  │ Status: active     │  │ Status: paused    │ │  │
+│  │  │ Messages: 12       │  │ Messages: 5       │ │  │
+│  │  └────────────────────┘  └───────────────────┘ │  │
+│  └────────────────────────────────────────────────┘  │
+│                                                      │
+│  ┌────────────────────────────────────────────────┐  │
+│  │ Conversation: conv_002 (different channel)     │  │
+│  │                                                │  │
+│  │  ┌────────────────────┐                        │  │
+│  │  │ Thread: thr_003    │                        │  │
+│  │  │ "API integration"  │                        │  │
+│  │  │ Agent: developer   │                        │  │
+│  │  │ Status: active     │                        │  │
+│  │  └────────────────────┘                        │  │
+│  └────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────┘
 ```
 
 ### 9.2 Thread Schema

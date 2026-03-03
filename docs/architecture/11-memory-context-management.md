@@ -43,28 +43,28 @@ Without this subsystem, every agent interaction starts from zero — no history,
 │                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────┐    │
 │  │                    Memory Manager (Core)                        │    │
-│  │  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌────────────┐  │    │
-│  │  │  Session   │  │  Working   │  │  Long-Term │  │  Team      │  │    │
-│  │  │  Memory    │  │  Memory    │  │  Memory    │  │  Memory    │  │    │
-│  │  │ (per-turn) │  │ (state)    │  │ (persist)  │  │  (shared)  │  │    │
-│  │  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘  └─────┬──────┘  │    │
+│  │  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌────────────┐  │      │
+│  │  │  Session   │  │  Working   │  │  Long-Term │  │  Team      │  │   │
+│  │  │  Memory    │  │  Memory    │  │  Memory    │  │  Memory    │  │   │
+│  │  │ (per-turn) │  │ (state)    │  │ (persist)  │  │  (shared)  │  │   │
+│  │  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘  └─────┬──────┘  │      │
 │  │        │               │               │              │         │    │
 │  │  ┌─────┴───────────────┴───────────────┴──────────────┴─────┐   │    │
-│  │  │                  State Store Layer                        │   │    │
+│  │  │                  State Store Layer                        │   │   │
 │  │  │  prefix: temp:  │  prefix: agent:  │  prefix: user:      │   │    │
 │  │  │                 │  prefix: team:   │  prefix: app:       │   │    │
 │  │  └──────────────────────────────────────────────────────────┘   │    │
 │  └─────────────────────────────────────────────────────────────────┘    │
 │                                                                         │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────┐  │
-│  │ Context Optimizer │  │  RAG Engine       │  │  Memory Lifecycle    │  │
-│  │                   │  │                   │  │  Manager             │  │
-│  │ - Pruning         │  │ - Ingestion       │  │                      │  │
-│  │ - Summarization   │  │ - Retrieval       │  │ - TTL enforcement    │  │
-│  │ - Compression     │  │ - Hybrid Search   │  │ - Invalidation       │  │
-│  │ - Windowing       │  │ - GraphRAG        │  │ - GC / Compaction    │  │
-│  │ - Prioritization  │  │ - Agentic RAG     │  │ - Privacy compliance │  │
-│  └──────────────────┘  └──────────────────┘  └──────────────────────┘  │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────┐   │
+│  │ Context Optimizer │  │  RAG Engine       │  │  Memory Lifecycle    │ │
+│  │                   │  │                   │  │  Manager             │ │
+│  │ - Pruning         │  │ - Ingestion       │  │                      │ │
+│  │ - Summarization   │  │ - Retrieval       │  │ - TTL enforcement    │ │
+│  │ - Compression     │  │ - Hybrid Search   │  │ - Invalidation       │ │
+│  │ - Windowing       │  │ - GraphRAG        │  │ - GC / Compaction    │ │
+│  │ - Prioritization  │  │ - Agentic RAG     │  │ - Privacy compliance │ │
+│  └──────────────────┘  └──────────────────┘  └──────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────┘
          │                        │                        │
     ┌────┴────┐             ┌─────┴─────┐           ┌─────┴──────┐
@@ -99,41 +99,41 @@ Building on the ADK Session/State/Memory trichotomy (p. 148), AgentForge extends
 ┌──────────────────────────────────────────────────────────────┐
 │                                                              │
 │  Layer 4: KNOWLEDGE MEMORY (cross-system, RAG-backed)        │
-│  ─────────────────────────────────────────────────────        │
+│  ─────────────────────────────────────────────────────       │
 │  Scope: Platform-wide or per-domain                          │
 │  Storage: Vector store + document store                      │
-│  TTL: Source-dependent (hours to indefinite)                  │
-│  Examples: Product catalog, company policies, API docs        │
+│  TTL: Source-dependent (hours to indefinite)                 │
+│  Examples: Product catalog, company policies, API docs       │
 │                                                              │
 ├──────────────────────────────────────────────────────────────┤
 │                                                              │
 │  Layer 3: LONG-TERM MEMORY (cross-session, persistent)       │
-│  ─────────────────────────────────────────────────────        │
+│  ─────────────────────────────────────────────────────       │
 │  Scope: Per-user (user:) or per-app (app:)                   │
-│  Storage: PostgreSQL + optional vector embeddings             │
-│  TTL: 30-365 days (configurable per data type)                │
-│  Examples: User preferences, conversation summaries,          │
-│            learned behaviors, agent performance history        │
+│  Storage: PostgreSQL + optional vector embeddings            │
+│  TTL: 30-365 days (configurable per data type)               │
+│  Examples: User preferences, conversation summaries,         │
+│            learned behaviors, agent performance history      │
 │                                                              │
 ├──────────────────────────────────────────────────────────────┤
 │                                                              │
 │  Layer 2: WORKING MEMORY (cross-turn, session-scoped)        │
-│  ─────────────────────────────────────────────────────        │
+│  ─────────────────────────────────────────────────────       │
 │  Scope: Per-agent (agent:) or per-team (team:)               │
-│  Storage: Redis                                               │
-│  TTL: Session end                                             │
-│  Examples: Task state, intermediate results, plan progress,   │
-│            tool call results, scratchpad for reasoning         │
+│  Storage: Redis                                              │
+│  TTL: Session end                                            │
+│  Examples: Task state, intermediate results, plan progress,  │
+│            tool call results, scratchpad for reasoning       │
 │                                                              │
 ├──────────────────────────────────────────────────────────────┤
 │                                                              │
 │  Layer 1: SESSION MEMORY (per-turn, ephemeral)               │
-│  ─────────────────────────────────────────────────────        │
-│  Scope: Per-interaction (temp:)                               │
-│  Storage: In-process memory                                   │
-│  TTL: Current turn only                                       │
-│  Examples: Current message, current tool call, reasoning       │
-│            trace, routing decision context                     │
+│  ─────────────────────────────────────────────────────       │
+│  Scope: Per-interaction (temp:)                              │
+│  Storage: In-process memory                                  │
+│  TTL: Current turn only                                      │
+│  Examples: Current message, current tool call, reasoning     │
+│            trace, routing decision context                   │
 │                                                              │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -485,33 +485,33 @@ In a multi-agent team, agents must coordinate without passing full histories to 
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│                    Team Alpha Shared Memory                     │
-│                                                                 │
+│                    Team Alpha Shared Memory                    │
+│                                                                │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │  Team Working Memory (team:alpha:*)                      │   │
-│  │                                                           │   │
-│  │  team:alpha:active_plan      → Current plan + progress   │   │
-│  │  team:alpha:shared_context   → Shared facts/findings     │   │
-│  │  team:alpha:coordination     → Who is doing what         │   │
-│  │  team:alpha:decisions        → Key decisions + rationale  │   │
-│  │  team:alpha:blockers         → Current blocking issues    │   │
+│  │  Team Working Memory (team:alpha:*)                      │  │
+│  │                                                           │ │
+│  │  team:alpha:active_plan      → Current plan + progress   │  │
+│  │  team:alpha:shared_context   → Shared facts/findings     │  │
+│  │  team:alpha:coordination     → Who is doing what         │  │
+│  │  team:alpha:decisions        → Key decisions + rationale  │ │
+│  │  team:alpha:blockers         → Current blocking issues    │ │
 │  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
+│                                                                │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │  Team Knowledge Base (team:alpha:kb:*)                   │   │
-│  │                                                           │   │
+│  │  Team Knowledge Base (team:alpha:kb:*)                   │  │
+│  │                                                           │ │
 │  │  team:alpha:kb:domain_facts  → Accumulated domain knowledge│  │
 │  │  team:alpha:kb:past_tasks    → Summaries of completed tasks│  │
-│  │  team:alpha:kb:lessons       → Learned patterns/mistakes  │   │
+│  │  team:alpha:kb:lessons       → Learned patterns/mistakes  │ │
 │  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
+│                                                                │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │  Access Control                                          │   │
-│  │                                                           │   │
-│  │  Supervisor  → read/write all team:alpha:* keys          │   │
-│  │  Workers     → read all, write only own namespace        │   │
-│  │  Guardrails  → read-only (for monitoring)                │   │
-│  │  Other teams → no access (isolation)                      │   │
+│  │  Access Control                                          │  │
+│  │                                                           │ │
+│  │  Supervisor  → read/write all team:alpha:* keys          │  │
+│  │  Workers     → read all, write only own namespace        │  │
+│  │  Guardrails  → read-only (for monitoring)                │  │
+│  │  Other teams → no access (isolation)                      │ │
 │  └─────────────────────────────────────────────────────────┘   │
 └────────────────────────────────────────────────────────────────┘
 ```

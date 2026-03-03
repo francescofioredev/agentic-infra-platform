@@ -37,22 +37,22 @@ In agentic systems, a significant portion of value is delivered not through inte
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                   Scheduling & Background Jobs                          │
 │                                                                         │
-│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────────────┐    │
+│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────────────┐     │
 │  │  Schedule     │  │  Job Queue   │  │  Event Trigger             │    │
 │  │  Manager      │  │  (Priority)  │  │  Manager                   │    │
 │  │  (p. 107)     │  │  (p. 326)    │  │  (p. 328)                  │    │
-│  └──────┬───────┘  └──────┬───────┘  └────────────┬───────────────┘    │
+│  └──────┬───────┘  └──────┬───────┘  └────────────┬───────────────┘     │
 │         │                 │                        │                    │
 │  ┌──────┴─────────────────┴────────────────────────┴───────────────┐    │
-│  │                    Job Execution Engine                           │    │
-│  │        (worker pools, concurrency control, retries)              │    │
+│  │                    Job Execution Engine                           │  │
+│  │        (worker pools, concurrency control, retries)              │   │
 │  └──────┬─────────────────┬────────────────────────┬───────────────┘    │
 │         │                 │                        │                    │
-│  ┌──────┴───────┐  ┌─────┴────────┐  ┌────────────┴───────────────┐    │
+│  ┌──────┴───────┐  ┌─────┴────────┐  ┌────────────┴───────────────┐     │
 │  │  DAG          │  │  Distributed │  │  Dead Letter               │    │
 │  │  Executor     │  │  Lock Mgr    │  │  Queue                     │    │
 │  │  (p. 108)     │  │              │  │  (p. 205)                  │    │
-│  └──────────────┘  └──────────────┘  └────────────────────────────┘    │
+│  └──────────────┘  └──────────────┘  └────────────────────────────┘     │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -2043,32 +2043,32 @@ class JobScheduler:
        ┌──────────────────────┼──────────────────────┐
        │                      │                      │
 ┌──────┴──────────┐   ┌──────┴──────────┐   ┌───────┴─────────┐
-│  RetryPolicy    │   │ JobDependency   │   │  EventTrigger   │
+│  RetryPolicy    │   │ JobDependency   │   │  EventTrigger          │
 ├─────────────────┤   ├─────────────────┤   ├─────────────────┤
-│ policy_id       │   │ dag_id          │   │ trigger_id      │
-│ job_id (FK)     │   │ job_id (FK)     │   │ event_type      │
-│ max_retries     │   │ depends_on (FK) │   │ filter          │
-│ backoff_strat   │   │ input_mapping   │   │ debounce_cfg    │
-│ base_delay      │   │                 │   │ batch_cfg       │
-│ max_delay       │   │                 │   │ job_template    │
-│ jitter_factor   │   │                 │   │ enabled         │
-│ retry_on_errors │   │                 │   │ tenant_id       │
+│ policy_id       │   │ dag_id          │   │ trigger_id             │
+│ job_id (FK)     │   │ job_id (FK)     │   │ event_type             │
+│ max_retries     │   │ depends_on (FK) │   │ filter                 │
+│ backoff_strat   │   │ input_mapping   │   │ debounce_cfg           │
+│ base_delay      │   │                 │   │ batch_cfg              │
+│ max_delay       │   │                 │   │ job_template           │
+│ jitter_factor   │   │                 │   │ enabled                │
+│ retry_on_errors │   │                 │   │ tenant_id              │
 └─────────────────┘   └─────────────────┘   └─────────────────┘
 
 ┌──────────────────┐
-│  DeadLetterEntry │
+│  DeadLetterEntry                                                   │
 ├──────────────────┤
-│ dlq_entry_id     │
-│ job_id (FK)      │
-│ execution_id(FK) │
-│ failed_at        │
-│ retry_attempts   │
-│ last_error       │
-│ all_errors       │
-│ original_job     │
-│ resolution       │
-│ resolved_by      │
-│ resolved_at      │
+│ dlq_entry_id                                                       │
+│ job_id (FK)                                                        │
+│ execution_id(FK)                                                   │
+│ failed_at                                                          │
+│ retry_attempts                                                     │
+│ last_error                                                         │
+│ all_errors                                                         │
+│ original_job                                                       │
+│ resolution                                                         │
+│ resolved_by                                                        │
+│ resolved_at                                                        │
 └──────────────────┘
 ```
 
@@ -2562,17 +2562,17 @@ This subsystem integrates with multiple other AgentForge subsystems:
 │  Agent Builder (#1) ───────────────►  Evaluation Framework (#8)     │
 │    (agent configs, schemas)            (scheduled eval sweeps)      │
 │                                                                     │
-│  Cost & Resource Mgr (#9) ─────────►  Team Orchestrator (#2)       │
+│  Cost & Resource Mgr (#9) ─────────►  Team Orchestrator (#2)        │
 │    (budget checks, cost tracking)      (team workflow execution)    │
 │                                                                     │
-│  IAM & Access Control (#12) ───────►  Replay & Debugging (#17)     │
-│    (auth, RBAC, tenancy)               (job execution replay)      │
+│  IAM & Access Control (#12) ───────►  Replay & Debugging (#17)      │
+│    (auth, RBAC, tenancy)               (job execution replay)       │
 │                                                                     │
-│  Multi-Provider LLM (#19) ─────────►  Agent Deployment (#13)       │
-│    (agent execution runtime)           (post-deploy smoke tests)   │
+│  Multi-Provider LLM (#19) ─────────►  Agent Deployment (#13)        │
+│    (agent execution runtime)           (post-deploy smoke tests)    │
 │                                                                     │
-│  Memory & Context (#10) ───────────►  External Integrations (#11)  │
-│    (agent context loading)             (scheduled data syncs)      │
+│  Memory & Context (#10) ───────────►  External Integrations (#11)   │
+│    (agent context loading)             (scheduled data syncs)       │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 

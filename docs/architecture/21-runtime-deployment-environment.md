@@ -153,11 +153,11 @@ This is the most architecturally critical decision — how agents map to OS proc
 │  ┌─────────────────────────────────────────────────────────────────────────┐ │
 │  │  Namespace: agentforge-platform (control plane)                         │ │
 │  │                                                                         │ │
-│  │  ┌──────────────────────┐   ┌──────────────────────────────────────┐   │ │
+│  │  ┌──────────────────────┐   ┌──────────────────────────────────────┐   │  │
 │  │  │ Platform Orchestrator │   │ API Gateway (FastAPI)                 │   │ │
-│  │  │ Deployment (2 pods)  │   │ Deployment (3 pods, HPA)             │   │ │
-│  │  │ Python / ADK LlmAgent│   │ Handles REST, WebSocket, SSE         │   │ │
-│  │  └──────────────────────┘   └──────────────────────────────────────┘   │ │
+│  │  │ Deployment (2 pods)  │   │ Deployment (3 pods, HPA)             │   │  │
+│  │  │ Python / ADK LlmAgent│   │ Handles REST, WebSocket, SSE         │   │  │
+│  │  └──────────────────────┘   └──────────────────────────────────────┘   │  │
 │  └─────────────────────────────────────────────────────────────────────────┘ │
 │                                                                              │
 │  ┌─────────────────────────────────────────────────────────────────────────┐ │

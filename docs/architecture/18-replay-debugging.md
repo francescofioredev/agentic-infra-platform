@@ -43,28 +43,28 @@ Without this subsystem, debugging agentic systems is reduced to reading log file
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                      Replay & Debugging Subsystem                            │
 │                                                                              │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌───────────────────────────┐  │
-│  │  Replay Engine   │  │  Time-Travel     │  │  What-If Analyzer         │  │
-│  │                  │  │  Debugger        │  │                           │  │
-│  │ - Trace loading  │  │                  │  │ - Input mutation          │  │
-│  │ - Step playback  │  │ - State snapshot │  │ - Fork-from-step         │  │
-│  │ - Mock injection │  │ - Rewind/forward │  │ - Re-execute divergent   │  │
-│  │ - Speed control  │  │ - State inspect  │  │ - Outcome comparison     │  │
-│  └────────┬─────────┘  └────────┬─────────┘  └────────────┬──────────────┘  │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌───────────────────────────┐   │
+│  │  Replay Engine   │  │  Time-Travel     │  │  What-If Analyzer         │   │
+│  │                  │  │  Debugger        │  │                           │   │
+│  │ - Trace loading  │  │                  │  │ - Input mutation          │   │
+│  │ - Step playback  │  │ - State snapshot │  │ - Fork-from-step         │    │
+│  │ - Mock injection │  │ - Rewind/forward │  │ - Re-execute divergent   │    │
+│  │ - Speed control  │  │ - State inspect  │  │ - Outcome comparison     │    │
+│  └────────┬─────────┘  └────────┬─────────┘  └────────────┬──────────────┘   │
 │           │                     │                          │                 │
 │  ┌────────┴─────────────────────┴──────────────────────────┴──────────────┐  │
 │  │                     Execution Record Store                             │  │
-│  │  (Traces + State Snapshots + LLM Interactions + Tool I/O + Decisions) │  │
+│  │  (Traces + State Snapshots + LLM Interactions + Tool I/O + Decisions) │   │
 │  └───────────────────────────────┬────────────────────────────────────────┘  │
 │                                  │                                           │
-│  ┌──────────────────┐  ┌────────┴─────────┐  ┌───────────────────────────┐  │
-│  │  Diff Engine     │  │  Breakpoint      │  │  Root Cause Analyzer      │  │
-│  │                  │  │  System          │  │                           │  │
-│  │ - Trace align   │  │                  │  │ - Failure trace analysis  │  │
-│  │ - Step diff     │  │ - Conditional    │  │ - Critic agent (p. 65)   │  │
-│  │ - Output diff   │  │ - Live intercept │  │ - Goal regression detect  │  │
-│  │ - Visual render │  │ - Step-through   │  │ - Cascading failure map   │  │
-│  └──────────────────┘  └──────────────────┘  └───────────────────────────┘  │
+│  ┌──────────────────┐  ┌────────┴─────────┐  ┌───────────────────────────┐   │
+│  │  Diff Engine     │  │  Breakpoint      │  │  Root Cause Analyzer      │   │
+│  │                  │  │  System          │  │                           │   │
+│  │ - Trace align   │  │                  │  │ - Failure trace analysis  │    │
+│  │ - Step diff     │  │ - Conditional    │  │ - Critic agent (p. 65)   │     │
+│  │ - Output diff   │  │ - Live intercept │  │ - Goal regression detect  │    │
+│  │ - Visual render │  │ - Step-through   │  │ - Cascading failure map   │    │
+│  └──────────────────┘  └──────────────────┘  └───────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────────────────┘
          │                       │                         │
     ┌────┴────┐            ┌─────┴─────┐            ┌──────┴──────┐
@@ -287,28 +287,28 @@ The Replay Engine reconstructs and re-plays past agent executions step-by-step. 
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        Replay Engine                             │
-│                                                                  │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
+│                        Replay Engine                            │
+│                                                                 │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐   │
 │  │ Record Loader │  │ Step Executor│  │ Mock Injection Layer │  │
 │  │               │  │              │  │                      │  │
 │  │ Fetches exec  │  │ Advances one │  │ Replaces real LLM    │  │
 │  │ record from   │  │ step at a    │  │ calls and tool calls │  │
 │  │ store, builds │  │ time through │  │ with recorded data   │  │
 │  │ step DAG      │  │ the DAG      │  │ or synthetic stubs   │  │
-│  └──────┬───────┘  └──────┬───────┘  └──────────┬───────────┘  │
+│  └──────┬───────┘  └──────┬───────┘  └──────────┬───────────┘   │
 │         │                 │                      │              │
 │  ┌──────┴─────────────────┴──────────────────────┴───────────┐  │
-│  │                    Replay Runtime                          │  │
+│  │                    Replay Runtime                          │ │
 │  │  - Agent instantiation from versioned definitions         │  │
 │  │  - Memory state restoration from snapshots                │  │
 │  │  - Guardrail replay (verify policy evaluation)            │  │
 │  │  - Event emission for UI subscribers                      │  │
 │  └───────────────────────────────────────────────────────────┘  │
-│                                                                  │
+│                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │                 Replay Speed Controller                    │  │
-│  │  - Real-time (1x), Fast (10x, 100x), Instant, Paused     │  │
+│  │                 Replay Speed Controller                    │ │
+│  │  - Real-time (1x), Fast (10x, 100x), Instant, Paused     │   │
 │  │  - Step-through (manual advance)                          │  │
 │  └───────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
@@ -1497,21 +1497,21 @@ Alignment:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│  Diff Mode — exec-a1b2 (baseline) vs. exec-x7y8 (comparison)           │
+│  Diff Mode — exec-a1b2 (baseline) vs. exec-x7y8 (comparison)             │
 ├──────────────────────────────┬───────────────────────────────────────────┤
-│  Baseline: exec-a1b2         │  Comparison: exec-x7y8                   │
-│  Agent: ResearchAgent@2.3    │  Agent: ResearchAgent@2.4                │
-│  Model: sonnet               │  Model: sonnet                           │
-│  Date: 2026-02-25            │  Date: 2026-02-27                        │
+│  Baseline: exec-a1b2         │  Comparison: exec-x7y8                    │
+│  Agent: ResearchAgent@2.3    │  Agent: ResearchAgent@2.4                 │
+│  Model: sonnet               │  Model: sonnet                            │
+│  Date: 2026-02-25            │  Date: 2026-02-27                         │
 ├──────────────────────────────┴───────────────────────────────────────────┤
 │                                                                          │
 │  Summary:                                                                │
-│    Steps matched: 6/6          Output similarity: 84%                   │
-│    Extra steps in B: 1         Goal met: A=YES  B=YES                   │
-│    Cost: A=$0.012  B=$0.018    Latency: A=5200ms  B=7100ms             │
+│    Steps matched: 6/6          Output similarity: 84%                    │
+│    Extra steps in B: 1         Goal met: A=YES  B=YES                    │
+│    Cost: A=$0.012  B=$0.018    Latency: A=5200ms  B=7100ms               │
 │                                                                          │
 ├──────────────────────────────┬───────────────────────────────────────────┤
-│  step-004: AnalysisAgent     │  step-004: AnalysisAgent                 │
+│  step-004: AnalysisAgent     │  step-004: AnalysisAgent                  │
 │  ─────────────────────────── │  ───────────────────────────────────────  │
 │                              │                                           │
 │  Input:                      │  Input:                                   │
@@ -1520,22 +1520,22 @@ Alignment:
 │                              │                                           │
 │  Output:                     │  Output:                                  │
 │  "Q3 revenue increased       │  "Q3 revenue increased                    │
-│ - 12% YoY driven by          │ + 12% YoY. After seasonal                │
-│ - enterprise segment          │ + adjustment, real growth                 │
+│ - 12% YoY driven by          │ + 12% YoY. After seasonal                 │
+│ - enterprise segment          │ + adjustment, real growth                │
 │ - growth."                    │ + was 8%, primarily driven by            │
 │                               │ + enterprise segment expansion           │
 │                               │ + and improved retention."               │
 │                              │                                           │
-│  Tokens: 1800/950            │  Tokens: 1800/1420  [+470 out]           │
-│  Latency: 3800ms             │  Latency: 4900ms    [+1100ms]            │
-│  Cost: $0.0089               │  Cost: $0.0121      [+$0.0032]           │
+│  Tokens: 1800/950            │  Tokens: 1800/1420  [+470 out]            │
+│  Latency: 3800ms             │  Latency: 4900ms    [+1100ms]             │
+│  Cost: $0.0089               │  Cost: $0.0121      [+$0.0032]            │
 │                              │                                           │
-│  [62% similarity] ← DIVERGENCE POINT                                    │
+│  [62% similarity] ← DIVERGENCE POINT                                     │
 ├──────────────────────────────┴───────────────────────────────────────────┤
 │  Divergence Analysis:                                                    │
-│    Root cause: Prompt v2.4 includes instruction to apply seasonal       │
-│    adjustment, producing more detailed but longer output.               │
-│    Impact: Higher quality (+seasonal adjustment), higher cost (+27%),   │
+│    Root cause: Prompt v2.4 includes instruction to apply seasonal        │
+│    adjustment, producing more detailed but longer output.                │
+│    Impact: Higher quality (+seasonal adjustment), higher cost (+27%),    │
 │    higher latency (+29%). Goal still met.                                │
 └──────────────────────────────────────────────────────────────────────────┘
 ```

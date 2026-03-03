@@ -25,31 +25,31 @@ Every external integration is exposed as an **MCP server** (p. 158), making tool
 │                     External Integrations Hub                           │
 │                                                                         │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
-│  │                    Connector Registry                              │  │
+│  │                    Connector Registry                              │ │
 │  │   Manages all integration configs, credentials, health status     │  │
 │  └───────────────────────────┬───────────────────────────────────────┘  │
 │                              │                                          │
-│  ┌───────────┬───────────┬───┴───────┬───────────┬───────────────────┐ │
-│  │           │           │           │           │                   │ │
-│  │  ┌────────┴──┐ ┌──────┴────┐ ┌────┴──────┐ ┌─┴──────────┐ ┌─────┴┐│
-│  │  │ Database  │ │  Comms    │ │  Cloud    │ │  External  │ │Custom││
-│  │  │ Connectors│ │ Connectors│ │ Storage   │ │  API       │ │MCP   ││
-│  │  │           │ │           │ │ Connectors│ │  Gateway   │ │Server││
-│  │  │ -Supabase │ │ -Slack    │ │           │ │            │ │      ││
-│  │  │ -Postgres │ │ -Telegram │ │ -Google   │ │ -REST      │ │-User ││
-│  │  │ -MySQL    │ │ -Gmail    │ │  Drive    │ │ -GraphQL   │ │ built││
-│  │  │ -MongoDB  │ │ -Discord  │ │ -S3/GCS   │ │ -SOAP      │ │      ││
-│  │  │ -Redis    │ │ -Teams    │ │ -Dropbox  │ │ -Webhook   │ │      ││
-│  │  │ -Qdrant   │ │ -Email    │ │ -OneDrive │ │  receiver  │ │      ││
-│  │  └───────────┘ └───────────┘ └───────────┘ └────────────┘ └──────┘│
-│  └───────────────────────────────────────────────────────────────────┘ │
+│  ┌───────────┬───────────┬───┴───────┬───────────┬───────────────────┐  │
+│  │           │           │           │           │                   │  │
+│  │  ┌────────┴──┐ ┌──────┴────┐ ┌────┴──────┐ ┌─┴──────────┐ ┌─────┴┐   │
+│  │  │ Database  │ │  Comms    │ │  Cloud    │ │  External  │ │Custom│   │
+│  │  │ Connectors│ │ Connectors│ │ Storage   │ │  API       │ │MCP   │   │
+│  │  │           │ │           │ │ Connectors│ │  Gateway   │ │Server│   │
+│  │  │ -Supabase │ │ -Slack    │ │           │ │            │ │      │   │
+│  │  │ -Postgres │ │ -Telegram │ │ -Google   │ │ -REST      │ │-User │   │
+│  │  │ -MySQL    │ │ -Gmail    │ │  Drive    │ │ -GraphQL   │ │ built│   │
+│  │  │ -MongoDB  │ │ -Discord  │ │ -S3/GCS   │ │ -SOAP      │ │      │   │
+│  │  │ -Redis    │ │ -Teams    │ │ -Dropbox  │ │ -Webhook   │ │      │   │
+│  │  │ -Qdrant   │ │ -Email    │ │ -OneDrive │ │  receiver  │ │      │   │
+│  │  └───────────┘ └───────────┘ └───────────┘ └────────────┘ └──────┘   │
+│  └───────────────────────────────────────────────────────────────────┘  │
 │                              │                                          │
 │  ┌───────────────────────────┴───────────────────────────────────────┐  │
-│  │                    Cross-Cutting Services                          │  │
-│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────┐ │  │
-│  │  │ Secret Vault │ │ Rate Limiter │ │ Data         │ │ Health   │ │  │
-│  │  │ (credentials)│ │ (per-service)│ │ Transformer  │ │ Monitor  │ │  │
-│  │  └──────────────┘ └──────────────┘ └──────────────┘ └──────────┘ │  │
+│  │                    Cross-Cutting Services                          │ │
+│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────┐ │   │
+│  │  │ Secret Vault │ │ Rate Limiter │ │ Data         │ │ Health   │ │   │
+│  │  │ (credentials)│ │ (per-service)│ │ Transformer  │ │ Monitor  │ │   │
+│  │  └──────────────┘ └──────────────┘ └──────────────┘ └──────────┘ │   │
 │  └───────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────┘
           │                    │                    │
