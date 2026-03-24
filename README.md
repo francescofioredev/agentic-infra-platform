@@ -4,8 +4,6 @@
 
 > **Status**: Design phase — architecture decision records and subsystem specifications complete. No implementation yet.
 > **Design review score**: 62/62 ✓ ([see assessment](docs/architecture/10-review-checklist-assessment.md))
->
-> **[Read the full documentation on the website →](https://francescofioredev.github.io/agentic-infra-platform/)**
 
 ---
 
@@ -208,6 +206,19 @@ Human approval is required before any of the following actions:
 - Deleting agent versions or team configurations
 - Tenant creation/deletion or RBAC role hierarchy changes
 - Promoting a canary deployment past the 50% traffic stage
+
+---
+
+## Deploy on Vercel
+
+This repository can be deployed to Vercel as a static MkDocs site.
+
+1. Import the GitHub repository into Vercel.
+2. Leave the framework preset as `Other`.
+3. Vercel will use [`vercel.json`](/Users/francescofiore/Coding/agentic-infra-platform/vercel.json) to install dependencies, run `mkdocs build --strict`, and publish the generated `site/` directory.
+4. In Project Settings -> Environment Variables, optionally add `SITE_URL=https://your-domain.vercel.app` or your custom production domain. If `SITE_URL` is not set, the build tries to fall back to `VERCEL_PROJECT_PRODUCTION_URL`.
+
+After the first production deploy, add the final Vercel URL back to the top of this README if you want a public docs link here.
 
 ---
 
