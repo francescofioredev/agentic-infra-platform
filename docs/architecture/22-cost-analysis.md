@@ -17,15 +17,51 @@
 
 **S3 topology detail**: 5 Level-1 Team Supervisors, each with 5 in-process Worker Agents — total 30 distinct agents + 1 Platform Orchestrator. Per task, the Orchestrator routes to 1–5 teams depending on complexity.
 
-```
-S1                    S2                         S3
-                                                 Level 0
-Orchestrator    Orchestrator               Orchestrator (L0)
-     │               │                          │
-  Team-α         ┌───┼───┐          ┌─────┬─────┼─────┬─────┐
-  │ │ │ │       α   β   γ          α     β     γ     δ     ε
- W1 W2 W3 W4   ││  ││  ││        ││    ││    ││    ││    ││
-               (4W)(4W)(4W)      (5W) (5W) (5W) (5W) (5W)
+```mermaid
+graph TD
+    subgraph S1["S1"]
+        direction TB
+        O1["Orchestrator"]
+        TA1["Team-α"]
+        O1 --> TA1
+        TA1 --> W1A["W1"]
+        TA1 --> W2A["W2"]
+        TA1 --> W3A["W3"]
+        TA1 --> W4A["W4"]
+    end
+
+    subgraph S2["S2"]
+        direction TB
+        O2["Orchestrator"]
+        TA2["α (4W)"]
+        TB2["β (4W)"]
+        TG2["γ (4W)"]
+        O2 --> TA2
+        O2 --> TB2
+        O2 --> TG2
+    end
+
+    subgraph S3["S3"]
+        direction TB
+        O3["Orchestrator (L0)"]
+        TA3["α (5W)"]
+        TB3["β (5W)"]
+        TG3["γ (5W)"]
+        TD3["δ (5W)"]
+        TE3["ε (5W)"]
+        O3 --> TA3
+        O3 --> TB3
+        O3 --> TG3
+        O3 --> TD3
+        O3 --> TE3
+    end
+
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef platform fill:#1ABC9C,stroke:#148F77,color:#fff
+    class O1,O2,O3 platform
+    class TA1,TA2,TB2,TG2,TA3,TB3,TG3,TD3,TE3 core
+    class W1A,W2A,W3A,W4A infra
 ```
 
 ### 1.2 Agent Process Model (from subsystem 21)
@@ -329,13 +365,15 @@ Approximate: ~4% overall LLM reduction (~$1,900/month)
 
 Default worker tier flipped to 80% Haiku / 18% Sonnet / 2% Opus (from 50/40/10).
 
-```
-Worker blended cost: 0.80×$0.006 + 0.18×$0.021 + 0.02×$0.105 = $0.011  (was $0.022)
-50% reduction in worker LLM cost
-Workers ≈ 80% of total LLM spend at S3
-S3 savings: $46,170 × 0.80 × 0.50 = $18,468/month
-New S3 total: ~$31,500/month (−37%)
-```
+??? example "View details"
+
+    ```
+    Worker blended cost: 0.80×$0.006 + 0.18×$0.021 + 0.02×$0.105 = $0.011  (was $0.022)
+    50% reduction in worker LLM cost
+    Workers ≈ 80% of total LLM spend at S3
+    S3 savings: $46,170 × 0.80 × 0.50 = $18,468/month
+    New S3 total: ~$31,500/month (−37%)
+    ```
 
 **Risk**: Quality degradation on complex tasks. Requires Critique-then-escalate pattern (p. 259) to automatically upclass when output quality is insufficient. Maintain per-agent quality metrics in Evaluation Framework.
 
@@ -444,13 +482,15 @@ At low volumes, the infra cost dominates and cost/task is high. The system becom
 
 **The fundamental cost equation for AgentForge**:
 
-```
-Monthly cost = (tasks/month × LLM_cost/task) + fixed_infra
+??? example "View details"
 
-Where:
-  LLM_cost/task = Σ (calls_per_agent × model_distribution × token_cost)
-  fixed_infra   = K8s_nodes + managed_services  (scales in steps, not linearly)
-```
+    ```
+    Monthly cost = (tasks/month × LLM_cost/task) + fixed_infra
+
+    Where:
+      LLM_cost/task = Σ (calls_per_agent × model_distribution × token_cost)
+      fixed_infra   = K8s_nodes + managed_services  (scales in steps, not linearly)
+    ```
 
 LLM spend is **linear with volume**; infrastructure is **step-function with capacity**. At production volumes (>50K tasks/month), LLM API spend accounts for >85% of total cost. Every optimization effort should prioritize LLM usage first.
 

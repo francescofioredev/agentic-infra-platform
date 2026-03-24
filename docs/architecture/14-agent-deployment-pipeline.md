@@ -56,31 +56,33 @@ The pipeline models the deployment process itself as a **deterministic prompt ch
 7. **Manage environments** (development, staging, production) with strict promotion rules.
 8. **Coordinate team deployments** by deploying multiple agents as a single atomic unit.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                     Agent Deployment Pipeline                               │
-│                                                                             │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌───────────────┐    │
-│  │  Artifact     │  │  Build       │  │  Deployment  │  │  Rollback     │   │
-│  │  Builder      │  │  Pipeline    │  │  Strategies  │  │  Controller   │   │
-│  │  (assemble &  │  │  (validate → │  │  (blue-green │  │  (auto &      │   │
-│  │   snapshot)   │  │   test →     │  │   canary,    │  │   manual)     │   │
-│  │              │  │   evaluate → │  │   progressive│  │               │    │
-│  │              │  │   stage →    │  │   rollout)   │  │               │    │
-│  │              │  │   deploy)    │  │              │  │               │    │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └───────┬───────┘    │
-│         │                 │                  │                   │          │
-│  ┌──────┴─────────────────┴──────────────────┴───────────────────┴────────┐ │
-│  │                    Environment Manager                                  │  │
-│  │        (dev → staging → production promotion rules)                    │ │
-│  └──────┬─────────────────┬──────────────────┬───────────────────┬────────┘ │
-│         │                 │                  │                   │          │
-│  ┌──────┴───────┐  ┌─────┴────────┐  ┌──────┴───────┐  ┌───────┴────────┐   │
-│  │  Team         │  │  Canary      │  │  HITL        │  │  Audit &       │  │
-│  │  Deployment   │  │  Evaluator   │  │  Approval    │  │  Event Log     │  │
-│  │  Coordinator  │  │  (goals_met) │  │  Gate        │  │                │  │
-│  └──────────────┘  └──────────────┘  └──────────────┘  └────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph ADP["Agent Deployment Pipeline"]
+        direction TB
+        AB["Artifact Builder<br/><small>assemble & snapshot</small>"]
+        BP["Build Pipeline<br/><small>validate → test →<br/>evaluate → stage → deploy</small>"]
+        DS["Deployment Strategies<br/><small>blue-green, canary,<br/>progressive rollout</small>"]
+        RC["Rollback Controller<br/><small>auto & manual</small>"]
+        AB & BP & DS & RC --> EM
+        EM["Environment Manager<br/><small>dev → staging → production promotion rules</small>"]
+        EM --> TDC & CE & HAG & AEL
+        TDC["Team Deployment<br/>Coordinator"]
+        CE["Canary Evaluator<br/><small>(goals_met)</small>"]
+        HAG["HITL Approval Gate"]
+        AEL["Audit & Event Log"]
+    end
+
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef guardrail fill:#E74C3C,stroke:#C0392B,color:#fff
+    classDef foundational fill:#F39C12,stroke:#D68910,color:#fff
+
+    class AB,BP,DS,RC core
+    class EM infra
+    class TDC,CE foundational
+    class HAG guardrail
+    class AEL infra
 ```
 
 ---
@@ -91,138 +93,140 @@ An agent artifact is the **complete deployable unit**. It bundles every configur
 
 ### 2.1 Canonical schema
 
-```json
-{
-  "$schema": "https://agentforge.io/schemas/agent-artifact/v1.json",
-  "artifact_id": "art_7f3a9b2e4c1d",
-  "agent_id": "agt_research_001",
-  "agent_name": "ResearchAgent",
-  "artifact_version": "2.3.1-build.48",
-  "created_at": "2026-02-27T14:30:00Z",
-  "created_by": {
-    "type": "pipeline",
-    "identity": "deployment-pipeline:build-48",
-    "trigger": "manual"
-  },
-  "content_hash": "sha256:a4f8c2e91b3d7f6a5c0e8d2b4a6f9c1e3d5b7a9f0c2e4d6b8a0f2c4e6d8b0a2",
+??? example "View JSON example"
 
-  "prompt": {
-    "prompt_id": "prm_a1b2c3d4e5f6",
-    "semver": "2.3.1",
-    "content_hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "resolved_content_hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
-    "registry_ref": "prompt-registry://research-agent@2.3.1"
-  },
-
-  "tools": [
+    ```json
     {
-      "tool_ref": "mcp://search-server/web_search",
-      "server_version": "1.4.2",
-      "config_hash": "sha256:abc123...",
-      "required": true
-    },
-    {
-      "tool_ref": "mcp://search-server/scholar_search",
-      "server_version": "1.4.2",
-      "config_hash": "sha256:def456...",
-      "required": true
-    }
-  ],
-
-  "guardrail_policies": [
-    {
-      "policy_id": "no-pii-output",
-      "version": "1.0.3",
-      "config_hash": "sha256:ghi789..."
-    },
-    {
-      "policy_id": "citation-required",
-      "version": "2.1.0",
-      "config_hash": "sha256:jkl012..."
-    }
-  ],
-
-  "memory_config": {
-    "memory_backend": "postgresql",
-    "context_window_strategy": "sliding_window_with_summary",
-    "max_context_tokens": 32000,
-    "rag_enabled": true,
-    "rag_collection": "research-knowledge-base",
-    "session_state_prefix": "user:",
-    "config_hash": "sha256:mno345..."
-  },
-
-  "model_config": {
-    "default_tier": "balanced",
-    "allowed_tiers": ["fast", "balanced", "frontier"],
-    "escalation_enabled": true,
-    "max_iterations": 10,
-    "temperature": 0.3,
-    "config_hash": "sha256:pqr678..."
-  },
-
-  "eval_criteria": {
-    "evalset_id": "evalset_research_v3",
-    "min_overall_score": 0.88,
-    "dimension_floors": {
-      "accuracy": 0.85,
-      "citation_quality": 0.80,
-      "format_compliance": 0.90,
-      "safety": 0.99
-    },
-    "red_team_suite_id": "redteam_research_v2",
-    "red_team_pass_rate": 0.95,
-    "trajectory_match_type": "in_order",
-    "config_hash": "sha256:stu901..."
-  },
-
-  "schemas": {
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "query": { "type": "string" }
+      "$schema": "https://agentforge.io/schemas/agent-artifact/v1.json",
+      "artifact_id": "art_7f3a9b2e4c1d",
+      "agent_id": "agt_research_001",
+      "agent_name": "ResearchAgent",
+      "artifact_version": "2.3.1-build.48",
+      "created_at": "2026-02-27T14:30:00Z",
+      "created_by": {
+        "type": "pipeline",
+        "identity": "deployment-pipeline:build-48",
+        "trigger": "manual"
       },
-      "required": ["query"]
-    },
-    "output_schema": {
-      "type": "object",
-      "properties": {
-        "summary": { "type": "string" },
-        "sources": { "type": "array" }
+      "content_hash": "sha256:a4f8c2e91b3d7f6a5c0e8d2b4a6f9c1e3d5b7a9f0c2e4d6b8a0f2c4e6d8b0a2",
+
+      "prompt": {
+        "prompt_id": "prm_a1b2c3d4e5f6",
+        "semver": "2.3.1",
+        "content_hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "resolved_content_hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+        "registry_ref": "prompt-registry://research-agent@2.3.1"
       },
-      "required": ["summary", "sources"]
+
+      "tools": [
+        {
+          "tool_ref": "mcp://search-server/web_search",
+          "server_version": "1.4.2",
+          "config_hash": "sha256:abc123...",
+          "required": true
+        },
+        {
+          "tool_ref": "mcp://search-server/scholar_search",
+          "server_version": "1.4.2",
+          "config_hash": "sha256:def456...",
+          "required": true
+        }
+      ],
+
+      "guardrail_policies": [
+        {
+          "policy_id": "no-pii-output",
+          "version": "1.0.3",
+          "config_hash": "sha256:ghi789..."
+        },
+        {
+          "policy_id": "citation-required",
+          "version": "2.1.0",
+          "config_hash": "sha256:jkl012..."
+        }
+      ],
+
+      "memory_config": {
+        "memory_backend": "postgresql",
+        "context_window_strategy": "sliding_window_with_summary",
+        "max_context_tokens": 32000,
+        "rag_enabled": true,
+        "rag_collection": "research-knowledge-base",
+        "session_state_prefix": "user:",
+        "config_hash": "sha256:mno345..."
+      },
+
+      "model_config": {
+        "default_tier": "balanced",
+        "allowed_tiers": ["fast", "balanced", "frontier"],
+        "escalation_enabled": true,
+        "max_iterations": 10,
+        "temperature": 0.3,
+        "config_hash": "sha256:pqr678..."
+      },
+
+      "eval_criteria": {
+        "evalset_id": "evalset_research_v3",
+        "min_overall_score": 0.88,
+        "dimension_floors": {
+          "accuracy": 0.85,
+          "citation_quality": 0.80,
+          "format_compliance": 0.90,
+          "safety": 0.99
+        },
+        "red_team_suite_id": "redteam_research_v2",
+        "red_team_pass_rate": 0.95,
+        "trajectory_match_type": "in_order",
+        "config_hash": "sha256:stu901..."
+      },
+
+      "schemas": {
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string" }
+          },
+          "required": ["query"]
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "summary": { "type": "string" },
+            "sources": { "type": "array" }
+          },
+          "required": ["summary", "sources"]
+        }
+      },
+
+      "dependencies": {
+        "mcp_servers": ["search-server@1.4.2"],
+        "shared_prompts": ["prompt-registry://shared/safety-preamble@2.1.0"],
+        "peer_agents": []
+      },
+
+      "deployment": {
+        "target_environment": "production",
+        "strategy": "canary",
+        "canary_config": {
+          "initial_traffic_pct": 5,
+          "increment_pct": 15,
+          "evaluation_window_minutes": 30,
+          "max_steps": 5,
+          "promotion_threshold": 0.88,
+          "rollback_threshold": 0.82
+        }
+      },
+
+      "metadata": {
+        "team_id": "team-alpha",
+        "tags": ["research", "web-search", "citations"],
+        "build_number": 48,
+        "pipeline_run_id": "run_abc123",
+        "parent_artifact_id": "art_6e2a8b1d3c0f",
+        "change_summary": "Updated prompt to APA-7 citation style; tightened safety policy version."
+      }
     }
-  },
-
-  "dependencies": {
-    "mcp_servers": ["search-server@1.4.2"],
-    "shared_prompts": ["prompt-registry://shared/safety-preamble@2.1.0"],
-    "peer_agents": []
-  },
-
-  "deployment": {
-    "target_environment": "production",
-    "strategy": "canary",
-    "canary_config": {
-      "initial_traffic_pct": 5,
-      "increment_pct": 15,
-      "evaluation_window_minutes": 30,
-      "max_steps": 5,
-      "promotion_threshold": 0.88,
-      "rollback_threshold": 0.82
-    }
-  },
-
-  "metadata": {
-    "team_id": "team-alpha",
-    "tags": ["research", "web-search", "citations"],
-    "build_number": 48,
-    "pipeline_run_id": "run_abc123",
-    "parent_artifact_id": "art_6e2a8b1d3c0f",
-    "change_summary": "Updated prompt to APA-7 citation style; tightened safety policy version."
-  }
-}
-```
+    ```
 
 ### 2.2 Field semantics
 
@@ -249,20 +253,22 @@ The `content_hash` field is computed over the canonical JSON serialization (sort
 - **Tamper detection**: Any modification to the artifact after build invalidates the hash.
 - **Cache keying**: Resolved artifacts are cached under `app:artifact:{content_hash}` (Memory Management, p. 151).
 
-```python
-# Pseudocode: artifact content hash computation
-import hashlib
-import json
+??? example "View Python pseudocode"
 
-def compute_artifact_hash(artifact: dict) -> str:
-    """Compute deterministic content hash for an agent artifact."""
-    hashable = {
-        k: v for k, v in artifact.items()
-        if k not in ("content_hash", "artifact_id", "created_at")
-    }
-    canonical = json.dumps(hashable, sort_keys=True, separators=(",", ":"))
-    return f"sha256:{hashlib.sha256(canonical.encode('utf-8')).hexdigest()}"
-```
+    ```python
+    # Pseudocode: artifact content hash computation
+    import hashlib
+    import json
+
+    def compute_artifact_hash(artifact: dict) -> str:
+        """Compute deterministic content hash for an agent artifact."""
+        hashable = {
+            k: v for k, v in artifact.items()
+            if k not in ("content_hash", "artifact_id", "created_at")
+        }
+        canonical = json.dumps(hashable, sort_keys=True, separators=(",", ":"))
+        return f"sha256:{hashlib.sha256(canonical.encode('utf-8')).hexdigest()}"
+    ```
 
 ---
 
@@ -272,22 +278,25 @@ The build pipeline implements the Prompt Chaining pattern (p. 5) as a determinis
 
 ### 3.1 Pipeline stages
 
-```
-┌───────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
-│  ASSEMBLE  │───►│ VALIDATE │───►│   TEST   │───►│ EVALUATE │───►│  STAGE  │
-│            │    │          │    │          │    │          │    │         │
-│ Collect all│    │ Schema   │    │ Evalset  │    │ LLM-as-  │    │ Snapshot│
-│ refs, pin  │    │ check,   │    │ regress- │    │ Judge +  │    │ to target│
-│ versions,  │    │ dep avail│    │ ion,     │    │ red-team │    │ environ-│
-│ build hash │    │ lint,    │    │ traject- │    │ suite,   │    │ ment    │
-│            │    │ safety   │    │ ory      │    │ baseline │    │         │
-│            │    │ scan     │    │ match    │    │ compare  │    │         │
-└───────────┘    └──────────┘    └──────────┘    └──────────┘    └──────────┘
-     │                │                │                │                │
-     ▼                ▼                ▼                ▼                ▼
-  artifact         pass/fail       test_results    eval_report     staged_id
-  (draft)          + reasons       + coverage      + approval       (ready)
-                                                   (HITL gate)
+```mermaid
+graph LR
+    A["<b>ASSEMBLE</b><br/><small>Collect all refs, pin<br/>versions, build hash</small>"]
+    V["<b>VALIDATE</b><br/><small>Schema check, dep avail,<br/>lint, safety scan</small>"]
+    T["<b>TEST</b><br/><small>Evalset regression,<br/>trajectory match</small>"]
+    E["<b>EVALUATE</b><br/><small>LLM-as-Judge + red-team<br/>suite, baseline compare</small>"]
+    S["<b>STAGE</b><br/><small>Snapshot to target<br/>environment</small>"]
+
+    A -->|"artifact (draft)"| V
+    V -->|"pass/fail + reasons"| T
+    T -->|"test_results + coverage"| E
+    E -->|"eval_report + approval<br/>(HITL gate)"| S
+    S -->|"staged_id (ready)"| DONE((" "))
+
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef guardrail fill:#E74C3C,stroke:#C0392B,color:#fff
+
+    class A,V,T,S core
+    class E guardrail
 ```
 
 Each gate enforces a strict pass/fail contract. The pipeline halts on the first failure, logs the complete context, and emits an event to the Observability Platform (05).
@@ -304,437 +313,439 @@ Each gate enforces a strict pass/fail contract. The pipeline halts on the first 
 
 ### 3.3 Pseudocode: Build Pipeline
 
-```python
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Optional
-from datetime import datetime
+??? example "View Python pseudocode"
+
+    ```python
+    from dataclasses import dataclass, field
+    from enum import Enum
+    from typing import Optional
+    from datetime import datetime
 
 
-class PipelineStage(str, Enum):
-    ASSEMBLE = "assemble"
-    VALIDATE = "validate"
-    TEST = "test"
-    EVALUATE = "evaluate"
-    STAGE = "stage"
-    DEPLOY = "deploy"
+    class PipelineStage(str, Enum):
+        ASSEMBLE = "assemble"
+        VALIDATE = "validate"
+        TEST = "test"
+        EVALUATE = "evaluate"
+        STAGE = "stage"
+        DEPLOY = "deploy"
 
 
-class StageResult(str, Enum):
-    PASSED = "passed"
-    FAILED = "failed"
-    SKIPPED = "skipped"
+    class StageResult(str, Enum):
+        PASSED = "passed"
+        FAILED = "failed"
+        SKIPPED = "skipped"
 
 
-@dataclass
-class GateVerdict:
-    """Result of a pipeline gate check (Prompt Chaining, p. 5)."""
-    stage: PipelineStage
-    result: StageResult
-    reasons: list[str] = field(default_factory=list)
-    metrics: dict = field(default_factory=dict)
-    duration_ms: int = 0
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    @dataclass
+    class GateVerdict:
+        """Result of a pipeline gate check (Prompt Chaining, p. 5)."""
+        stage: PipelineStage
+        result: StageResult
+        reasons: list[str] = field(default_factory=list)
+        metrics: dict = field(default_factory=dict)
+        duration_ms: int = 0
+        timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
 
 
-@dataclass
-class PipelineRun:
-    """Tracks the full lifecycle of a single pipeline execution."""
-    run_id: str
-    agent_id: str
-    artifact_id: Optional[str] = None
-    target_environment: str = "staging"
-    stages: list[GateVerdict] = field(default_factory=list)
-    status: str = "pending"  # pending | running | succeeded | failed | cancelled
-    started_at: Optional[str] = None
-    completed_at: Optional[str] = None
-    triggered_by: dict = field(default_factory=dict)
+    @dataclass
+    class PipelineRun:
+        """Tracks the full lifecycle of a single pipeline execution."""
+        run_id: str
+        agent_id: str
+        artifact_id: Optional[str] = None
+        target_environment: str = "staging"
+        stages: list[GateVerdict] = field(default_factory=list)
+        status: str = "pending"  # pending | running | succeeded | failed | cancelled
+        started_at: Optional[str] = None
+        completed_at: Optional[str] = None
+        triggered_by: dict = field(default_factory=dict)
 
 
-class AgentDeploymentPipeline:
-    """Deterministic build-and-deploy pipeline for agent artifacts.
+    class AgentDeploymentPipeline:
+        """Deterministic build-and-deploy pipeline for agent artifacts.
 
-    Implements the Prompt Chaining pattern (p. 5): each stage is a
-    deterministic step whose output feeds the next, with validation
-    gates ensuring failures do not propagate downstream.
-    """
-
-    def __init__(
-        self,
-        prompt_registry,       # Subsystem 07
-        eval_framework,        # Subsystem 08
-        guardrail_system,      # Subsystem 04
-        tool_manager,          # Subsystem 03
-        environment_manager,
-        observability,         # Subsystem 05
-    ):
-        self.prompt_registry = prompt_registry
-        self.eval_framework = eval_framework
-        self.guardrail_system = guardrail_system
-        self.tool_manager = tool_manager
-        self.env_manager = environment_manager
-        self.observability = observability
-
-    async def run(
-        self,
-        agent_id: str,
-        target_environment: str,
-        deployment_strategy: str = "canary",
-        triggered_by: dict = None,
-    ) -> PipelineRun:
-        """Execute the full build pipeline for an agent.
-
-        Stages execute sequentially (deterministic chain, p. 5).
-        Pipeline halts on first gate failure.
+        Implements the Prompt Chaining pattern (p. 5): each stage is a
+        deterministic step whose output feeds the next, with validation
+        gates ensuring failures do not propagate downstream.
         """
-        pipeline_run = PipelineRun(
-            run_id=generate_run_id(),
-            agent_id=agent_id,
-            target_environment=target_environment,
-            status="running",
-            started_at=datetime.utcnow().isoformat(),
-            triggered_by=triggered_by or {},
-        )
 
-        self.observability.emit_event("pipeline.started", pipeline_run.__dict__)
+        def __init__(
+            self,
+            prompt_registry,       # Subsystem 07
+            eval_framework,        # Subsystem 08
+            guardrail_system,      # Subsystem 04
+            tool_manager,          # Subsystem 03
+            environment_manager,
+            observability,         # Subsystem 05
+        ):
+            self.prompt_registry = prompt_registry
+            self.eval_framework = eval_framework
+            self.guardrail_system = guardrail_system
+            self.tool_manager = tool_manager
+            self.env_manager = environment_manager
+            self.observability = observability
 
-        try:
-            # --- STAGE 1: ASSEMBLE ---
-            artifact, assemble_verdict = await self._assemble(agent_id)
-            pipeline_run.stages.append(assemble_verdict)
-            if assemble_verdict.result == StageResult.FAILED:
-                return await self._finalize(pipeline_run, "failed")
-            pipeline_run.artifact_id = artifact["artifact_id"]
+        async def run(
+            self,
+            agent_id: str,
+            target_environment: str,
+            deployment_strategy: str = "canary",
+            triggered_by: dict = None,
+        ) -> PipelineRun:
+            """Execute the full build pipeline for an agent.
 
-            # --- STAGE 2: VALIDATE ---
-            validate_verdict = await self._validate(artifact)
-            pipeline_run.stages.append(validate_verdict)
-            if validate_verdict.result == StageResult.FAILED:
-                return await self._finalize(pipeline_run, "failed")
-
-            # --- STAGE 3: TEST ---
-            test_verdict = await self._test(artifact)
-            pipeline_run.stages.append(test_verdict)
-            if test_verdict.result == StageResult.FAILED:
-                return await self._finalize(pipeline_run, "failed")
-
-            # --- STAGE 4: EVALUATE ---
-            eval_verdict = await self._evaluate(
-                artifact, target_environment, triggered_by
+            Stages execute sequentially (deterministic chain, p. 5).
+            Pipeline halts on first gate failure.
+            """
+            pipeline_run = PipelineRun(
+                run_id=generate_run_id(),
+                agent_id=agent_id,
+                target_environment=target_environment,
+                status="running",
+                started_at=datetime.utcnow().isoformat(),
+                triggered_by=triggered_by or {},
             )
-            pipeline_run.stages.append(eval_verdict)
-            if eval_verdict.result == StageResult.FAILED:
+
+            self.observability.emit_event("pipeline.started", pipeline_run.__dict__)
+
+            try:
+                # --- STAGE 1: ASSEMBLE ---
+                artifact, assemble_verdict = await self._assemble(agent_id)
+                pipeline_run.stages.append(assemble_verdict)
+                if assemble_verdict.result == StageResult.FAILED:
+                    return await self._finalize(pipeline_run, "failed")
+                pipeline_run.artifact_id = artifact["artifact_id"]
+
+                # --- STAGE 2: VALIDATE ---
+                validate_verdict = await self._validate(artifact)
+                pipeline_run.stages.append(validate_verdict)
+                if validate_verdict.result == StageResult.FAILED:
+                    return await self._finalize(pipeline_run, "failed")
+
+                # --- STAGE 3: TEST ---
+                test_verdict = await self._test(artifact)
+                pipeline_run.stages.append(test_verdict)
+                if test_verdict.result == StageResult.FAILED:
+                    return await self._finalize(pipeline_run, "failed")
+
+                # --- STAGE 4: EVALUATE ---
+                eval_verdict = await self._evaluate(
+                    artifact, target_environment, triggered_by
+                )
+                pipeline_run.stages.append(eval_verdict)
+                if eval_verdict.result == StageResult.FAILED:
+                    return await self._finalize(pipeline_run, "failed")
+
+                # --- STAGE 5: STAGE ---
+                stage_verdict = await self._stage(
+                    artifact, target_environment, deployment_strategy
+                )
+                pipeline_run.stages.append(stage_verdict)
+                if stage_verdict.result == StageResult.FAILED:
+                    return await self._finalize(pipeline_run, "failed")
+
+                # --- STAGE 6: DEPLOY ---
+                deploy_verdict = await self._deploy(
+                    artifact, target_environment, deployment_strategy
+                )
+                pipeline_run.stages.append(deploy_verdict)
+                if deploy_verdict.result == StageResult.FAILED:
+                    return await self._finalize(pipeline_run, "failed")
+
+                return await self._finalize(pipeline_run, "succeeded")
+
+            except Exception as e:
+                # Exception Handling (p. 205): classify and log
+                error_class = classify_error(e)  # transient | logic | unrecoverable
+                self.observability.emit_event("pipeline.error", {
+                    "run_id": pipeline_run.run_id,
+                    "error": str(e),
+                    "error_class": error_class,
+                    "stage": pipeline_run.stages[-1].stage if pipeline_run.stages else None,
+                })
                 return await self._finalize(pipeline_run, "failed")
 
-            # --- STAGE 5: STAGE ---
-            stage_verdict = await self._stage(
-                artifact, target_environment, deployment_strategy
+        # ── Stage Implementations ──────────────────────────────────────────
+
+        async def _assemble(self, agent_id: str) -> tuple[dict, GateVerdict]:
+            """Collect all references and pin them to specific versions."""
+            start = now_ms()
+
+            agent_config = await self.prompt_registry.get_agent_config(agent_id)
+            prompt_version = await self.prompt_registry.get_production_version(
+                agent_config["prompt_id"]
             )
-            pipeline_run.stages.append(stage_verdict)
-            if stage_verdict.result == StageResult.FAILED:
-                return await self._finalize(pipeline_run, "failed")
-
-            # --- STAGE 6: DEPLOY ---
-            deploy_verdict = await self._deploy(
-                artifact, target_environment, deployment_strategy
+            tool_refs = await self.tool_manager.resolve_tool_versions(
+                agent_config["tools"]
             )
-            pipeline_run.stages.append(deploy_verdict)
-            if deploy_verdict.result == StageResult.FAILED:
-                return await self._finalize(pipeline_run, "failed")
+            policies = await self.guardrail_system.resolve_policy_versions(
+                agent_config["guardrail_policies"]
+            )
 
-            return await self._finalize(pipeline_run, "succeeded")
+            artifact = build_artifact(
+                agent_id=agent_id,
+                prompt=prompt_version,
+                tools=tool_refs,
+                policies=policies,
+                memory_config=agent_config["memory_config"],
+                model_config=agent_config["model_config"],
+                eval_criteria=agent_config["eval_criteria"],
+                schemas=agent_config["schemas"],
+            )
+            artifact["content_hash"] = compute_artifact_hash(artifact)
 
-        except Exception as e:
-            # Exception Handling (p. 205): classify and log
-            error_class = classify_error(e)  # transient | logic | unrecoverable
-            self.observability.emit_event("pipeline.error", {
+            verdict = GateVerdict(
+                stage=PipelineStage.ASSEMBLE,
+                result=StageResult.PASSED,
+                metrics={"component_count": len(tool_refs) + len(policies) + 1},
+                duration_ms=now_ms() - start,
+            )
+            return artifact, verdict
+
+        async def _validate(self, artifact: dict) -> GateVerdict:
+            """Schema validation, dependency checks, lint, safety scan (p. 298)."""
+            start = now_ms()
+            reasons = []
+
+            # 1. JSON Schema conformance
+            schema_errors = validate_json_schema(artifact, ARTIFACT_SCHEMA)
+            if schema_errors:
+                reasons.extend([f"Schema: {e}" for e in schema_errors])
+
+            # 2. Dependency availability check
+            for dep in artifact["dependencies"]["mcp_servers"]:
+                if not await self.tool_manager.is_available(dep):
+                    reasons.append(f"MCP server unavailable: {dep}")
+
+            # 3. Prompt lint (no unresolved variables, no deprecated instructions)
+            lint_issues = await self.prompt_registry.lint(
+                artifact["prompt"]["registry_ref"]
+            )
+            if lint_issues:
+                reasons.extend([f"Lint: {i}" for i in lint_issues])
+
+            # 4. Safety scan -- red-team pre-check (p. 298)
+            safety_result = await self.guardrail_system.safety_scan(artifact)
+            if not safety_result.passed:
+                reasons.extend([f"Safety: {v}" for v in safety_result.violations])
+
+            result = StageResult.FAILED if reasons else StageResult.PASSED
+            return GateVerdict(
+                stage=PipelineStage.VALIDATE,
+                result=result,
+                reasons=reasons,
+                duration_ms=now_ms() - start,
+            )
+
+        async def _test(self, artifact: dict) -> GateVerdict:
+            """Evalset regression and trajectory testing (p. 312)."""
+            start = now_ms()
+            reasons = []
+            criteria = artifact["eval_criteria"]
+
+            # Run evalset regression (Evaluation Framework, p. 312)
+            eval_result = await self.eval_framework.run_evalset(
+                evalset_id=criteria["evalset_id"],
+                agent_artifact=artifact,
+            )
+
+            if eval_result.overall_score < criteria["min_overall_score"]:
+                reasons.append(
+                    f"Overall score {eval_result.overall_score:.3f} "
+                    f"< threshold {criteria['min_overall_score']:.3f}"
+                )
+
+            # Check per-dimension floors
+            for dim, floor in criteria["dimension_floors"].items():
+                actual = eval_result.dimension_scores.get(dim, 0.0)
+                if actual < floor:
+                    reasons.append(
+                        f"Dimension '{dim}' score {actual:.3f} < floor {floor:.3f}"
+                    )
+
+            # Trajectory match (p. 308)
+            traj_result = await self.eval_framework.run_trajectory_eval(
+                evalset_id=criteria["evalset_id"],
+                agent_artifact=artifact,
+                match_type=criteria["trajectory_match_type"],
+            )
+            if not traj_result.passed:
+                reasons.append(f"Trajectory check failed: {traj_result.explanation}")
+
+            result = StageResult.FAILED if reasons else StageResult.PASSED
+            return GateVerdict(
+                stage=PipelineStage.TEST,
+                result=result,
+                reasons=reasons,
+                metrics={
+                    "overall_score": eval_result.overall_score,
+                    "dimension_scores": eval_result.dimension_scores,
+                    "trajectory_tool_accuracy": traj_result.tool_accuracy,
+                },
+                duration_ms=now_ms() - start,
+            )
+
+        async def _evaluate(
+            self, artifact: dict, target_env: str, triggered_by: dict
+        ) -> GateVerdict:
+            """LLM-as-Judge + red-team suite + baseline comparison + HITL gate."""
+            start = now_ms()
+            reasons = []
+            criteria = artifact["eval_criteria"]
+
+            # 1. Red-team suite (Guardrails/Safety, p. 298)
+            redteam_result = await self.guardrail_system.run_red_team_suite(
+                suite_id=criteria["red_team_suite_id"],
+                agent_artifact=artifact,
+            )
+            if redteam_result.pass_rate < criteria["red_team_pass_rate"]:
+                reasons.append(
+                    f"Red-team pass rate {redteam_result.pass_rate:.3f} "
+                    f"< threshold {criteria['red_team_pass_rate']:.3f}"
+                )
+
+            # 2. Baseline comparison (Evaluation & Monitoring, p. 305)
+            current_prod = await self.env_manager.get_active_artifact(
+                artifact["agent_id"], "production"
+            )
+            if current_prod:
+                baseline_score = current_prod.get("last_eval_score", 0.0)
+                candidate_score = artifact.get("last_eval_score", 0.0)
+                if candidate_score < baseline_score - 0.02:  # 2% tolerance
+                    reasons.append(
+                        f"Candidate score {candidate_score:.3f} regresses from "
+                        f"baseline {baseline_score:.3f} (tolerance 0.02)"
+                    )
+
+            # 3. HITL approval gate for production (p. 211, p. 214)
+            if target_env == "production" and not reasons:
+                approval = await self._request_hitl_approval(
+                    artifact=artifact,
+                    triggered_by=triggered_by,
+                    timeout_minutes=60,  # Approval timeout (p. 214)
+                )
+                if not approval.granted:
+                    reasons.append(
+                        f"HITL approval denied: {approval.reason}"
+                    )
+
+            result = StageResult.FAILED if reasons else StageResult.PASSED
+            return GateVerdict(
+                stage=PipelineStage.EVALUATE,
+                result=result,
+                reasons=reasons,
+                metrics={
+                    "red_team_pass_rate": redteam_result.pass_rate,
+                    "hitl_approved": not reasons,
+                },
+                duration_ms=now_ms() - start,
+            )
+
+        async def _request_hitl_approval(
+            self, artifact: dict, triggered_by: dict, timeout_minutes: int
+        ):
+            """Request human approval with timeout-with-safe-default (p. 214).
+
+            If timeout expires, the safe default is DENY -- the deployment
+            does not proceed without explicit human approval.
+            """
+            approval_request = {
+                "artifact_id": artifact["artifact_id"],
+                "agent_id": artifact["agent_id"],
+                "artifact_version": artifact["artifact_version"],
+                "change_summary": artifact["metadata"]["change_summary"],
+                "eval_metrics": artifact.get("last_eval_metrics", {}),
+                "requested_by": triggered_by,
+                "timeout_minutes": timeout_minutes,
+            }
+            return await self.env_manager.request_approval(approval_request)
+
+        async def _stage(
+            self, artifact: dict, target_env: str, strategy: str
+        ) -> GateVerdict:
+            """Prepare the deployment in the target environment."""
+            start = now_ms()
+            reasons = []
+
+            # Check environment capacity
+            env_status = await self.env_manager.check_capacity(target_env)
+            if not env_status.has_capacity:
+                reasons.append(f"Environment '{target_env}' at capacity")
+
+            # Check no conflicting deployments
+            active_deployments = await self.env_manager.get_active_deployments(
+                target_env, artifact["agent_id"]
+            )
+            for dep in active_deployments:
+                if dep["status"] == "in_progress":
+                    reasons.append(
+                        f"Conflicting deployment in progress: {dep['deployment_id']}"
+                    )
+
+            if not reasons:
+                await self.env_manager.create_staged_deployment(
+                    artifact=artifact,
+                    environment=target_env,
+                    strategy=strategy,
+                )
+
+            result = StageResult.FAILED if reasons else StageResult.PASSED
+            return GateVerdict(
+                stage=PipelineStage.STAGE,
+                result=result,
+                reasons=reasons,
+                duration_ms=now_ms() - start,
+            )
+
+        async def _deploy(
+            self, artifact: dict, target_env: str, strategy: str
+        ) -> GateVerdict:
+            """Execute the deployment using the selected strategy."""
+            start = now_ms()
+
+            deployer = self._get_deployer(strategy)
+            deploy_result = await deployer.deploy(artifact, target_env)
+
+            return GateVerdict(
+                stage=PipelineStage.DEPLOY,
+                result=StageResult.PASSED if deploy_result.success else StageResult.FAILED,
+                reasons=deploy_result.reasons,
+                metrics=deploy_result.metrics,
+                duration_ms=now_ms() - start,
+            )
+
+        def _get_deployer(self, strategy: str):
+            """Factory for deployment strategy implementations."""
+            deployers = {
+                "blue_green": BlueGreenDeployer(self.env_manager, self.observability),
+                "canary": CanaryDeployer(self.env_manager, self.eval_framework, self.observability),
+                "progressive": ProgressiveDeployer(self.env_manager, self.eval_framework, self.observability),
+                "immediate": ImmediateDeployer(self.env_manager, self.observability),
+            }
+            return deployers[strategy]
+
+        async def _finalize(self, pipeline_run: PipelineRun, status: str) -> PipelineRun:
+            """Record final pipeline state and emit completion event."""
+            pipeline_run.status = status
+            pipeline_run.completed_at = datetime.utcnow().isoformat()
+
+            self.observability.emit_event("pipeline.completed", {
                 "run_id": pipeline_run.run_id,
-                "error": str(e),
-                "error_class": error_class,
-                "stage": pipeline_run.stages[-1].stage if pipeline_run.stages else None,
+                "agent_id": pipeline_run.agent_id,
+                "artifact_id": pipeline_run.artifact_id,
+                "status": status,
+                "stage_count": len(pipeline_run.stages),
+                "failed_stage": next(
+                    (s.stage for s in pipeline_run.stages if s.result == StageResult.FAILED),
+                    None,
+                ),
+                "total_duration_ms": sum(s.duration_ms for s in pipeline_run.stages),
             })
-            return await self._finalize(pipeline_run, "failed")
 
-    # ── Stage Implementations ──────────────────────────────────────────
-
-    async def _assemble(self, agent_id: str) -> tuple[dict, GateVerdict]:
-        """Collect all references and pin them to specific versions."""
-        start = now_ms()
-
-        agent_config = await self.prompt_registry.get_agent_config(agent_id)
-        prompt_version = await self.prompt_registry.get_production_version(
-            agent_config["prompt_id"]
-        )
-        tool_refs = await self.tool_manager.resolve_tool_versions(
-            agent_config["tools"]
-        )
-        policies = await self.guardrail_system.resolve_policy_versions(
-            agent_config["guardrail_policies"]
-        )
-
-        artifact = build_artifact(
-            agent_id=agent_id,
-            prompt=prompt_version,
-            tools=tool_refs,
-            policies=policies,
-            memory_config=agent_config["memory_config"],
-            model_config=agent_config["model_config"],
-            eval_criteria=agent_config["eval_criteria"],
-            schemas=agent_config["schemas"],
-        )
-        artifact["content_hash"] = compute_artifact_hash(artifact)
-
-        verdict = GateVerdict(
-            stage=PipelineStage.ASSEMBLE,
-            result=StageResult.PASSED,
-            metrics={"component_count": len(tool_refs) + len(policies) + 1},
-            duration_ms=now_ms() - start,
-        )
-        return artifact, verdict
-
-    async def _validate(self, artifact: dict) -> GateVerdict:
-        """Schema validation, dependency checks, lint, safety scan (p. 298)."""
-        start = now_ms()
-        reasons = []
-
-        # 1. JSON Schema conformance
-        schema_errors = validate_json_schema(artifact, ARTIFACT_SCHEMA)
-        if schema_errors:
-            reasons.extend([f"Schema: {e}" for e in schema_errors])
-
-        # 2. Dependency availability check
-        for dep in artifact["dependencies"]["mcp_servers"]:
-            if not await self.tool_manager.is_available(dep):
-                reasons.append(f"MCP server unavailable: {dep}")
-
-        # 3. Prompt lint (no unresolved variables, no deprecated instructions)
-        lint_issues = await self.prompt_registry.lint(
-            artifact["prompt"]["registry_ref"]
-        )
-        if lint_issues:
-            reasons.extend([f"Lint: {i}" for i in lint_issues])
-
-        # 4. Safety scan -- red-team pre-check (p. 298)
-        safety_result = await self.guardrail_system.safety_scan(artifact)
-        if not safety_result.passed:
-            reasons.extend([f"Safety: {v}" for v in safety_result.violations])
-
-        result = StageResult.FAILED if reasons else StageResult.PASSED
-        return GateVerdict(
-            stage=PipelineStage.VALIDATE,
-            result=result,
-            reasons=reasons,
-            duration_ms=now_ms() - start,
-        )
-
-    async def _test(self, artifact: dict) -> GateVerdict:
-        """Evalset regression and trajectory testing (p. 312)."""
-        start = now_ms()
-        reasons = []
-        criteria = artifact["eval_criteria"]
-
-        # Run evalset regression (Evaluation Framework, p. 312)
-        eval_result = await self.eval_framework.run_evalset(
-            evalset_id=criteria["evalset_id"],
-            agent_artifact=artifact,
-        )
-
-        if eval_result.overall_score < criteria["min_overall_score"]:
-            reasons.append(
-                f"Overall score {eval_result.overall_score:.3f} "
-                f"< threshold {criteria['min_overall_score']:.3f}"
-            )
-
-        # Check per-dimension floors
-        for dim, floor in criteria["dimension_floors"].items():
-            actual = eval_result.dimension_scores.get(dim, 0.0)
-            if actual < floor:
-                reasons.append(
-                    f"Dimension '{dim}' score {actual:.3f} < floor {floor:.3f}"
-                )
-
-        # Trajectory match (p. 308)
-        traj_result = await self.eval_framework.run_trajectory_eval(
-            evalset_id=criteria["evalset_id"],
-            agent_artifact=artifact,
-            match_type=criteria["trajectory_match_type"],
-        )
-        if not traj_result.passed:
-            reasons.append(f"Trajectory check failed: {traj_result.explanation}")
-
-        result = StageResult.FAILED if reasons else StageResult.PASSED
-        return GateVerdict(
-            stage=PipelineStage.TEST,
-            result=result,
-            reasons=reasons,
-            metrics={
-                "overall_score": eval_result.overall_score,
-                "dimension_scores": eval_result.dimension_scores,
-                "trajectory_tool_accuracy": traj_result.tool_accuracy,
-            },
-            duration_ms=now_ms() - start,
-        )
-
-    async def _evaluate(
-        self, artifact: dict, target_env: str, triggered_by: dict
-    ) -> GateVerdict:
-        """LLM-as-Judge + red-team suite + baseline comparison + HITL gate."""
-        start = now_ms()
-        reasons = []
-        criteria = artifact["eval_criteria"]
-
-        # 1. Red-team suite (Guardrails/Safety, p. 298)
-        redteam_result = await self.guardrail_system.run_red_team_suite(
-            suite_id=criteria["red_team_suite_id"],
-            agent_artifact=artifact,
-        )
-        if redteam_result.pass_rate < criteria["red_team_pass_rate"]:
-            reasons.append(
-                f"Red-team pass rate {redteam_result.pass_rate:.3f} "
-                f"< threshold {criteria['red_team_pass_rate']:.3f}"
-            )
-
-        # 2. Baseline comparison (Evaluation & Monitoring, p. 305)
-        current_prod = await self.env_manager.get_active_artifact(
-            artifact["agent_id"], "production"
-        )
-        if current_prod:
-            baseline_score = current_prod.get("last_eval_score", 0.0)
-            candidate_score = artifact.get("last_eval_score", 0.0)
-            if candidate_score < baseline_score - 0.02:  # 2% tolerance
-                reasons.append(
-                    f"Candidate score {candidate_score:.3f} regresses from "
-                    f"baseline {baseline_score:.3f} (tolerance 0.02)"
-                )
-
-        # 3. HITL approval gate for production (p. 211, p. 214)
-        if target_env == "production" and not reasons:
-            approval = await self._request_hitl_approval(
-                artifact=artifact,
-                triggered_by=triggered_by,
-                timeout_minutes=60,  # Approval timeout (p. 214)
-            )
-            if not approval.granted:
-                reasons.append(
-                    f"HITL approval denied: {approval.reason}"
-                )
-
-        result = StageResult.FAILED if reasons else StageResult.PASSED
-        return GateVerdict(
-            stage=PipelineStage.EVALUATE,
-            result=result,
-            reasons=reasons,
-            metrics={
-                "red_team_pass_rate": redteam_result.pass_rate,
-                "hitl_approved": not reasons,
-            },
-            duration_ms=now_ms() - start,
-        )
-
-    async def _request_hitl_approval(
-        self, artifact: dict, triggered_by: dict, timeout_minutes: int
-    ):
-        """Request human approval with timeout-with-safe-default (p. 214).
-
-        If timeout expires, the safe default is DENY -- the deployment
-        does not proceed without explicit human approval.
-        """
-        approval_request = {
-            "artifact_id": artifact["artifact_id"],
-            "agent_id": artifact["agent_id"],
-            "artifact_version": artifact["artifact_version"],
-            "change_summary": artifact["metadata"]["change_summary"],
-            "eval_metrics": artifact.get("last_eval_metrics", {}),
-            "requested_by": triggered_by,
-            "timeout_minutes": timeout_minutes,
-        }
-        return await self.env_manager.request_approval(approval_request)
-
-    async def _stage(
-        self, artifact: dict, target_env: str, strategy: str
-    ) -> GateVerdict:
-        """Prepare the deployment in the target environment."""
-        start = now_ms()
-        reasons = []
-
-        # Check environment capacity
-        env_status = await self.env_manager.check_capacity(target_env)
-        if not env_status.has_capacity:
-            reasons.append(f"Environment '{target_env}' at capacity")
-
-        # Check no conflicting deployments
-        active_deployments = await self.env_manager.get_active_deployments(
-            target_env, artifact["agent_id"]
-        )
-        for dep in active_deployments:
-            if dep["status"] == "in_progress":
-                reasons.append(
-                    f"Conflicting deployment in progress: {dep['deployment_id']}"
-                )
-
-        if not reasons:
-            await self.env_manager.create_staged_deployment(
-                artifact=artifact,
-                environment=target_env,
-                strategy=strategy,
-            )
-
-        result = StageResult.FAILED if reasons else StageResult.PASSED
-        return GateVerdict(
-            stage=PipelineStage.STAGE,
-            result=result,
-            reasons=reasons,
-            duration_ms=now_ms() - start,
-        )
-
-    async def _deploy(
-        self, artifact: dict, target_env: str, strategy: str
-    ) -> GateVerdict:
-        """Execute the deployment using the selected strategy."""
-        start = now_ms()
-
-        deployer = self._get_deployer(strategy)
-        deploy_result = await deployer.deploy(artifact, target_env)
-
-        return GateVerdict(
-            stage=PipelineStage.DEPLOY,
-            result=StageResult.PASSED if deploy_result.success else StageResult.FAILED,
-            reasons=deploy_result.reasons,
-            metrics=deploy_result.metrics,
-            duration_ms=now_ms() - start,
-        )
-
-    def _get_deployer(self, strategy: str):
-        """Factory for deployment strategy implementations."""
-        deployers = {
-            "blue_green": BlueGreenDeployer(self.env_manager, self.observability),
-            "canary": CanaryDeployer(self.env_manager, self.eval_framework, self.observability),
-            "progressive": ProgressiveDeployer(self.env_manager, self.eval_framework, self.observability),
-            "immediate": ImmediateDeployer(self.env_manager, self.observability),
-        }
-        return deployers[strategy]
-
-    async def _finalize(self, pipeline_run: PipelineRun, status: str) -> PipelineRun:
-        """Record final pipeline state and emit completion event."""
-        pipeline_run.status = status
-        pipeline_run.completed_at = datetime.utcnow().isoformat()
-
-        self.observability.emit_event("pipeline.completed", {
-            "run_id": pipeline_run.run_id,
-            "agent_id": pipeline_run.agent_id,
-            "artifact_id": pipeline_run.artifact_id,
-            "status": status,
-            "stage_count": len(pipeline_run.stages),
-            "failed_stage": next(
-                (s.stage for s in pipeline_run.stages if s.result == StageResult.FAILED),
-                None,
-            ),
-            "total_duration_ms": sum(s.duration_ms for s in pipeline_run.stages),
-        })
-
-        await store_pipeline_run(pipeline_run)
-        return pipeline_run
-```
+            await store_pipeline_run(pipeline_run)
+            return pipeline_run
+    ```
 
 ---
 
@@ -755,33 +766,29 @@ The pipeline supports four deployment strategies, each offering a different trad
 
 Blue-green deployment maintains two complete environments (blue and green). At any time, one is live (serving traffic) and the other is idle (staged with the new artifact). Cutover is a single routing switch.
 
-```
-                         BEFORE CUTOVER
-┌─────────────────────────────────────────────────────┐
-│                                                       │
-│   Traffic ──────────► ┌───────────────────────┐      │
-│   (100%)               │   BLUE (current v2.3.0)│      │
-│                        │   ██████████████████████│      │
-│                        └───────────────────────┘      │
-│                                                       │
-│                        ┌───────────────────────┐      │
-│                        │   GREEN (new v2.3.1)   │      │
-│                        │   (staged, idle)       │      │
-│                        └───────────────────────┘      │
-│                                                       │
-│                         AFTER CUTOVER                 │
-│                                                       │
-│                        ┌───────────────────────┐      │
-│                        │   BLUE (old v2.3.0)    │      │
-│                        │   (idle, rollback       │      │
-│                        │    target)              │      │
-│                        └───────────────────────┘      │
-│                                                       │
-│   Traffic ──────────► ┌───────────────────────┐      │
-│   (100%)               │   GREEN (new v2.3.1)  │      │
-│                        │   ██████████████████████│      │
-│                        └───────────────────────┘      │
-└─────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph Before["BEFORE CUTOVER"]
+        direction LR
+        T1["Traffic (100%)"] --> BLUE1["BLUE (current v2.3.0)<br/><small>active, serving</small>"]
+        GREEN1["GREEN (new v2.3.1)<br/><small>staged, idle</small>"]
+    end
+
+    Before -->|"Cutover"| After
+
+    subgraph After["AFTER CUTOVER"]
+        direction LR
+        BLUE2["BLUE (old v2.3.0)<br/><small>idle, rollback target</small>"]
+        T2["Traffic (100%)"] --> GREEN2["GREEN (new v2.3.1)<br/><small>active, serving</small>"]
+    end
+
+    classDef active fill:#2ECC71,stroke:#1FA855,color:#fff
+    classDef idle fill:#95A5A6,stroke:#7F8C8D,color:#fff
+    classDef traffic fill:#4A90D9,stroke:#2C5F8A,color:#fff
+
+    class BLUE1,GREEN2 active
+    class GREEN1,BLUE2 idle
+    class T1,T2 traffic
 ```
 
 Rollback is simply switching back to the blue environment. The old artifact remains warm and ready for instant reactivation.
@@ -790,256 +797,255 @@ Rollback is simply switching back to the blue environment. The old artifact rema
 
 Canary deployment gradually shifts traffic from the current artifact to the new one, evaluating quality at each step. If quality degrades below the rollback threshold, traffic is immediately routed back to the current artifact.
 
-```
-Step 1:  ████████████████████████████████████████████████░░  (5% canary)
-         current v2.3.0 ──────────────────────────── new v2.3.1
-                                                     ▲
-                                            evaluate goals_met() (p. 188)
+```mermaid
+graph TD
+    S1["<b>Step 1: 5% canary</b><br/><small>current v2.3.0 ← 95% | 5% → new v2.3.1</small>"]
+    E1["evaluate goals_met() (p. 188)"]
+    S2["<b>Step 2: 20% canary</b><br/><small>current v2.3.0 ← 80% | 20% → new v2.3.1</small>"]
+    E2["evaluate goals_met()"]
+    S3["<b>Step 3: 35% canary</b><br/><small>current v2.3.0 ← 65% | 35% → new v2.3.1</small>"]
+    E3["evaluate goals_met()"]
+    S4["<b>Step 4: 50% canary</b><br/><small>current v2.3.0 ← 50% | 50% → new v2.3.1</small>"]
+    E4["evaluate goals_met()"]
+    S5["<b>Step 5: 100% new</b><br/><small>PROMOTED (canary complete)</small>"]
 
-Step 2:  ████████████████████████████████████████░░░░░░░░░░  (20% canary)
-         current v2.3.0 ─────────────────── new v2.3.1
-                                             ▲
-                                    evaluate goals_met()
+    S1 --> E1 --> S2 --> E2 --> S3 --> E3 --> S4 --> E4 --> S5
 
-Step 3:  ████████████████████████████░░░░░░░░░░░░░░░░░░░░░░  (35% canary)
-         current v2.3.0 ─────── new v2.3.1
-                                 ▲
-                        evaluate goals_met()
+    classDef step fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef eval fill:#F39C12,stroke:#D68910,color:#fff
+    classDef done fill:#2ECC71,stroke:#1FA855,color:#fff
 
-Step 4:  ████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  (50% canary)
-         current ────── new v2.3.1
-                         ▲
-                evaluate goals_met()
-
-Step 5:  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  (100% new)
-         new v2.3.1 ─────────────────────────────────────────
-         PROMOTED (canary complete)
+    class S1,S2,S3,S4 step
+    class E1,E2,E3,E4 eval
+    class S5 done
 ```
 
 ### 4.4 Pseudocode: Canary Evaluator
 
-```python
-from dataclasses import dataclass
-from enum import Enum
+??? example "View Python pseudocode"
+
+    ```python
+    from dataclasses import dataclass
+    from enum import Enum
 
 
-class CanaryDecision(str, Enum):
-    PROMOTE = "promote"       # Increase traffic to canary
-    HOLD = "hold"             # Keep current traffic split
-    ROLLBACK = "rollback"     # Revert all traffic to current
+    class CanaryDecision(str, Enum):
+        PROMOTE = "promote"       # Increase traffic to canary
+        HOLD = "hold"             # Keep current traffic split
+        ROLLBACK = "rollback"     # Revert all traffic to current
 
 
-@dataclass
-class CanaryStepResult:
-    step: int
-    traffic_pct: float
-    sample_size: int
-    canary_score: float
-    baseline_score: float
-    decision: CanaryDecision
-    reasons: list[str]
-    goals_met: bool
+    @dataclass
+    class CanaryStepResult:
+        step: int
+        traffic_pct: float
+        sample_size: int
+        canary_score: float
+        baseline_score: float
+        decision: CanaryDecision
+        reasons: list[str]
+        goals_met: bool
 
 
-class CanaryEvaluator:
-    """Evaluates canary deployment health using SMART goals (p. 185).
+    class CanaryEvaluator:
+        """Evaluates canary deployment health using SMART goals (p. 185).
 
-    At each canary step, the evaluator collects quality metrics from
-    the canary traffic slice and compares against the production baseline.
-    Promotion decisions use goals_met() (p. 188).
+        At each canary step, the evaluator collects quality metrics from
+        the canary traffic slice and compares against the production baseline.
+        Promotion decisions use goals_met() (p. 188).
 
-    Traffic splitting is cost-aware (Resource-Aware Optimization, p. 255-272):
-    canary starts at a small percentage to limit cost exposure during
-    the most uncertain phase, then increases as confidence grows.
-    """
-
-    def __init__(
-        self,
-        eval_framework,       # Subsystem 08
-        observability,        # Subsystem 05
-        promotion_threshold: float = 0.88,
-        rollback_threshold: float = 0.82,
-        min_sample_size: int = 50,
-    ):
-        self.eval_framework = eval_framework
-        self.observability = observability
-        self.promotion_threshold = promotion_threshold
-        self.rollback_threshold = rollback_threshold
-        self.min_sample_size = min_sample_size
-
-    async def evaluate_step(
-        self,
-        deployment_id: str,
-        canary_artifact: dict,
-        baseline_artifact: dict,
-        current_step: int,
-        traffic_pct: float,
-        evaluation_window_minutes: int,
-    ) -> CanaryStepResult:
-        """Evaluate one step of a canary deployment.
-
-        Implements goals_met() pattern (p. 188):
-        - Specific: Quality metrics >= promotion_threshold
-        - Measurable: LLM-as-Judge scores on canary traffic
-        - Achievable: Compared against known production baseline
-        - Relevant: Same evalset dimensions as the agent's criteria
-        - Time-bound: evaluation_window_minutes per step
+        Traffic splitting is cost-aware (Resource-Aware Optimization, p. 255-272):
+        canary starts at a small percentage to limit cost exposure during
+        the most uncertain phase, then increases as confidence grows.
         """
-        # Collect metrics from canary traffic slice
-        canary_metrics = await self.observability.collect_metrics(
-            deployment_id=deployment_id,
-            artifact_id=canary_artifact["artifact_id"],
-            window_minutes=evaluation_window_minutes,
-        )
 
-        # Collect metrics from baseline (production) traffic
-        baseline_metrics = await self.observability.collect_metrics(
-            deployment_id=deployment_id,
-            artifact_id=baseline_artifact["artifact_id"],
-            window_minutes=evaluation_window_minutes,
-        )
+        def __init__(
+            self,
+            eval_framework,       # Subsystem 08
+            observability,        # Subsystem 05
+            promotion_threshold: float = 0.88,
+            rollback_threshold: float = 0.82,
+            min_sample_size: int = 50,
+        ):
+            self.eval_framework = eval_framework
+            self.observability = observability
+            self.promotion_threshold = promotion_threshold
+            self.rollback_threshold = rollback_threshold
+            self.min_sample_size = min_sample_size
 
-        canary_score = canary_metrics.overall_quality_score
-        baseline_score = baseline_metrics.overall_quality_score
-        sample_size = canary_metrics.request_count
+        async def evaluate_step(
+            self,
+            deployment_id: str,
+            canary_artifact: dict,
+            baseline_artifact: dict,
+            current_step: int,
+            traffic_pct: float,
+            evaluation_window_minutes: int,
+        ) -> CanaryStepResult:
+            """Evaluate one step of a canary deployment.
 
-        reasons = []
-        decision = CanaryDecision.HOLD  # Default: hold and wait for more data
-
-        # Insufficient data -- hold position
-        if sample_size < self.min_sample_size:
-            reasons.append(
-                f"Insufficient sample size: {sample_size} < {self.min_sample_size}"
+            Implements goals_met() pattern (p. 188):
+            - Specific: Quality metrics >= promotion_threshold
+            - Measurable: LLM-as-Judge scores on canary traffic
+            - Achievable: Compared against known production baseline
+            - Relevant: Same evalset dimensions as the agent's criteria
+            - Time-bound: evaluation_window_minutes per step
+            """
+            # Collect metrics from canary traffic slice
+            canary_metrics = await self.observability.collect_metrics(
+                deployment_id=deployment_id,
+                artifact_id=canary_artifact["artifact_id"],
+                window_minutes=evaluation_window_minutes,
             )
+
+            # Collect metrics from baseline (production) traffic
+            baseline_metrics = await self.observability.collect_metrics(
+                deployment_id=deployment_id,
+                artifact_id=baseline_artifact["artifact_id"],
+                window_minutes=evaluation_window_minutes,
+            )
+
+            canary_score = canary_metrics.overall_quality_score
+            baseline_score = baseline_metrics.overall_quality_score
+            sample_size = canary_metrics.request_count
+
+            reasons = []
+            decision = CanaryDecision.HOLD  # Default: hold and wait for more data
+
+            # Insufficient data -- hold position
+            if sample_size < self.min_sample_size:
+                reasons.append(
+                    f"Insufficient sample size: {sample_size} < {self.min_sample_size}"
+                )
+                return CanaryStepResult(
+                    step=current_step,
+                    traffic_pct=traffic_pct,
+                    sample_size=sample_size,
+                    canary_score=canary_score,
+                    baseline_score=baseline_score,
+                    decision=CanaryDecision.HOLD,
+                    reasons=reasons,
+                    goals_met=False,
+                )
+
+            # Check rollback condition (Exception Handling, p. 209)
+            if canary_score < self.rollback_threshold:
+                reasons.append(
+                    f"Canary score {canary_score:.3f} < rollback threshold "
+                    f"{self.rollback_threshold:.3f}"
+                )
+                decision = CanaryDecision.ROLLBACK
+
+            # Check for significant regression against baseline (p. 305)
+            elif canary_score < baseline_score - 0.03:
+                reasons.append(
+                    f"Canary score {canary_score:.3f} regresses from baseline "
+                    f"{baseline_score:.3f} by more than tolerance (0.03)"
+                )
+                decision = CanaryDecision.ROLLBACK
+
+            # Check error rate spike
+            elif canary_metrics.error_rate > baseline_metrics.error_rate * 2:
+                reasons.append(
+                    f"Canary error rate {canary_metrics.error_rate:.3f} > "
+                    f"2x baseline {baseline_metrics.error_rate:.3f}"
+                )
+                decision = CanaryDecision.ROLLBACK
+
+            # Check promotion condition -- goals_met() (p. 188)
+            elif canary_score >= self.promotion_threshold:
+                reasons.append(
+                    f"Canary score {canary_score:.3f} >= promotion threshold "
+                    f"{self.promotion_threshold:.3f}"
+                )
+                decision = CanaryDecision.PROMOTE
+
+            else:
+                reasons.append(
+                    f"Canary score {canary_score:.3f} between rollback "
+                    f"({self.rollback_threshold:.3f}) and promotion "
+                    f"({self.promotion_threshold:.3f}) thresholds -- holding"
+                )
+                decision = CanaryDecision.HOLD
+
+            goals_met = decision == CanaryDecision.PROMOTE
+
+            self.observability.emit_event("canary.step.evaluated", {
+                "deployment_id": deployment_id,
+                "step": current_step,
+                "traffic_pct": traffic_pct,
+                "canary_score": canary_score,
+                "baseline_score": baseline_score,
+                "decision": decision.value,
+                "goals_met": goals_met,
+                "sample_size": sample_size,
+            })
+
             return CanaryStepResult(
                 step=current_step,
                 traffic_pct=traffic_pct,
                 sample_size=sample_size,
                 canary_score=canary_score,
                 baseline_score=baseline_score,
-                decision=CanaryDecision.HOLD,
+                decision=decision,
                 reasons=reasons,
-                goals_met=False,
+                goals_met=goals_met,
             )
 
-        # Check rollback condition (Exception Handling, p. 209)
-        if canary_score < self.rollback_threshold:
-            reasons.append(
-                f"Canary score {canary_score:.3f} < rollback threshold "
-                f"{self.rollback_threshold:.3f}"
-            )
-            decision = CanaryDecision.ROLLBACK
+        async def run_canary_loop(
+            self,
+            deployment_id: str,
+            canary_artifact: dict,
+            baseline_artifact: dict,
+            canary_config: dict,
+        ) -> str:
+            """Run the full canary deployment loop.
 
-        # Check for significant regression against baseline (p. 305)
-        elif canary_score < baseline_score - 0.03:
-            reasons.append(
-                f"Canary score {canary_score:.3f} regresses from baseline "
-                f"{baseline_score:.3f} by more than tolerance (0.03)"
-            )
-            decision = CanaryDecision.ROLLBACK
+            Returns final status: 'promoted' | 'rolled_back' | 'timed_out'.
 
-        # Check error rate spike
-        elif canary_metrics.error_rate > baseline_metrics.error_rate * 2:
-            reasons.append(
-                f"Canary error rate {canary_metrics.error_rate:.3f} > "
-                f"2x baseline {baseline_metrics.error_rate:.3f}"
-            )
-            decision = CanaryDecision.ROLLBACK
+            Cost-aware traffic splitting (p. 255-272): starts at a small
+            percentage (e.g., 5%) to limit cost exposure, then ramps up
+            as confidence grows.
+            """
+            traffic_pct = canary_config["initial_traffic_pct"]
+            increment = canary_config["increment_pct"]
+            window = canary_config["evaluation_window_minutes"]
+            max_steps = canary_config["max_steps"]
 
-        # Check promotion condition -- goals_met() (p. 188)
-        elif canary_score >= self.promotion_threshold:
-            reasons.append(
-                f"Canary score {canary_score:.3f} >= promotion threshold "
-                f"{self.promotion_threshold:.3f}"
-            )
-            decision = CanaryDecision.PROMOTE
+            for step in range(1, max_steps + 1):
+                # Set traffic split
+                await self.observability.set_traffic_split(
+                    deployment_id=deployment_id,
+                    canary_pct=traffic_pct,
+                )
 
-        else:
-            reasons.append(
-                f"Canary score {canary_score:.3f} between rollback "
-                f"({self.rollback_threshold:.3f}) and promotion "
-                f"({self.promotion_threshold:.3f}) thresholds -- holding"
-            )
-            decision = CanaryDecision.HOLD
+                # Wait for evaluation window to collect sufficient data
+                await wait_minutes(window)
 
-        goals_met = decision == CanaryDecision.PROMOTE
+                # Evaluate
+                result = await self.evaluate_step(
+                    deployment_id=deployment_id,
+                    canary_artifact=canary_artifact,
+                    baseline_artifact=baseline_artifact,
+                    current_step=step,
+                    traffic_pct=traffic_pct,
+                    evaluation_window_minutes=window,
+                )
 
-        self.observability.emit_event("canary.step.evaluated", {
-            "deployment_id": deployment_id,
-            "step": current_step,
-            "traffic_pct": traffic_pct,
-            "canary_score": canary_score,
-            "baseline_score": baseline_score,
-            "decision": decision.value,
-            "goals_met": goals_met,
-            "sample_size": sample_size,
-        })
+                if result.decision == CanaryDecision.ROLLBACK:
+                    return "rolled_back"
 
-        return CanaryStepResult(
-            step=current_step,
-            traffic_pct=traffic_pct,
-            sample_size=sample_size,
-            canary_score=canary_score,
-            baseline_score=baseline_score,
-            decision=decision,
-            reasons=reasons,
-            goals_met=goals_met,
-        )
+                if result.decision == CanaryDecision.PROMOTE:
+                    if traffic_pct >= 100:
+                        return "promoted"
+                    # Increase canary traffic
+                    traffic_pct = min(traffic_pct + increment, 100)
 
-    async def run_canary_loop(
-        self,
-        deployment_id: str,
-        canary_artifact: dict,
-        baseline_artifact: dict,
-        canary_config: dict,
-    ) -> str:
-        """Run the full canary deployment loop.
+                # HOLD: stay at current traffic, re-evaluate on next iteration
 
-        Returns final status: 'promoted' | 'rolled_back' | 'timed_out'.
-
-        Cost-aware traffic splitting (p. 255-272): starts at a small
-        percentage (e.g., 5%) to limit cost exposure, then ramps up
-        as confidence grows.
-        """
-        traffic_pct = canary_config["initial_traffic_pct"]
-        increment = canary_config["increment_pct"]
-        window = canary_config["evaluation_window_minutes"]
-        max_steps = canary_config["max_steps"]
-
-        for step in range(1, max_steps + 1):
-            # Set traffic split
-            await self.observability.set_traffic_split(
-                deployment_id=deployment_id,
-                canary_pct=traffic_pct,
-            )
-
-            # Wait for evaluation window to collect sufficient data
-            await wait_minutes(window)
-
-            # Evaluate
-            result = await self.evaluate_step(
-                deployment_id=deployment_id,
-                canary_artifact=canary_artifact,
-                baseline_artifact=baseline_artifact,
-                current_step=step,
-                traffic_pct=traffic_pct,
-                evaluation_window_minutes=window,
-            )
-
-            if result.decision == CanaryDecision.ROLLBACK:
-                return "rolled_back"
-
-            if result.decision == CanaryDecision.PROMOTE:
-                if traffic_pct >= 100:
-                    return "promoted"
-                # Increase canary traffic
-                traffic_pct = min(traffic_pct + increment, 100)
-
-            # HOLD: stay at current traffic, re-evaluate on next iteration
-
-        # Exhausted all steps without full promotion
-        return "timed_out"
-```
+            # Exhausted all steps without full promotion
+            return "timed_out"
+    ```
 
 ### 4.5 Progressive Rollout
 
@@ -1063,25 +1069,22 @@ Progressive rollout is recommended for first-time deployments of new agents and 
 
 The platform maintains three environments with strict promotion rules. Each environment has its own isolated set of active agent artifacts, traffic routing, and metric collection.
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      Environment Hierarchy                              │
-│                                                                         │
-│  ┌─────────────────┐    ┌──────────────────┐    ┌────────────────────┐  │
-│  │  DEVELOPMENT     │───►│  STAGING          │───►│  PRODUCTION        │  │
-│  │                  │    │                   │    │                    │  │
-│  │  - Auto-deploy   │    │  - Evalset gate   │    │  - HITL approval   │  │
-│  │    on commit     │    │  - Red-team suite  │    │  - Canary/BG gate  │  │
-│  │  - No quality    │    │  - Baseline        │    │  - Quality mon.    │  │
-│  │    gates         │    │    comparison      │    │  - Auto-rollback   │  │
-│  │  - Ephemeral     │    │  - Load testing    │    │  - Audit logging   │  │
-│  │  - Per-developer │    │  - Shared team env │    │  - 99.9% SLA       │  │
-│  └─────────────────┘    └──────────────────┘    └────────────────────┘  │
-│         │                        │                        │             │
-│         ▼                        ▼                        ▼             │
-│    No rollback              Auto-rollback on         Auto-rollback on   │
-│    needed                   eval regression          quality degradation│
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph LR
+    DEV["<b>DEVELOPMENT</b><br/><small>Auto-deploy on commit<br/>No quality gates<br/>Ephemeral<br/>Per-developer<br/><br/>No rollback needed</small>"]
+    STG["<b>STAGING</b><br/><small>Evalset gate<br/>Red-team suite<br/>Baseline comparison<br/>Load testing<br/>Shared team env<br/><br/>Auto-rollback on eval regression</small>"]
+    PRD["<b>PRODUCTION</b><br/><small>HITL approval<br/>Canary/BG gate<br/>Quality monitoring<br/>Auto-rollback<br/>Audit logging<br/>99.9% SLA<br/><br/>Auto-rollback on quality degradation</small>"]
+
+    DEV -->|"Validate + Test pass"| STG
+    STG -->|"Evaluate + HITL approval"| PRD
+
+    classDef dev fill:#2ECC71,stroke:#1FA855,color:#fff
+    classDef stg fill:#F39C12,stroke:#D68910,color:#fff
+    classDef prd fill:#E74C3C,stroke:#C0392B,color:#fff
+
+    class DEV dev
+    class STG stg
+    class PRD prd
 ```
 
 ### 5.2 Promotion rules
@@ -1101,70 +1104,72 @@ Each environment maintains independent:
 - **Metric pipeline**: Independent metric collection and aggregation to prevent cross-contamination of quality data.
 - **Secret scope**: Environment-specific API keys and credentials (no production secrets in dev/staging).
 
-```python
-# Pseudocode: environment manager
-@dataclass
-class Environment:
-    name: str                           # "development" | "staging" | "production"
-    active_artifacts: dict[str, str]    # agent_id -> artifact_id
-    traffic_config: dict                # routing rules
-    metric_namespace: str               # isolated metric prefix
-    secret_scope: str                   # vault path prefix
-    sla_target: float                   # e.g., 0.999 for production
+??? example "View Python pseudocode"
+
+    ```python
+    # Pseudocode: environment manager
+    @dataclass
+    class Environment:
+        name: str                           # "development" | "staging" | "production"
+        active_artifacts: dict[str, str]    # agent_id -> artifact_id
+        traffic_config: dict                # routing rules
+        metric_namespace: str               # isolated metric prefix
+        secret_scope: str                   # vault path prefix
+        sla_target: float                   # e.g., 0.999 for production
 
 
-class EnvironmentManager:
-    """Manages environment lifecycle and promotion rules."""
+    class EnvironmentManager:
+        """Manages environment lifecycle and promotion rules."""
 
-    PROMOTION_RULES = {
-        "development": "staging",
-        "staging": "production",
-    }
+        PROMOTION_RULES = {
+            "development": "staging",
+            "staging": "production",
+        }
 
-    async def promote_artifact(
-        self,
-        artifact: dict,
-        from_env: str,
-        to_env: str,
-        promoted_by: dict,
-    ) -> dict:
-        """Promote an artifact from one environment to the next."""
-        expected_target = self.PROMOTION_RULES.get(from_env)
-        if expected_target != to_env:
-            raise InvalidPromotionError(
-                f"Cannot promote from '{from_env}' to '{to_env}'. "
-                f"Expected target: '{expected_target}'."
-            )
-
-        # HITL gate for production promotion (p. 211)
-        if to_env == "production":
-            if promoted_by.get("type") != "human":
-                raise HITLRequiredError(
-                    "Human approval required for production promotion (p. 211)"
+        async def promote_artifact(
+            self,
+            artifact: dict,
+            from_env: str,
+            to_env: str,
+            promoted_by: dict,
+        ) -> dict:
+            """Promote an artifact from one environment to the next."""
+            expected_target = self.PROMOTION_RULES.get(from_env)
+            if expected_target != to_env:
+                raise InvalidPromotionError(
+                    f"Cannot promote from '{from_env}' to '{to_env}'. "
+                    f"Expected target: '{expected_target}'."
                 )
 
-        # Snapshot current state for rollback (Checkpoint, p. 290)
-        checkpoint = await self.create_checkpoint(to_env, artifact["agent_id"])
+            # HITL gate for production promotion (p. 211)
+            if to_env == "production":
+                if promoted_by.get("type") != "human":
+                    raise HITLRequiredError(
+                        "Human approval required for production promotion (p. 211)"
+                    )
 
-        # Activate artifact in target environment
-        deployment = await self.activate_artifact(artifact, to_env)
-        deployment["rollback_checkpoint"] = checkpoint
+            # Snapshot current state for rollback (Checkpoint, p. 290)
+            checkpoint = await self.create_checkpoint(to_env, artifact["agent_id"])
 
-        return deployment
+            # Activate artifact in target environment
+            deployment = await self.activate_artifact(artifact, to_env)
+            deployment["rollback_checkpoint"] = checkpoint
 
-    async def create_checkpoint(self, environment: str, agent_id: str) -> dict:
-        """Checkpoint current state before deployment (p. 290).
-        Captures current active artifact and routing config."""
-        env = self.get_environment(environment)
-        return {
-            "checkpoint_id": generate_checkpoint_id(),
-            "environment": environment,
-            "agent_id": agent_id,
-            "previous_artifact_id": env.active_artifacts.get(agent_id),
-            "traffic_config_snapshot": env.traffic_config.copy(),
-            "created_at": datetime.utcnow().isoformat(),
-        }
-```
+            return deployment
+
+        async def create_checkpoint(self, environment: str, agent_id: str) -> dict:
+            """Checkpoint current state before deployment (p. 290).
+            Captures current active artifact and routing config."""
+            env = self.get_environment(environment)
+            return {
+                "checkpoint_id": generate_checkpoint_id(),
+                "environment": environment,
+                "agent_id": agent_id,
+                "previous_artifact_id": env.active_artifacts.get(agent_id),
+                "traffic_config_snapshot": env.traffic_config.copy(),
+                "created_at": datetime.utcnow().isoformat(),
+            }
+    ```
 
 ---
 
@@ -1194,306 +1199,310 @@ Rollback is a first-class operation in the deployment pipeline. Because every ar
 
 ### 6.3 Pseudocode: Rollback Controller
 
-```python
-from dataclasses import dataclass
-from enum import Enum
-from typing import Optional
+??? example "View Python pseudocode"
+
+    ```python
+    from dataclasses import dataclass
+    from enum import Enum
+    from typing import Optional
 
 
-class RollbackType(str, Enum):
-    INSTANT = "instant"
-    GRACEFUL = "graceful"
-    TARGETED = "targeted"
+    class RollbackType(str, Enum):
+        INSTANT = "instant"
+        GRACEFUL = "graceful"
+        TARGETED = "targeted"
 
 
-class RollbackTrigger(str, Enum):
-    CANARY_QUALITY = "canary_quality_degradation"
-    ERROR_RATE = "error_rate_spike"
-    LATENCY = "latency_spike"
-    GUARDRAIL_VIOLATIONS = "guardrail_violation_spike"
-    SAFETY_INCIDENT = "safety_incident"
-    EVAL_DRIFT = "eval_score_drift"
-    MANUAL = "manual_operator"
+    class RollbackTrigger(str, Enum):
+        CANARY_QUALITY = "canary_quality_degradation"
+        ERROR_RATE = "error_rate_spike"
+        LATENCY = "latency_spike"
+        GUARDRAIL_VIOLATIONS = "guardrail_violation_spike"
+        SAFETY_INCIDENT = "safety_incident"
+        EVAL_DRIFT = "eval_score_drift"
+        MANUAL = "manual_operator"
 
 
-@dataclass
-class RollbackResult:
-    rollback_id: str
-    deployment_id: str
-    agent_id: str
-    rolled_back_from: str   # artifact_id
-    rolled_back_to: str     # artifact_id
-    rollback_type: RollbackType
-    trigger: RollbackTrigger
-    duration_ms: int
-    success: bool
-    reason: str
+    @dataclass
+    class RollbackResult:
+        rollback_id: str
+        deployment_id: str
+        agent_id: str
+        rolled_back_from: str   # artifact_id
+        rolled_back_to: str     # artifact_id
+        rollback_type: RollbackType
+        trigger: RollbackTrigger
+        duration_ms: int
+        success: bool
+        reason: str
 
 
-class RollbackController:
-    """Controls automatic and manual rollback for agent deployments.
+    class RollbackController:
+        """Controls automatic and manual rollback for agent deployments.
 
-    Automatic rollback is triggered by quality degradation (p. 209, p. 305).
-    Manual rollback requires HITL authorization (p. 211).
-    All rollbacks use checkpoint/restore (p. 290).
-    """
-
-    def __init__(
-        self,
-        environment_manager,
-        observability,        # Subsystem 05
-        guardrail_system,     # Subsystem 04
-    ):
-        self.env_manager = environment_manager
-        self.observability = observability
-        self.guardrail_system = guardrail_system
-
-    async def auto_rollback(
-        self,
-        deployment_id: str,
-        trigger: RollbackTrigger,
-        evidence: dict,
-    ) -> RollbackResult:
-        """Execute automatic rollback on quality degradation.
-
-        Automatic rollback does NOT require HITL approval -- speed is
-        critical. The system prefers a false-positive rollback over
-        serving degraded quality to users (Exception Handling, p. 209).
-
-        Error classification (p. 205) determines whether to rollback
-        or retry:
-        - Transient errors (network, timeout): retry up to 3 times
-        - Logic errors (eval failure, quality drop): rollback
-        - Unrecoverable errors (safety incident): rollback + quarantine
+        Automatic rollback is triggered by quality degradation (p. 209, p. 305).
+        Manual rollback requires HITL authorization (p. 211).
+        All rollbacks use checkpoint/restore (p. 290).
         """
-        start = now_ms()
 
-        deployment = await self.env_manager.get_deployment(deployment_id)
-        checkpoint = deployment["rollback_checkpoint"]
+        def __init__(
+            self,
+            environment_manager,
+            observability,        # Subsystem 05
+            guardrail_system,     # Subsystem 04
+        ):
+            self.env_manager = environment_manager
+            self.observability = observability
+            self.guardrail_system = guardrail_system
 
-        # Classify the error to determine action (p. 205)
-        error_class = self._classify_trigger(trigger, evidence)
+        async def auto_rollback(
+            self,
+            deployment_id: str,
+            trigger: RollbackTrigger,
+            evidence: dict,
+        ) -> RollbackResult:
+            """Execute automatic rollback on quality degradation.
 
-        if error_class == "transient":
-            # Retry logic -- do not rollback yet
-            retry_count = evidence.get("retry_count", 0)
-            if retry_count < 3:
-                self.observability.emit_event("rollback.retry", {
-                    "deployment_id": deployment_id,
-                    "trigger": trigger.value,
-                    "retry_count": retry_count + 1,
-                })
-                return RollbackResult(
-                    rollback_id=generate_rollback_id(),
-                    deployment_id=deployment_id,
-                    agent_id=deployment["agent_id"],
-                    rolled_back_from=deployment["artifact_id"],
-                    rolled_back_to=deployment["artifact_id"],  # No change
-                    rollback_type=RollbackType.GRACEFUL,
-                    trigger=trigger,
-                    duration_ms=now_ms() - start,
-                    success=False,
-                    reason=f"Transient error, retrying ({retry_count + 1}/3)",
+            Automatic rollback does NOT require HITL approval -- speed is
+            critical. The system prefers a false-positive rollback over
+            serving degraded quality to users (Exception Handling, p. 209).
+
+            Error classification (p. 205) determines whether to rollback
+            or retry:
+            - Transient errors (network, timeout): retry up to 3 times
+            - Logic errors (eval failure, quality drop): rollback
+            - Unrecoverable errors (safety incident): rollback + quarantine
+            """
+            start = now_ms()
+
+            deployment = await self.env_manager.get_deployment(deployment_id)
+            checkpoint = deployment["rollback_checkpoint"]
+
+            # Classify the error to determine action (p. 205)
+            error_class = self._classify_trigger(trigger, evidence)
+
+            if error_class == "transient":
+                # Retry logic -- do not rollback yet
+                retry_count = evidence.get("retry_count", 0)
+                if retry_count < 3:
+                    self.observability.emit_event("rollback.retry", {
+                        "deployment_id": deployment_id,
+                        "trigger": trigger.value,
+                        "retry_count": retry_count + 1,
+                    })
+                    return RollbackResult(
+                        rollback_id=generate_rollback_id(),
+                        deployment_id=deployment_id,
+                        agent_id=deployment["agent_id"],
+                        rolled_back_from=deployment["artifact_id"],
+                        rolled_back_to=deployment["artifact_id"],  # No change
+                        rollback_type=RollbackType.GRACEFUL,
+                        trigger=trigger,
+                        duration_ms=now_ms() - start,
+                        success=False,
+                        reason=f"Transient error, retrying ({retry_count + 1}/3)",
+                    )
+
+            # --- EXECUTE ROLLBACK ---
+
+            # For safety incidents: quarantine the agent immediately
+            if trigger == RollbackTrigger.SAFETY_INCIDENT:
+                await self.guardrail_system.quarantine_agent(deployment["agent_id"])
+
+            # Restore from checkpoint (p. 290)
+            previous_artifact_id = checkpoint["previous_artifact_id"]
+            if not previous_artifact_id:
+                # No previous artifact -- this was the first deployment.
+                # Deactivate the agent entirely.
+                await self.env_manager.deactivate_agent(
+                    deployment["agent_id"], deployment["environment"]
+                )
+                rolled_back_to = "none"
+            else:
+                await self.env_manager.restore_checkpoint(checkpoint)
+                rolled_back_to = previous_artifact_id
+
+            # Invalidate all caches for this agent
+            await self.env_manager.invalidate_caches(deployment["agent_id"])
+
+            duration = now_ms() - start
+
+            result = RollbackResult(
+                rollback_id=generate_rollback_id(),
+                deployment_id=deployment_id,
+                agent_id=deployment["agent_id"],
+                rolled_back_from=deployment["artifact_id"],
+                rolled_back_to=rolled_back_to,
+                rollback_type=RollbackType.INSTANT,
+                trigger=trigger,
+                duration_ms=duration,
+                success=True,
+                reason=f"Auto-rollback on {trigger.value}: {evidence.get('reason', '')}",
+            )
+
+            # Emit critical event for Observability Platform
+            self.observability.emit_event("deployment.rollback", {
+                **result.__dict__,
+                "evidence": evidence,
+            }, severity="critical")
+
+            return result
+
+        async def manual_rollback(
+            self,
+            deployment_id: str,
+            target_artifact_id: Optional[str],
+            authorized_by: dict,
+            reason: str,
+        ) -> RollbackResult:
+            """Execute manual rollback. Requires HITL authorization (p. 211)."""
+            if authorized_by.get("type") != "human":
+                raise HITLRequiredError(
+                    "Manual rollback requires human authorization (p. 211)"
                 )
 
-        # --- EXECUTE ROLLBACK ---
+            start = now_ms()
+            deployment = await self.env_manager.get_deployment(deployment_id)
 
-        # For safety incidents: quarantine the agent immediately
-        if trigger == RollbackTrigger.SAFETY_INCIDENT:
-            await self.guardrail_system.quarantine_agent(deployment["agent_id"])
+            if target_artifact_id:
+                # Targeted rollback to a specific artifact
+                target = await self.env_manager.get_artifact(target_artifact_id)
+                await self.env_manager.activate_artifact(
+                    target, deployment["environment"]
+                )
+            else:
+                # Rollback to checkpoint (most recent previous artifact)
+                checkpoint = deployment["rollback_checkpoint"]
+                await self.env_manager.restore_checkpoint(checkpoint)
+                target_artifact_id = checkpoint["previous_artifact_id"]
 
-        # Restore from checkpoint (p. 290)
-        previous_artifact_id = checkpoint["previous_artifact_id"]
-        if not previous_artifact_id:
-            # No previous artifact -- this was the first deployment.
-            # Deactivate the agent entirely.
-            await self.env_manager.deactivate_agent(
-                deployment["agent_id"], deployment["environment"]
-            )
-            rolled_back_to = "none"
-        else:
-            await self.env_manager.restore_checkpoint(checkpoint)
-            rolled_back_to = previous_artifact_id
+            await self.env_manager.invalidate_caches(deployment["agent_id"])
 
-        # Invalidate all caches for this agent
-        await self.env_manager.invalidate_caches(deployment["agent_id"])
-
-        duration = now_ms() - start
-
-        result = RollbackResult(
-            rollback_id=generate_rollback_id(),
-            deployment_id=deployment_id,
-            agent_id=deployment["agent_id"],
-            rolled_back_from=deployment["artifact_id"],
-            rolled_back_to=rolled_back_to,
-            rollback_type=RollbackType.INSTANT,
-            trigger=trigger,
-            duration_ms=duration,
-            success=True,
-            reason=f"Auto-rollback on {trigger.value}: {evidence.get('reason', '')}",
-        )
-
-        # Emit critical event for Observability Platform
-        self.observability.emit_event("deployment.rollback", {
-            **result.__dict__,
-            "evidence": evidence,
-        }, severity="critical")
-
-        return result
-
-    async def manual_rollback(
-        self,
-        deployment_id: str,
-        target_artifact_id: Optional[str],
-        authorized_by: dict,
-        reason: str,
-    ) -> RollbackResult:
-        """Execute manual rollback. Requires HITL authorization (p. 211)."""
-        if authorized_by.get("type") != "human":
-            raise HITLRequiredError(
-                "Manual rollback requires human authorization (p. 211)"
+            result = RollbackResult(
+                rollback_id=generate_rollback_id(),
+                deployment_id=deployment_id,
+                agent_id=deployment["agent_id"],
+                rolled_back_from=deployment["artifact_id"],
+                rolled_back_to=target_artifact_id or "none",
+                rollback_type=RollbackType.TARGETED if target_artifact_id else RollbackType.INSTANT,
+                trigger=RollbackTrigger.MANUAL,
+                duration_ms=now_ms() - start,
+                success=True,
+                reason=reason,
             )
 
-        start = now_ms()
-        deployment = await self.env_manager.get_deployment(deployment_id)
+            self.observability.emit_event("deployment.rollback", {
+                **result.__dict__,
+                "authorized_by": authorized_by,
+            }, severity="high")
 
-        if target_artifact_id:
-            # Targeted rollback to a specific artifact
-            target = await self.env_manager.get_artifact(target_artifact_id)
-            await self.env_manager.activate_artifact(
-                target, deployment["environment"]
-            )
-        else:
-            # Rollback to checkpoint (most recent previous artifact)
-            checkpoint = deployment["rollback_checkpoint"]
-            await self.env_manager.restore_checkpoint(checkpoint)
-            target_artifact_id = checkpoint["previous_artifact_id"]
+            return result
 
-        await self.env_manager.invalidate_caches(deployment["agent_id"])
+        def _classify_trigger(self, trigger: RollbackTrigger, evidence: dict) -> str:
+            """Classify rollback trigger for error handling (p. 205).
 
-        result = RollbackResult(
-            rollback_id=generate_rollback_id(),
-            deployment_id=deployment_id,
-            agent_id=deployment["agent_id"],
-            rolled_back_from=deployment["artifact_id"],
-            rolled_back_to=target_artifact_id or "none",
-            rollback_type=RollbackType.TARGETED if target_artifact_id else RollbackType.INSTANT,
-            trigger=RollbackTrigger.MANUAL,
-            duration_ms=now_ms() - start,
-            success=True,
-            reason=reason,
-        )
-
-        self.observability.emit_event("deployment.rollback", {
-            **result.__dict__,
-            "authorized_by": authorized_by,
-        }, severity="high")
-
-        return result
-
-    def _classify_trigger(self, trigger: RollbackTrigger, evidence: dict) -> str:
-        """Classify rollback trigger for error handling (p. 205).
-
-        Returns: 'transient' | 'logic' | 'unrecoverable'
-        """
-        if trigger == RollbackTrigger.SAFETY_INCIDENT:
-            return "unrecoverable"
-        if trigger in (RollbackTrigger.CANARY_QUALITY, RollbackTrigger.EVAL_DRIFT):
+            Returns: 'transient' | 'logic' | 'unrecoverable'
+            """
+            if trigger == RollbackTrigger.SAFETY_INCIDENT:
+                return "unrecoverable"
+            if trigger in (RollbackTrigger.CANARY_QUALITY, RollbackTrigger.EVAL_DRIFT):
+                return "logic"
+            if trigger == RollbackTrigger.ERROR_RATE:
+                # Check if errors are network-related (transient) or logic errors
+                error_types = evidence.get("error_types", {})
+                transient_pct = error_types.get("timeout", 0) + error_types.get("network", 0)
+                if transient_pct > 0.7:
+                    return "transient"
+                return "logic"
+            if trigger == RollbackTrigger.LATENCY:
+                return "transient"  # Latency spikes are often transient
             return "logic"
-        if trigger == RollbackTrigger.ERROR_RATE:
-            # Check if errors are network-related (transient) or logic errors
-            error_types = evidence.get("error_types", {})
-            transient_pct = error_types.get("timeout", 0) + error_types.get("network", 0)
-            if transient_pct > 0.7:
-                return "transient"
-            return "logic"
-        if trigger == RollbackTrigger.LATENCY:
-            return "transient"  # Latency spikes are often transient
-        return "logic"
-```
+    ```
 
 ### 6.4 Quality monitoring loop
 
 After every deployment, a background monitoring loop continuously evaluates the deployed artifact against its SMART quality goals (p. 185). This loop is responsible for triggering automatic rollback when post-deployment quality drifts.
 
-```python
-async def post_deployment_monitor(
-    deployment_id: str,
-    artifact: dict,
-    rollback_controller: RollbackController,
-    eval_framework,
-    observability,
-    check_interval_minutes: int = 5,
-    monitoring_duration_hours: int = 24,
-):
-    """Continuous quality monitoring after deployment.
+??? example "View Python pseudocode"
 
-    Implements Goal Setting & Monitoring (p. 185):
-    - SMART goals defined in artifact['eval_criteria']
-    - goals_met() checked at each interval (p. 188)
-    - Automatic rollback on sustained degradation (p. 209)
-    """
-    criteria = artifact["eval_criteria"]
-    checks_remaining = (monitoring_duration_hours * 60) // check_interval_minutes
-    consecutive_failures = 0
-    MAX_CONSECUTIVE_FAILURES = 3  # Rollback after 3 consecutive failures
+    ```python
+    async def post_deployment_monitor(
+        deployment_id: str,
+        artifact: dict,
+        rollback_controller: RollbackController,
+        eval_framework,
+        observability,
+        check_interval_minutes: int = 5,
+        monitoring_duration_hours: int = 24,
+    ):
+        """Continuous quality monitoring after deployment.
 
-    for check in range(checks_remaining):
-        await wait_minutes(check_interval_minutes)
+        Implements Goal Setting & Monitoring (p. 185):
+        - SMART goals defined in artifact['eval_criteria']
+        - goals_met() checked at each interval (p. 188)
+        - Automatic rollback on sustained degradation (p. 209)
+        """
+        criteria = artifact["eval_criteria"]
+        checks_remaining = (monitoring_duration_hours * 60) // check_interval_minutes
+        consecutive_failures = 0
+        MAX_CONSECUTIVE_FAILURES = 3  # Rollback after 3 consecutive failures
 
-        # Collect live metrics from production traffic
-        metrics = await observability.collect_metrics(
-            deployment_id=deployment_id,
-            artifact_id=artifact["artifact_id"],
-            window_minutes=check_interval_minutes,
-        )
+        for check in range(checks_remaining):
+            await wait_minutes(check_interval_minutes)
 
-        # goals_met() check (p. 188)
-        goals_met = True
-        violations = []
-
-        if metrics.overall_quality_score < criteria["min_overall_score"]:
-            goals_met = False
-            violations.append(
-                f"Quality {metrics.overall_quality_score:.3f} "
-                f"< {criteria['min_overall_score']:.3f}"
+            # Collect live metrics from production traffic
+            metrics = await observability.collect_metrics(
+                deployment_id=deployment_id,
+                artifact_id=artifact["artifact_id"],
+                window_minutes=check_interval_minutes,
             )
 
-        if metrics.error_rate > 0.05:  # 5% error rate threshold
-            goals_met = False
-            violations.append(f"Error rate {metrics.error_rate:.3f} > 0.05")
+            # goals_met() check (p. 188)
+            goals_met = True
+            violations = []
 
-        for dim, floor in criteria["dimension_floors"].items():
-            actual = metrics.dimension_scores.get(dim, 0.0)
-            if actual < floor:
+            if metrics.overall_quality_score < criteria["min_overall_score"]:
                 goals_met = False
-                violations.append(f"Dimension '{dim}' {actual:.3f} < {floor:.3f}")
+                violations.append(
+                    f"Quality {metrics.overall_quality_score:.3f} "
+                    f"< {criteria['min_overall_score']:.3f}"
+                )
 
-        if goals_met:
-            consecutive_failures = 0
-        else:
-            consecutive_failures += 1
-            observability.emit_event("deployment.quality.degraded", {
-                "deployment_id": deployment_id,
-                "check_number": check,
-                "consecutive_failures": consecutive_failures,
-                "violations": violations,
-            })
+            if metrics.error_rate > 0.05:  # 5% error rate threshold
+                goals_met = False
+                violations.append(f"Error rate {metrics.error_rate:.3f} > 0.05")
 
-        # Trigger rollback after sustained degradation
-        if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-            await rollback_controller.auto_rollback(
-                deployment_id=deployment_id,
-                trigger=RollbackTrigger.EVAL_DRIFT,
-                evidence={
+            for dim, floor in criteria["dimension_floors"].items():
+                actual = metrics.dimension_scores.get(dim, 0.0)
+                if actual < floor:
+                    goals_met = False
+                    violations.append(f"Dimension '{dim}' {actual:.3f} < {floor:.3f}")
+
+            if goals_met:
+                consecutive_failures = 0
+            else:
+                consecutive_failures += 1
+                observability.emit_event("deployment.quality.degraded", {
+                    "deployment_id": deployment_id,
+                    "check_number": check,
                     "consecutive_failures": consecutive_failures,
                     "violations": violations,
-                    "last_score": metrics.overall_quality_score,
-                    "threshold": criteria["min_overall_score"],
-                },
-            )
-            return  # Monitoring ends after rollback
-```
+                })
+
+            # Trigger rollback after sustained degradation
+            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                await rollback_controller.auto_rollback(
+                    deployment_id=deployment_id,
+                    trigger=RollbackTrigger.EVAL_DRIFT,
+                    evidence={
+                        "consecutive_failures": consecutive_failures,
+                        "violations": violations,
+                        "last_score": metrics.overall_quality_score,
+                        "threshold": criteria["min_overall_score"],
+                    },
+                )
+                return  # Monitoring ends after rollback
+    ```
 
 ---
 
@@ -1503,205 +1512,196 @@ When agents operate within teams (see Team Orchestrator, subsystem 02), deployin
 
 ### 7.1 Team deployment artifact
 
-```json
-{
-  "$schema": "https://agentforge.io/schemas/team-deployment/v1.json",
-  "team_deployment_id": "tdep_4a8f2c1e",
-  "team_id": "team-alpha",
-  "team_version": "3.1.0-build.12",
-  "created_at": "2026-02-27T15:00:00Z",
-  "agent_artifacts": [
+??? example "View JSON example"
+
+    ```json
     {
-      "agent_id": "agt_research_001",
-      "artifact_id": "art_7f3a9b2e4c1d",
-      "artifact_version": "2.3.1-build.48",
-      "role": "researcher"
-    },
-    {
-      "agent_id": "agt_writer_002",
-      "artifact_id": "art_8e4b1c3d5f2a",
-      "artifact_version": "1.5.0-build.22",
-      "role": "writer"
-    },
-    {
-      "agent_id": "agt_reviewer_003",
-      "artifact_id": "art_9d5c2e4f6a3b",
-      "artifact_version": "1.2.0-build.15",
-      "role": "reviewer"
+      "$schema": "https://agentforge.io/schemas/team-deployment/v1.json",
+      "team_deployment_id": "tdep_4a8f2c1e",
+      "team_id": "team-alpha",
+      "team_version": "3.1.0-build.12",
+      "created_at": "2026-02-27T15:00:00Z",
+      "agent_artifacts": [
+        {
+          "agent_id": "agt_research_001",
+          "artifact_id": "art_7f3a9b2e4c1d",
+          "artifact_version": "2.3.1-build.48",
+          "role": "researcher"
+        },
+        {
+          "agent_id": "agt_writer_002",
+          "artifact_id": "art_8e4b1c3d5f2a",
+          "artifact_version": "1.5.0-build.22",
+          "role": "writer"
+        },
+        {
+          "agent_id": "agt_reviewer_003",
+          "artifact_id": "art_9d5c2e4f6a3b",
+          "artifact_version": "1.2.0-build.15",
+          "role": "reviewer"
+        }
+      ],
+      "team_topology": {
+        "type": "supervisor",
+        "supervisor_agent": "agt_research_001",
+        "communication_pattern": "sequential_handoff"
+      },
+      "cross_agent_eval": {
+        "evalset_id": "evalset_team_alpha_integration_v2",
+        "min_overall_score": 0.85,
+        "end_to_end_trajectory_match": "in_order"
+      },
+      "deployment_strategy": "blue_green",
+      "rollback_strategy": "atomic"
     }
-  ],
-  "team_topology": {
-    "type": "supervisor",
-    "supervisor_agent": "agt_research_001",
-    "communication_pattern": "sequential_handoff"
-  },
-  "cross_agent_eval": {
-    "evalset_id": "evalset_team_alpha_integration_v2",
-    "min_overall_score": 0.85,
-    "end_to_end_trajectory_match": "in_order"
-  },
-  "deployment_strategy": "blue_green",
-  "rollback_strategy": "atomic"
-}
-```
+    ```
 
 ### 7.2 Atomic team deployment
 
 Team deployments follow an atomic commit pattern: either all agents in the team deploy successfully, or none of them do. This prevents partial deployments where some agents are on the new version and others are on the old version.
 
-```
-┌───────────────────────────────────────────────────────────────────┐
-│                    Team Deployment Flow                           │
-│                                                                   │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                │
-│  │ Agent A      │  │ Agent B      │  │ Agent C      │  Individual │
-│  │ Pipeline     │  │ Pipeline     │  │ Pipeline     │  pipelines  │
-│  │ (build,      │  │ (build,      │  │ (build,      │  run in     │
-│  │  validate,   │  │  validate,   │  │  validate,   │  parallel   │
-│  │  test)       │  │  test)       │  │  test)       │             │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘             │
-│         │                 │                  │                    │
-│         ▼                 ▼                  ▼                    │
-│  ┌─────────────────────────────────────────────────────────┐      │
-│  │           Integration Test Gate                          │     │
-│  │   Run cross-agent evalset on the entire team             │     │
-│  │   All agents must pass individual AND team evals         │     │
-│  └────────────────────────┬────────────────────────────────┘      │
-│                           │                                       │
-│                           ▼                                       │
-│  ┌─────────────────────────────────────────────────────────┐      │
-│  │           HITL Approval (production only, p. 211)        │     │
-│  │   Reviewer sees full team change summary                 │     │
-│  └────────────────────────┬────────────────────────────────┘      │
-│                           │                                       │
-│                           ▼                                       │
-│  ┌─────────────────────────────────────────────────────────┐      │
-│  │           Atomic Deploy                                  │     │
-│  │   All agents switch simultaneously (blue-green)          │     │
-│  │   OR canary with team-level traffic split                │     │
-│  └────────────────────────┬────────────────────────────────┘      │
-│                           │                                       │
-│                           ▼                                       │
-│  ┌─────────────────────────────────────────────────────────┐      │
-│  │           Atomic Rollback (if needed)                    │     │
-│  │   All agents revert together -- no partial rollback      │     │
-│  └─────────────────────────────────────────────────────────┘      │
-└───────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph TDF["Team Deployment Flow"]
+        direction TB
+        AA["Agent A Pipeline<br/><small>build, validate, test</small>"]
+        AB["Agent B Pipeline<br/><small>build, validate, test</small>"]
+        AC["Agent C Pipeline<br/><small>build, validate, test</small>"]
+        AA & AB & AC --> ITG
+        ITG["Integration Test Gate<br/><small>Run cross-agent evalset on the entire team<br/>All agents must pass individual AND team evals</small>"]
+        ITG --> HITL
+        HITL["HITL Approval (production only, p. 211)<br/><small>Reviewer sees full team change summary</small>"]
+        HITL --> AD
+        AD["Atomic Deploy<br/><small>All agents switch simultaneously (blue-green)<br/>OR canary with team-level traffic split</small>"]
+        AD --> AR
+        AR["Atomic Rollback (if needed)<br/><small>All agents revert together — no partial rollback</small>"]
+    end
+
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef guardrail fill:#E74C3C,stroke:#C0392B,color:#fff
+
+    class AA,AB,AC core
+    class ITG,AD infra
+    class HITL guardrail
+    class AR guardrail
 ```
 
 ### 7.3 Team deployment coordinator pseudocode
 
-```python
-@dataclass
-class TeamDeploymentResult:
-    team_deployment_id: str
-    team_id: str
-    status: str             # "deployed" | "rolled_back" | "failed"
-    agent_results: list     # Per-agent pipeline results
-    integration_eval: dict  # Cross-agent evaluation results
-    duration_ms: int
+??? example "View Python pseudocode"
+
+    ```python
+    @dataclass
+    class TeamDeploymentResult:
+        team_deployment_id: str
+        team_id: str
+        status: str             # "deployed" | "rolled_back" | "failed"
+        agent_results: list     # Per-agent pipeline results
+        integration_eval: dict  # Cross-agent evaluation results
+        duration_ms: int
 
 
-class TeamDeploymentCoordinator:
-    """Coordinates deployment of multiple agents as an atomic unit.
+    class TeamDeploymentCoordinator:
+        """Coordinates deployment of multiple agents as an atomic unit.
 
-    Ensures that team members are version-compatible and that
-    cross-agent integration tests pass before any agent goes live.
-    Rollback is all-or-nothing: if one agent fails, all revert.
-    """
+        Ensures that team members are version-compatible and that
+        cross-agent integration tests pass before any agent goes live.
+        Rollback is all-or-nothing: if one agent fails, all revert.
+        """
 
-    def __init__(self, pipeline: AgentDeploymentPipeline, env_manager, eval_framework):
-        self.pipeline = pipeline
-        self.env_manager = env_manager
-        self.eval_framework = eval_framework
+        def __init__(self, pipeline: AgentDeploymentPipeline, env_manager, eval_framework):
+            self.pipeline = pipeline
+            self.env_manager = env_manager
+            self.eval_framework = eval_framework
 
-    async def deploy_team(
-        self,
-        team_deployment: dict,
-        triggered_by: dict,
-    ) -> TeamDeploymentResult:
-        """Deploy an entire team as a coordinated unit."""
-        start = now_ms()
-        team_id = team_deployment["team_id"]
-        agent_artifacts = team_deployment["agent_artifacts"]
-        target_env = team_deployment.get("target_environment", "production")
+        async def deploy_team(
+            self,
+            team_deployment: dict,
+            triggered_by: dict,
+        ) -> TeamDeploymentResult:
+            """Deploy an entire team as a coordinated unit."""
+            start = now_ms()
+            team_id = team_deployment["team_id"]
+            agent_artifacts = team_deployment["agent_artifacts"]
+            target_env = team_deployment.get("target_environment", "production")
 
-        # Phase 1: Run individual pipelines in parallel (up to Test stage)
-        individual_results = await asyncio.gather(*[
-            self.pipeline.run(
-                agent_id=aa["agent_id"],
-                target_environment=target_env,
-                deployment_strategy="hold",  # Don't deploy individually
-                triggered_by=triggered_by,
-            )
-            for aa in agent_artifacts
-        ])
+            # Phase 1: Run individual pipelines in parallel (up to Test stage)
+            individual_results = await asyncio.gather(*[
+                self.pipeline.run(
+                    agent_id=aa["agent_id"],
+                    target_environment=target_env,
+                    deployment_strategy="hold",  # Don't deploy individually
+                    triggered_by=triggered_by,
+                )
+                for aa in agent_artifacts
+            ])
 
-        # Check all individual pipelines passed
-        failed_agents = [
-            r for r in individual_results if r.status == "failed"
-        ]
-        if failed_agents:
-            return TeamDeploymentResult(
-                team_deployment_id=team_deployment["team_deployment_id"],
-                team_id=team_id,
-                status="failed",
-                agent_results=individual_results,
-                integration_eval={},
-                duration_ms=now_ms() - start,
-            )
+            # Check all individual pipelines passed
+            failed_agents = [
+                r for r in individual_results if r.status == "failed"
+            ]
+            if failed_agents:
+                return TeamDeploymentResult(
+                    team_deployment_id=team_deployment["team_deployment_id"],
+                    team_id=team_id,
+                    status="failed",
+                    agent_results=individual_results,
+                    integration_eval={},
+                    duration_ms=now_ms() - start,
+                )
 
-        # Phase 2: Cross-agent integration test
-        integration_result = await self.eval_framework.run_team_evalset(
-            evalset_id=team_deployment["cross_agent_eval"]["evalset_id"],
-            agent_artifacts=[
-                self.env_manager.get_artifact(r.artifact_id)
-                for r in individual_results
-            ],
-            match_type=team_deployment["cross_agent_eval"].get(
-                "end_to_end_trajectory_match", "in_order"
-            ),
-        )
-
-        if integration_result.overall_score < team_deployment["cross_agent_eval"]["min_overall_score"]:
-            return TeamDeploymentResult(
-                team_deployment_id=team_deployment["team_deployment_id"],
-                team_id=team_id,
-                status="failed",
-                agent_results=individual_results,
-                integration_eval=integration_result.__dict__,
-                duration_ms=now_ms() - start,
+            # Phase 2: Cross-agent integration test
+            integration_result = await self.eval_framework.run_team_evalset(
+                evalset_id=team_deployment["cross_agent_eval"]["evalset_id"],
+                agent_artifacts=[
+                    self.env_manager.get_artifact(r.artifact_id)
+                    for r in individual_results
+                ],
+                match_type=team_deployment["cross_agent_eval"].get(
+                    "end_to_end_trajectory_match", "in_order"
+                ),
             )
 
-        # Phase 3: Atomic deploy -- all agents switch together
-        checkpoint = await self.env_manager.create_team_checkpoint(team_id, target_env)
+            if integration_result.overall_score < team_deployment["cross_agent_eval"]["min_overall_score"]:
+                return TeamDeploymentResult(
+                    team_deployment_id=team_deployment["team_deployment_id"],
+                    team_id=team_id,
+                    status="failed",
+                    agent_results=individual_results,
+                    integration_eval=integration_result.__dict__,
+                    duration_ms=now_ms() - start,
+                )
 
-        try:
-            for result in individual_results:
-                artifact = await self.env_manager.get_artifact(result.artifact_id)
-                await self.env_manager.activate_artifact(artifact, target_env)
+            # Phase 3: Atomic deploy -- all agents switch together
+            checkpoint = await self.env_manager.create_team_checkpoint(team_id, target_env)
 
-            return TeamDeploymentResult(
-                team_deployment_id=team_deployment["team_deployment_id"],
-                team_id=team_id,
-                status="deployed",
-                agent_results=individual_results,
-                integration_eval=integration_result.__dict__,
-                duration_ms=now_ms() - start,
-            )
+            try:
+                for result in individual_results:
+                    artifact = await self.env_manager.get_artifact(result.artifact_id)
+                    await self.env_manager.activate_artifact(artifact, target_env)
 
-        except Exception:
-            # Atomic rollback: restore ALL agents from checkpoint
-            await self.env_manager.restore_team_checkpoint(checkpoint)
-            return TeamDeploymentResult(
-                team_deployment_id=team_deployment["team_deployment_id"],
-                team_id=team_id,
-                status="rolled_back",
-                agent_results=individual_results,
-                integration_eval=integration_result.__dict__,
-                duration_ms=now_ms() - start,
-            )
-```
+                return TeamDeploymentResult(
+                    team_deployment_id=team_deployment["team_deployment_id"],
+                    team_id=team_id,
+                    status="deployed",
+                    agent_results=individual_results,
+                    integration_eval=integration_result.__dict__,
+                    duration_ms=now_ms() - start,
+                )
+
+            except Exception:
+                # Atomic rollback: restore ALL agents from checkpoint
+                await self.env_manager.restore_team_checkpoint(checkpoint)
+                return TeamDeploymentResult(
+                    team_deployment_id=team_deployment["team_deployment_id"],
+                    team_id=team_id,
+                    status="rolled_back",
+                    agent_results=individual_results,
+                    integration_eval=integration_result.__dict__,
+                    duration_ms=now_ms() - start,
+                )
+    ```
 
 ---
 
@@ -1753,39 +1753,35 @@ The Prompt Registry is the source of truth for prompt content. The deployment pi
 
 ### 8.5 Integration diagram
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                Agent Deployment Pipeline (14)                     │
-│                                                                   │
-│         ┌──────────────────────────────────────┐                 │
-│         │        Build Pipeline                  │                 │
-│         │  assemble → validate → test → eval →   │                 │
-│         │  stage → deploy                        │                 │
-│         └───┬──────────┬──────────┬──────────┬──┘                 │
-│             │          │          │          │                     │
-└─────────────┼──────────┼──────────┼──────────┼────────────────────┘
-              │          │          │          │
-      ┌───────▼──┐  ┌───▼──────┐  ┌▼────────┐ ┌▼──────────────┐
-      │ Prompt   │  │ Eval     │  │Guardrail│ │ Observability │
-      │ Registry │  │ Framework│  │ System  │ │ Platform      │
-      │ (07)     │  │ (08)     │  │ (04)    │ │ (05)          │
-      │          │  │          │  │         │ │               │
-      │ -version │  │ -evalset │  │ -policy │ │ -traces       │
-      │  resolve │  │  regress │  │  resolve│ │ -metrics      │
-      │ -lint    │  │ -LLM     │  │ -safety │ │ -events       │
-      │ -rollback│  │  judge   │  │  scan   │ │ -alerts       │
-      │  notify  │  │ -traject │  │ -redteam│ │ -traffic      │
-      │          │  │ -A/B exp │  │ -quarant│ │  split        │
-      └──────────┘  └──────────┘  └─────────┘ └───────────────┘
-              │          │          │          │
-              └──────────┼──────────┼──────────┘
-                         │          │
-                  ┌──────▼──────────▼───────────────┐
-                  │  Agent Builder (01)               │
-                  │  Team Orchestrator (02)            │
-                  │  Tool & MCP Manager (03)           │
-                  │  Cost & Resource Manager (09)      │
-                  └───────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph ADP14["Agent Deployment Pipeline (14)"]
+        direction TB
+        BPL["Build Pipeline<br/><small>assemble → validate → test → eval → stage → deploy</small>"]
+    end
+
+    BPL --> PR & EF & GS & OP
+
+    PR["Prompt Registry (07)<br/><small>version resolve, lint,<br/>rollback notify</small>"]
+    EF["Eval Framework (08)<br/><small>evalset regress, LLM judge,<br/>trajectory, A/B exp</small>"]
+    GS["Guardrail System (04)<br/><small>policy resolve, safety scan,<br/>red-team, quarantine</small>"]
+    OP["Observability Platform (05)<br/><small>traces, metrics, events,<br/>alerts, traffic split</small>"]
+
+    PR & EF & GS & OP --> CORE
+
+    CORE["Agent Builder (01) | Team Orchestrator (02)<br/>Tool & MCP Manager (03) | Cost & Resource Manager (09)"]
+
+    classDef pipeline fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef subsystem fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef guardrail fill:#E74C3C,stroke:#C0392B,color:#fff
+    classDef foundational fill:#F39C12,stroke:#D68910,color:#fff
+    classDef core fill:#1ABC9C,stroke:#148F77,color:#fff
+
+    class BPL pipeline
+    class PR,EF subsystem
+    class GS guardrail
+    class OP foundational
+    class CORE core
 ```
 
 ---

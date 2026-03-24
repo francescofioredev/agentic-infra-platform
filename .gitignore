@@ -10,3 +10,14 @@
 /.idea/misc.xml
 /.idea/modules.xml
 /.idea/vcs.xml
+
+# MkDocs build output
+site/
+
+# Python virtual environment
+venv/
+.venv/
+
+# Python bytecode
+__pycache__/
+*.pyc

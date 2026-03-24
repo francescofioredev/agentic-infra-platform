@@ -32,89 +32,91 @@ The Agent Builder depends on the Evaluation Framework for running evalsets and o
 
 Every agent is represented as an **AgentDefinition** record. This is the canonical data structure that travels across the platform.
 
-```json
-{
-  "agent_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "name": "ResearchAgent",
-  "description": "Performs web research and produces cited summaries.",
-  "version": "3.1.0",
-  "lifecycle_state": "production",
+??? example "View JSON example"
 
-  "system_prompt": {
-    "prompt_id": "prompt-9f8e7d6c-5b4a-3210-fedc-ba0987654321",
-    "version": 14,
-    "content": "You are a research agent specialized in...",
-    "content_hash": "sha256:a3f2b1c0...",
-    "author": "optimizer:reflection-loop-v2",
-    "created_at": "2026-02-25T14:30:00Z"
-  },
+    ```json
+    {
+      "agent_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "ResearchAgent",
+      "description": "Performs web research and produces cited summaries.",
+      "version": "3.1.0",
+      "lifecycle_state": "production",
 
-  "capabilities": ["web_search", "summarization", "citation_extraction"],
-
-  "input_schema": {
-    "type": "object",
-    "properties": {
-      "query": { "type": "string", "minLength": 1, "maxLength": 2000 },
-      "max_sources": { "type": "integer", "minimum": 1, "maximum": 50, "default": 10 }
-    },
-    "required": ["query"]
-  },
-
-  "output_schema": {
-    "type": "object",
-    "properties": {
-      "summary": { "type": "string" },
-      "sources": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "url": { "type": "string", "format": "uri" },
-            "title": { "type": "string" },
-            "relevance_score": { "type": "number", "minimum": 0, "maximum": 1 }
-          }
-        }
+      "system_prompt": {
+        "prompt_id": "prompt-9f8e7d6c-5b4a-3210-fedc-ba0987654321",
+        "version": 14,
+        "content": "You are a research agent specialized in...",
+        "content_hash": "sha256:a3f2b1c0...",
+        "author": "optimizer:reflection-loop-v2",
+        "created_at": "2026-02-25T14:30:00Z"
       },
-      "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
-    },
-    "required": ["summary", "sources"]
-  },
 
-  "tools": [
-    "mcp://search-server/web_search",
-    "mcp://search-server/scholar_search"
-  ],
+      "capabilities": ["web_search", "summarization", "citation_extraction"],
 
-  "guardrail_policies": ["no-pii-output", "citation-required", "max-tokens-4096"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "max_sources": { "type": "integer", "minimum": 1, "maximum": 50, "default": 10 }
+        },
+        "required": ["query"]
+      },
 
-  "model_config": {
-    "model_tier": "auto",
-    "fallback_tier": "pro",
-    "max_tokens": 4096,
-    "temperature": 0.3
-  },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "summary": { "type": "string" },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "url": { "type": "string", "format": "uri" },
+                "title": { "type": "string" },
+                "relevance_score": { "type": "number", "minimum": 0, "maximum": 1 }
+              }
+            }
+          },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        },
+        "required": ["summary", "sources"]
+      },
 
-  "operational_limits": {
-    "max_iterations": 10,
-    "timeout_seconds": 120,
-    "token_budget": 50000
-  },
+      "tools": [
+        "mcp://search-server/web_search",
+        "mcp://search-server/scholar_search"
+      ],
 
-  "metadata": {
-    "team_id": "team-alpha",
-    "created_by": "user:jane.doe@company.com",
-    "tags": ["research", "summarization"],
-    "optimization_history": [
-      {
-        "cycle_id": "opt-001",
-        "previous_version": 13,
-        "quality_delta": "+0.08",
-        "method": "reflection-loop"
+      "guardrail_policies": ["no-pii-output", "citation-required", "max-tokens-4096"],
+
+      "model_config": {
+        "model_tier": "auto",
+        "fallback_tier": "pro",
+        "max_tokens": 4096,
+        "temperature": 0.3
+      },
+
+      "operational_limits": {
+        "max_iterations": 10,
+        "timeout_seconds": 120,
+        "token_budget": 50000
+      },
+
+      "metadata": {
+        "team_id": "team-alpha",
+        "created_by": "user:jane.doe@company.com",
+        "tags": ["research", "summarization"],
+        "optimization_history": [
+          {
+            "cycle_id": "opt-001",
+            "previous_version": 13,
+            "quality_delta": "+0.08",
+            "method": "reflection-loop"
+          }
+        ]
       }
-    ]
-  }
-}
-```
+    }
+    ```
 
 ### 2.1 Schema Design Decisions
 
@@ -160,102 +162,106 @@ prompt-9f8e7d6c
 
 ### 3.2 Version Record Structure
 
-```json
-{
-  "prompt_id": "prompt-9f8e7d6c-5b4a-3210-fedc-ba0987654321",
-  "version": 6,
-  "parent_version": 5,
-  "content": "You are a research agent specialized in...",
-  "content_hash": "sha256:b4c3d2e1...",
-  "author": "optimizer:evo-v1",
-  "author_type": "ai",
-  "method": "evolutionary_search",
-  "lifecycle_state": "staged",
-  "created_at": "2026-02-25T14:30:00Z",
-  "promotion_history": [],
-  "eval_results": {
-    "evalset_version": "evalset-research-v3",
-    "scores": {
-      "task_accuracy": 0.91,
-      "clarity": 0.88,
-      "safety_compliance": 1.0,
-      "token_efficiency": 0.85,
-      "overall": 0.91
-    },
-    "regression_tests_passed": true,
-    "baseline_comparison": "+0.04 vs v5"
-  },
-  "diff_from_parent": {
-    "type": "unified_diff",
-    "hunks": [
-      {
-        "old_start": 3,
-        "old_count": 2,
-        "new_start": 3,
-        "new_count": 4,
-        "content": "@@ -3,2 +3,4 @@\n-When summarizing, include at least 3 sources.\n+When summarizing, include at least 5 sources with relevance scores.\n+Prioritize peer-reviewed sources over blog posts.\n+Always include publication dates in citations."
+??? example "View JSON example"
+
+    ```json
+    {
+      "prompt_id": "prompt-9f8e7d6c-5b4a-3210-fedc-ba0987654321",
+      "version": 6,
+      "parent_version": 5,
+      "content": "You are a research agent specialized in...",
+      "content_hash": "sha256:b4c3d2e1...",
+      "author": "optimizer:evo-v1",
+      "author_type": "ai",
+      "method": "evolutionary_search",
+      "lifecycle_state": "staged",
+      "created_at": "2026-02-25T14:30:00Z",
+      "promotion_history": [],
+      "eval_results": {
+        "evalset_version": "evalset-research-v3",
+        "scores": {
+          "task_accuracy": 0.91,
+          "clarity": 0.88,
+          "safety_compliance": 1.0,
+          "token_efficiency": 0.85,
+          "overall": 0.91
+        },
+        "regression_tests_passed": true,
+        "baseline_comparison": "+0.04 vs v5"
+      },
+      "diff_from_parent": {
+        "type": "unified_diff",
+        "hunks": [
+          {
+            "old_start": 3,
+            "old_count": 2,
+            "new_start": 3,
+            "new_count": 4,
+            "content": "@@ -3,2 +3,4 @@\n-When summarizing, include at least 3 sources.\n+When summarizing, include at least 5 sources with relevance scores.\n+Prioritize peer-reviewed sources over blog posts.\n+Always include publication dates in citations."
+          }
+        ],
+        "stats": { "additions": 3, "deletions": 1, "changed_lines": 4 }
       }
-    ],
-    "stats": { "additions": 3, "deletions": 1, "changed_lines": 4 }
-  }
-}
-```
+    }
+    ```
 
 ### 3.3 Diff Computation
 
 Diffs are computed at write time when a new version is created and stored alongside the version record. This enables efficient diff retrieval without recomputation.
 
-```python
-import difflib
-import hashlib
-from dataclasses import dataclass
+??? example "View Python pseudocode"
+
+    ```python
+    import difflib
+    import hashlib
+    from dataclasses import dataclass
 
 
-@dataclass
-class PromptDiff:
-    hunks: list[dict]
-    additions: int
-    deletions: int
+    @dataclass
+    class PromptDiff:
+        hunks: list[dict]
+        additions: int
+        deletions: int
 
 
-def compute_prompt_diff(old_content: str, new_content: str) -> PromptDiff:
-    """Compute a structured diff between two prompt versions.
+    def compute_prompt_diff(old_content: str, new_content: str) -> PromptDiff:
+        """Compute a structured diff between two prompt versions.
 
-    Uses unified diff format, splitting on newlines for line-level
-    granularity. Returns a serializable PromptDiff with hunk details
-    and summary statistics.
-    """
-    old_lines = old_content.splitlines(keepends=True)
-    new_lines = new_content.splitlines(keepends=True)
+        Uses unified diff format, splitting on newlines for line-level
+        granularity. Returns a serializable PromptDiff with hunk details
+        and summary statistics.
+        """
+        old_lines = old_content.splitlines(keepends=True)
+        new_lines = new_content.splitlines(keepends=True)
 
-    differ = difflib.unified_diff(old_lines, new_lines, lineterm="")
-    hunks = []
-    additions = 0
-    deletions = 0
+        differ = difflib.unified_diff(old_lines, new_lines, lineterm="")
+        hunks = []
+        additions = 0
+        deletions = 0
 
-    current_hunk = None
-    for line in differ:
-        if line.startswith("@@"):
-            if current_hunk:
-                hunks.append(current_hunk)
-            current_hunk = {"header": line, "lines": []}
-        elif current_hunk is not None:
-            current_hunk["lines"].append(line)
-            if line.startswith("+") and not line.startswith("+++"):
-                additions += 1
-            elif line.startswith("-") and not line.startswith("---"):
-                deletions += 1
+        current_hunk = None
+        for line in differ:
+            if line.startswith("@@"):
+                if current_hunk:
+                    hunks.append(current_hunk)
+                current_hunk = {"header": line, "lines": []}
+            elif current_hunk is not None:
+                current_hunk["lines"].append(line)
+                if line.startswith("+") and not line.startswith("+++"):
+                    additions += 1
+                elif line.startswith("-") and not line.startswith("---"):
+                    deletions += 1
 
-    if current_hunk:
-        hunks.append(current_hunk)
+        if current_hunk:
+            hunks.append(current_hunk)
 
-    return PromptDiff(hunks=hunks, additions=additions, deletions=deletions)
+        return PromptDiff(hunks=hunks, additions=additions, deletions=deletions)
 
 
-def content_hash(content: str) -> str:
-    """SHA-256 hash of prompt content for deduplication and integrity."""
-    return f"sha256:{hashlib.sha256(content.encode('utf-8')).hexdigest()}"
-```
+    def content_hash(content: str) -> str:
+        """SHA-256 hash of prompt content for deduplication and integrity."""
+        return f"sha256:{hashlib.sha256(content.encode('utf-8')).hexdigest()}"
+    ```
 
 ### 3.4 Version Retrieval API
 
@@ -288,57 +294,34 @@ The Reflection pattern implements a generator-critic loop where a Generator LLM 
 
 #### 4.1.1 Architecture
 
-```
-                    ┌──────────────────────────────┐
-                    │   Optimization Trigger       │
-                    │ (eval score below threshold  │
-                    │  OR scheduled optimization)  │
-                    └──────────────┬───────────────┘
-                                   │
-                                   v
-                    ┌──────────────────────────────┐
-                    │   Load Current Production    │
-                    │   Prompt + Eval Results +    │
-                    │   Failure Cases              │
-                    └──────────────┬───────────────┘
-                                   │
-                     ┌─────────────v──────────────┐
-                     │                            │
-              ┌──────┴───────┐             ┌──────┴───────┐
-              │  Generator   │             │   Critic     │
-              │  (cheap LLM) │             │ (strong LLM) │
-              │              │◄────────────│              │
-              │  Proposes    │  feedback   │  Evaluates   │
-              │  improved    │             │  against     │
-              │  prompt      ├────────────►│  rubric      │
-              │              │  candidate  │              │
-              └──────┬───────┘             └───────┬──────┘
-                     │                             │
-                     │     Loop max N iterations   │
-                     │     (p. 67)                 │
-                     └─────────────┬───────────────┘
-                                   │
-                                   v
-                    ┌──────────────────────────────┐
-                    │   Best Candidate Prompt      │
-                    │   Saved as new Draft version │
-                    └──────────────┬───────────────┘
-                                   │
-                                   v
-                    ┌──────────────────────────────┐
-                    │   Run Full Evalset           │
-                    │   (Evaluation Framework)     │
-                    └──────────────┬───────────────┘
-                                   │
-                               Pass? ──── No ──► Discard candidate
-                                   │
-                                  Yes
-                                   │
-                                   v
-                    ┌──────────────────────────────┐
-                    │   Promote to Review state    │
-                    │   (HITL gate, p. 211)        │
-                    └──────────────────────────────┘
+```mermaid
+graph TD
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef guardrail fill:#E74C3C,stroke:#C0392B,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+
+    TRIG["Optimization Trigger<br/><small>eval score below threshold<br/>OR scheduled optimization</small>"]
+    LOAD["Load Current Production<br/>Prompt + Eval Results +<br/>Failure Cases"]
+    GEN["Generator<br/><small>(cheap LLM)<br/>Proposes improved prompt</small>"]
+    CRIT["Critic<br/><small>(strong LLM)<br/>Evaluates against rubric</small>"]
+    BEST["Best Candidate Prompt<br/><small>Saved as new Draft version</small>"]
+    EVAL["Run Full Evalset<br/><small>(Evaluation Framework)</small>"]
+    PASS{"Pass?"}
+    DISC["Discard candidate"]
+    PROM["Promote to Review state<br/><small>(HITL gate, p. 211)</small>"]
+
+    TRIG --> LOAD --> GEN
+    GEN -->|"candidate"| CRIT
+    CRIT -->|"feedback"| GEN
+    GEN & CRIT -->|"Loop max N iterations (p. 67)"| BEST
+    BEST --> EVAL --> PASS
+    PASS -->|"No"| DISC
+    PASS -->|"Yes"| PROM
+
+    class TRIG,LOAD infra
+    class GEN,CRIT core
+    class PROM guardrail
+    class DISC guardrail
 ```
 
 #### 4.1.2 Critic Rubric (Evaluation & Monitoring, p. 306)
@@ -357,239 +340,243 @@ The critic evaluates every candidate prompt against a five-dimension rubric. Eac
 
 #### 4.1.3 Pseudocode: Reflection Loop
 
-```python
-from dataclasses import dataclass
-from enum import Enum
+??? example "View Python pseudocode"
+
+    ```python
+    from dataclasses import dataclass
+    from enum import Enum
 
 
-class ModelTier(Enum):
-    CHEAP = "haiku"       # Fast/cheap: variant generation (p. 258)
-    STRONG = "opus"       # Strong/expensive: quality evaluation (p. 258)
+    class ModelTier(Enum):
+        CHEAP = "haiku"       # Fast/cheap: variant generation (p. 258)
+        STRONG = "opus"       # Strong/expensive: quality evaluation (p. 258)
 
 
-@dataclass
-class CriticScore:
-    task_accuracy: float       # 1-5
-    clarity: float             # 1-5
-    safety_compliance: float   # 1-5
-    token_efficiency: float    # 1-5
-    robustness: float          # 1-5
-    feedback: str              # Structured textual feedback
-    weighted_total: float      # Weighted composite score
+    @dataclass
+    class CriticScore:
+        task_accuracy: float       # 1-5
+        clarity: float             # 1-5
+        safety_compliance: float   # 1-5
+        token_efficiency: float    # 1-5
+        robustness: float          # 1-5
+        feedback: str              # Structured textual feedback
+        weighted_total: float      # Weighted composite score
 
-    WEIGHTS = {
-        "task_accuracy": 0.35,
-        "clarity": 0.20,
-        "safety_compliance": 0.20,
-        "token_efficiency": 0.10,
-        "robustness": 0.15,
-    }
+        WEIGHTS = {
+            "task_accuracy": 0.35,
+            "clarity": 0.20,
+            "safety_compliance": 0.20,
+            "token_efficiency": 0.10,
+            "robustness": 0.15,
+        }
 
-    def compute_weighted_total(self) -> float:
-        total = 0.0
-        for dim, weight in self.WEIGHTS.items():
-            total += getattr(self, dim) * weight
-        self.weighted_total = round(total, 3)
-        return self.weighted_total
+        def compute_weighted_total(self) -> float:
+            total = 0.0
+            for dim, weight in self.WEIGHTS.items():
+                total += getattr(self, dim) * weight
+            self.weighted_total = round(total, 3)
+            return self.weighted_total
 
-    def passes_threshold(self, minimum: float = 3.5, floor: float = 2.0) -> bool:
-        """Check if score meets promotion thresholds."""
-        if self.weighted_total < minimum:
-            return False
-        for dim in self.WEIGHTS:
-            if getattr(self, dim) < floor:
+        def passes_threshold(self, minimum: float = 3.5, floor: float = 2.0) -> bool:
+            """Check if score meets promotion thresholds."""
+            if self.weighted_total < minimum:
                 return False
-        return True
+            for dim in self.WEIGHTS:
+                if getattr(self, dim) < floor:
+                    return False
+            return True
 
 
-@dataclass
-class OptimizationResult:
-    cycle_id: str
-    original_prompt_version: int
-    best_candidate: str | None
-    best_score: CriticScore | None
-    iterations_used: int
-    improvement_delta: float
-    promoted: bool
+    @dataclass
+    class OptimizationResult:
+        cycle_id: str
+        original_prompt_version: int
+        best_candidate: str | None
+        best_score: CriticScore | None
+        iterations_used: int
+        improvement_delta: float
+        promoted: bool
 
 
-async def run_reflection_loop(
-    agent_id: str,
-    prompt_id: str,
-    current_version: int,
-    evalset_id: str,
-    max_iterations: int = 3,        # Hard limit per p. 67
-    min_improvement: float = 0.02,   # Minimum score delta to accept
-) -> OptimizationResult:
-    """Run a Reflection-pattern optimization loop on an agent's prompt.
+    async def run_reflection_loop(
+        agent_id: str,
+        prompt_id: str,
+        current_version: int,
+        evalset_id: str,
+        max_iterations: int = 3,        # Hard limit per p. 67
+        min_improvement: float = 0.02,   # Minimum score delta to accept
+    ) -> OptimizationResult:
+        """Run a Reflection-pattern optimization loop on an agent's prompt.
 
-    Implements the Generator-Critic loop (p. 61-68):
-    - Generator (cheap model, p. 258) proposes improved prompts.
-    - Critic (strong model, p. 258) evaluates against rubric (p. 306).
-    - Loop terminates at max_iterations or when improvement plateaus.
-    - Critic is a SEPARATE prompt from generator (p. 68).
-    """
-    cycle_id = generate_cycle_id()
-    current_prompt = await prompt_registry.get_version(prompt_id, current_version)
-    baseline_score = await evaluate_prompt_on_evalset(current_prompt.content, evalset_id)
+        Implements the Generator-Critic loop (p. 61-68):
+        - Generator (cheap model, p. 258) proposes improved prompts.
+        - Critic (strong model, p. 258) evaluates against rubric (p. 306).
+        - Loop terminates at max_iterations or when improvement plateaus.
+        - Critic is a SEPARATE prompt from generator (p. 68).
+        """
+        cycle_id = generate_cycle_id()
+        current_prompt = await prompt_registry.get_version(prompt_id, current_version)
+        baseline_score = await evaluate_prompt_on_evalset(current_prompt.content, evalset_id)
 
-    # Load failure cases from production to guide the generator
-    failure_cases = await eval_framework.get_failure_cases(
-        agent_id=agent_id,
-        limit=20,
-        sort_by="severity_desc",
-    )
-
-    best_candidate = None
-    best_score = baseline_score
-    iteration = 0
-
-    for iteration in range(1, max_iterations + 1):
-        logger.info(
-            "reflection_loop.iteration",
-            cycle_id=cycle_id,
-            iteration=iteration,
-            current_best_score=best_score.weighted_total,
+        # Load failure cases from production to guide the generator
+        failure_cases = await eval_framework.get_failure_cases(
+            agent_id=agent_id,
+            limit=20,
+            sort_by="severity_desc",
         )
 
-        # --- GENERATOR PHASE (cheap model, p. 258) ---
-        candidate_prompt = await llm_call(
-            model=ModelTier.CHEAP,
-            system_prompt=GENERATOR_SYSTEM_PROMPT,
-            user_prompt=format_generator_input(
-                current_prompt=best_candidate or current_prompt.content,
-                failure_cases=failure_cases,
-                previous_feedback=best_score.feedback if iteration > 1 else None,
-                rubric=CRITIC_RUBRIC_DESCRIPTION,
-            ),
-        )
+        best_candidate = None
+        best_score = baseline_score
+        iteration = 0
 
-        # --- CRITIC PHASE (strong model, p. 258; separate prompt, p. 68) ---
-        critic_result = await llm_call(
-            model=ModelTier.STRONG,
-            system_prompt=CRITIC_SYSTEM_PROMPT,   # Separate from generator (p. 68)
-            user_prompt=format_critic_input(
-                candidate_prompt=candidate_prompt,
+        for iteration in range(1, max_iterations + 1):
+            logger.info(
+                "reflection_loop.iteration",
+                cycle_id=cycle_id,
+                iteration=iteration,
+                current_best_score=best_score.weighted_total,
+            )
+
+            # --- GENERATOR PHASE (cheap model, p. 258) ---
+            candidate_prompt = await llm_call(
+                model=ModelTier.CHEAP,
+                system_prompt=GENERATOR_SYSTEM_PROMPT,
+                user_prompt=format_generator_input(
+                    current_prompt=best_candidate or current_prompt.content,
+                    failure_cases=failure_cases,
+                    previous_feedback=best_score.feedback if iteration > 1 else None,
+                    rubric=CRITIC_RUBRIC_DESCRIPTION,
+                ),
+            )
+
+            # --- CRITIC PHASE (strong model, p. 258; separate prompt, p. 68) ---
+            critic_result = await llm_call(
+                model=ModelTier.STRONG,
+                system_prompt=CRITIC_SYSTEM_PROMPT,   # Separate from generator (p. 68)
+                user_prompt=format_critic_input(
+                    candidate_prompt=candidate_prompt,
+                    evalset_id=evalset_id,
+                    rubric=CRITIC_RUBRIC_DESCRIPTION,  # Explicit measurable criteria (p. 65)
+                ),
+            )
+
+            score = parse_critic_score(critic_result)
+            score.compute_weighted_total()
+
+            # --- IMPROVEMENT CHECK ---
+            delta = score.weighted_total - best_score.weighted_total
+
+            if delta >= min_improvement:
+                best_candidate = candidate_prompt
+                best_score = score
+                logger.info(
+                    "reflection_loop.improvement",
+                    cycle_id=cycle_id,
+                    iteration=iteration,
+                    delta=delta,
+                    new_score=score.weighted_total,
+                )
+            else:
+                logger.info(
+                    "reflection_loop.plateau",
+                    cycle_id=cycle_id,
+                    iteration=iteration,
+                    delta=delta,
+                )
+                # Early termination: no meaningful improvement
+                break
+
+        # --- POST-LOOP: Full evalset validation ---
+        improvement_delta = best_score.weighted_total - baseline_score.weighted_total
+
+        if best_candidate and improvement_delta >= min_improvement:
+            # Run full evalset regression test (p. 312) before saving
+            regression_result = await eval_framework.run_evalset(
+                prompt_content=best_candidate,
                 evalset_id=evalset_id,
-                rubric=CRITIC_RUBRIC_DESCRIPTION,  # Explicit measurable criteria (p. 65)
-            ),
+            )
+
+            if regression_result.all_passed:
+                new_version = await prompt_registry.create_version(
+                    prompt_id=prompt_id,
+                    content=best_candidate,
+                    author=f"optimizer:reflection-loop-v2",
+                    method="reflection_loop",
+                    parent_version=current_version,
+                    eval_results=best_score,
+                    lifecycle_state="draft",
+                )
+
+                return OptimizationResult(
+                    cycle_id=cycle_id,
+                    original_prompt_version=current_version,
+                    best_candidate=best_candidate,
+                    best_score=best_score,
+                    iterations_used=iteration,
+                    improvement_delta=improvement_delta,
+                    promoted=True,
+                )
+
+        # No improvement found or regression detected
+        return OptimizationResult(
+            cycle_id=cycle_id,
+            original_prompt_version=current_version,
+            best_candidate=None,
+            best_score=best_score,
+            iterations_used=iteration,
+            improvement_delta=improvement_delta,
+            promoted=False,
         )
-
-        score = parse_critic_score(critic_result)
-        score.compute_weighted_total()
-
-        # --- IMPROVEMENT CHECK ---
-        delta = score.weighted_total - best_score.weighted_total
-
-        if delta >= min_improvement:
-            best_candidate = candidate_prompt
-            best_score = score
-            logger.info(
-                "reflection_loop.improvement",
-                cycle_id=cycle_id,
-                iteration=iteration,
-                delta=delta,
-                new_score=score.weighted_total,
-            )
-        else:
-            logger.info(
-                "reflection_loop.plateau",
-                cycle_id=cycle_id,
-                iteration=iteration,
-                delta=delta,
-            )
-            # Early termination: no meaningful improvement
-            break
-
-    # --- POST-LOOP: Full evalset validation ---
-    improvement_delta = best_score.weighted_total - baseline_score.weighted_total
-
-    if best_candidate and improvement_delta >= min_improvement:
-        # Run full evalset regression test (p. 312) before saving
-        regression_result = await eval_framework.run_evalset(
-            prompt_content=best_candidate,
-            evalset_id=evalset_id,
-        )
-
-        if regression_result.all_passed:
-            new_version = await prompt_registry.create_version(
-                prompt_id=prompt_id,
-                content=best_candidate,
-                author=f"optimizer:reflection-loop-v2",
-                method="reflection_loop",
-                parent_version=current_version,
-                eval_results=best_score,
-                lifecycle_state="draft",
-            )
-
-            return OptimizationResult(
-                cycle_id=cycle_id,
-                original_prompt_version=current_version,
-                best_candidate=best_candidate,
-                best_score=best_score,
-                iterations_used=iteration,
-                improvement_delta=improvement_delta,
-                promoted=True,
-            )
-
-    # No improvement found or regression detected
-    return OptimizationResult(
-        cycle_id=cycle_id,
-        original_prompt_version=current_version,
-        best_candidate=None,
-        best_score=best_score,
-        iterations_used=iteration,
-        improvement_delta=improvement_delta,
-        promoted=False,
-    )
-```
+    ```
 
 #### 4.1.4 Generator and Critic Prompts
 
 The generator and critic are **separate prompts** (p. 68), each with a clearly defined role. The critic uses **adversarial framing** to prevent sycophantic evaluation.
 
-```python
-GENERATOR_SYSTEM_PROMPT = """You are a prompt engineering specialist. Your task is to
-improve an agent's system prompt based on evaluation feedback and failure cases.
+??? example "View Python pseudocode"
 
-Rules:
-1. Preserve the core task definition -- do not change WHAT the agent does.
-2. Improve HOW the agent executes: clarity, specificity, edge case handling.
-3. Address every failure case provided -- each one represents a real production failure.
-4. Keep the prompt concise. Remove redundant instructions.
-5. Maintain all safety constraints from the original prompt.
-6. Output ONLY the improved system prompt, nothing else.
-"""
+    ```python
+    GENERATOR_SYSTEM_PROMPT = """You are a prompt engineering specialist. Your task is to
+    improve an agent's system prompt based on evaluation feedback and failure cases.
 
-CRITIC_SYSTEM_PROMPT = """You are a rigorous prompt quality evaluator. Your job is to find
-weaknesses in agent system prompts. You are adversarial by design -- assume the prompt
-will face hostile inputs, ambiguous requests, and edge cases in production.
+    Rules:
+    1. Preserve the core task definition -- do not change WHAT the agent does.
+    2. Improve HOW the agent executes: clarity, specificity, edge case handling.
+    3. Address every failure case provided -- each one represents a real production failure.
+    4. Keep the prompt concise. Remove redundant instructions.
+    5. Maintain all safety constraints from the original prompt.
+    6. Output ONLY the improved system prompt, nothing else.
+    """
 
-Evaluate the candidate prompt against these EXACT dimensions (score each 1-5):
+    CRITIC_SYSTEM_PROMPT = """You are a rigorous prompt quality evaluator. Your job is to find
+    weaknesses in agent system prompts. You are adversarial by design -- assume the prompt
+    will face hostile inputs, ambiguous requests, and edge cases in production.
 
-1. TASK ACCURACY (weight 0.35): Will this prompt cause the agent to complete its
-   designated task correctly across a diverse set of inputs?
-2. CLARITY & SPECIFICITY (weight 0.20): Is every instruction unambiguous? Could a
-   different LLM interpret any instruction differently?
-3. SAFETY COMPLIANCE (weight 0.20): Are safety constraints explicit and robust?
-   Could an adversarial input bypass them?
-4. TOKEN EFFICIENCY (weight 0.10): Is the prompt concise without sacrificing clarity?
-5. ROBUSTNESS (weight 0.15): Does the prompt handle unexpected inputs, malformed data,
-   and adversarial attacks gracefully?
+    Evaluate the candidate prompt against these EXACT dimensions (score each 1-5):
 
-Output format (JSON):
-{
-  "task_accuracy": <1-5>,
-  "clarity": <1-5>,
-  "safety_compliance": <1-5>,
-  "token_efficiency": <1-5>,
-  "robustness": <1-5>,
-  "feedback": "<specific, actionable feedback for the generator to improve the prompt>"
-}
+    1. TASK ACCURACY (weight 0.35): Will this prompt cause the agent to complete its
+       designated task correctly across a diverse set of inputs?
+    2. CLARITY & SPECIFICITY (weight 0.20): Is every instruction unambiguous? Could a
+       different LLM interpret any instruction differently?
+    3. SAFETY COMPLIANCE (weight 0.20): Are safety constraints explicit and robust?
+       Could an adversarial input bypass them?
+    4. TOKEN EFFICIENCY (weight 0.10): Is the prompt concise without sacrificing clarity?
+    5. ROBUSTNESS (weight 0.15): Does the prompt handle unexpected inputs, malformed data,
+       and adversarial attacks gracefully?
 
-Be harsh. A score of 5 should be rare. Always provide concrete examples of weaknesses.
-"""
-```
+    Output format (JSON):
+    {
+      "task_accuracy": <1-5>,
+      "clarity": <1-5>,
+      "safety_compliance": <1-5>,
+      "token_efficiency": <1-5>,
+      "robustness": <1-5>,
+      "feedback": "<specific, actionable feedback for the generator to improve the prompt>"
+    }
+
+    Be harsh. A score of 5 should be rare. Always provide concrete examples of weaknesses.
+    """
+    ```
 
 ### 4.2 Evolutionary Search (Learning & Adaptation, p. 163-172)
 
@@ -597,298 +584,290 @@ For longer-term, exploratory optimization, the Agent Builder implements an **Evo
 
 #### 4.2.1 Algorithm
 
-```
-Generation 0:  [current_prod_prompt] + [N-1 random mutations]
-                         │
-                         v
-               ┌─────────────────────┐
-               │  Evaluate all       │
-               │  candidates on      │  LLM-as-Judge (strong model)
-               │  evalset (p. 312)   │  + automated metric scoring
-               └────────┬────────────┘
-                         │
-                         v
-               ┌─────────────────────┐
-               │  Select top-K       │
-               │  by fitness score   │  Tournament selection
-               └────────┬────────────┘
-                         │
-                         v
-               ┌─────────────────────┐
-               │  Generate next      │
-               │  generation via:    │  Crossover: merge best parts of 2 parents
-               │  - Crossover        │  Mutation: targeted changes via LLM
-               │  - Mutation         │  Elitism: carry best unchanged
-               │  - Elitism          │
-               └────────┬────────────┘
-                         │
-                    Repeat for G generations
-                    (configurable, typically 3-5)
-                         │
-                         v
-               ┌─────────────────────┐
-               │  Best prompt from   │
-               │  final generation   │  Must beat current production by
-               │                     │  min_improvement threshold
-               └─────────────────────┘
+```mermaid
+graph TD
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+
+    G0["Generation 0<br/><small>current_prod_prompt + N-1 random mutations</small>"]
+    EVAL["Evaluate all candidates<br/>on evalset (p. 312)<br/><small>LLM-as-Judge (strong model)<br/>+ automated metric scoring</small>"]
+    SEL["Select top-K<br/>by fitness score<br/><small>Tournament selection</small>"]
+    GEN["Generate next generation<br/><small>Crossover: merge best parts of 2 parents<br/>Mutation: targeted changes via LLM<br/>Elitism: carry best unchanged</small>"]
+    BEST["Best prompt from<br/>final generation<br/><small>Must beat current production by<br/>min_improvement threshold</small>"]
+
+    G0 --> EVAL --> SEL --> GEN
+    GEN -->|"Repeat for G generations<br/>(configurable, typically 3-5)"| EVAL
+    GEN --> BEST
+
+    class G0,BEST infra
+    class EVAL,SEL,GEN core
 ```
 
 #### 4.2.2 Pseudocode: Evolutionary Search
 
-```python
-import random
-from dataclasses import dataclass
+??? example "View Python pseudocode"
+
+    ```python
+    import random
+    from dataclasses import dataclass
 
 
-@dataclass
-class PromptCandidate:
-    content: str
-    score: CriticScore | None
-    lineage: list[str]  # Track parent candidate IDs for provenance
+    @dataclass
+    class PromptCandidate:
+        content: str
+        score: CriticScore | None
+        lineage: list[str]  # Track parent candidate IDs for provenance
 
 
-@dataclass
-class EvolutionConfig:
-    population_size: int = 8
-    generations: int = 4
-    top_k: int = 3                    # Parents selected per generation
-    mutation_rate: float = 0.7        # Probability of mutation vs. crossover
-    elitism_count: int = 1            # Best N carried unchanged
-    min_improvement: float = 0.03     # Minimum delta vs. production baseline
+    @dataclass
+    class EvolutionConfig:
+        population_size: int = 8
+        generations: int = 4
+        top_k: int = 3                    # Parents selected per generation
+        mutation_rate: float = 0.7        # Probability of mutation vs. crossover
+        elitism_count: int = 1            # Best N carried unchanged
+        min_improvement: float = 0.03     # Minimum delta vs. production baseline
 
 
-async def run_evolutionary_search(
-    agent_id: str,
-    prompt_id: str,
-    current_version: int,
-    evalset_id: str,
-    config: EvolutionConfig = EvolutionConfig(),
-) -> OptimizationResult:
-    """Run evolutionary prompt search (AlphaEvolve pattern, p. 172).
+    async def run_evolutionary_search(
+        agent_id: str,
+        prompt_id: str,
+        current_version: int,
+        evalset_id: str,
+        config: EvolutionConfig = EvolutionConfig(),
+    ) -> OptimizationResult:
+        """Run evolutionary prompt search (AlphaEvolve pattern, p. 172).
 
-    Uses RLVR-style verifiable rewards (p. 168): the evalset provides
-    deterministic, reproducible scoring for each candidate. This is the
-    'verifiable reward' signal that drives selection.
+        Uses RLVR-style verifiable rewards (p. 168): the evalset provides
+        deterministic, reproducible scoring for each candidate. This is the
+        'verifiable reward' signal that drives selection.
 
-    Resource-Aware: candidate generation uses cheap model; evaluation
-    uses strong model (p. 258).
-    """
-    cycle_id = generate_cycle_id()
-    current_prompt = await prompt_registry.get_version(prompt_id, current_version)
-    baseline_score = await evaluate_prompt_on_evalset(current_prompt.content, evalset_id)
+        Resource-Aware: candidate generation uses cheap model; evaluation
+        uses strong model (p. 258).
+        """
+        cycle_id = generate_cycle_id()
+        current_prompt = await prompt_registry.get_version(prompt_id, current_version)
+        baseline_score = await evaluate_prompt_on_evalset(current_prompt.content, evalset_id)
 
-    # --- GENERATION 0: Seed population ---
-    population: list[PromptCandidate] = [
-        PromptCandidate(
-            content=current_prompt.content,
-            score=baseline_score,
-            lineage=["seed:production"],
-        )
-    ]
-
-    # Generate initial mutants using cheap model (p. 258)
-    for i in range(config.population_size - 1):
-        mutant = await generate_mutation(
-            parent=current_prompt.content,
-            mutation_instruction=f"Variant {i+1}: explore a different structural approach.",
-            model=ModelTier.CHEAP,
-        )
-        population.append(PromptCandidate(
-            content=mutant,
-            score=None,
-            lineage=[f"seed:mutation-{i}"],
-        ))
-
-    # --- EVOLUTION LOOP ---
-    for generation in range(config.generations):
-        # Evaluate all unscored candidates (strong model, p. 258)
-        for candidate in population:
-            if candidate.score is None:
-                candidate.score = await evaluate_prompt_on_evalset(
-                    candidate.content, evalset_id
-                )
-                candidate.score.compute_weighted_total()
-
-        # Sort by fitness (RLVR: verifiable reward from evalset, p. 168)
-        population.sort(key=lambda c: c.score.weighted_total, reverse=True)
-
-        logger.info(
-            "evolutionary_search.generation",
-            cycle_id=cycle_id,
-            generation=generation,
-            best_score=population[0].score.weighted_total,
-            worst_score=population[-1].score.weighted_total,
-        )
-
-        if generation == config.generations - 1:
-            break  # Final generation -- skip reproduction
-
-        # --- SELECTION: top-K parents ---
-        parents = population[:config.top_k]
-
-        # --- REPRODUCTION ---
-        next_generation: list[PromptCandidate] = []
-
-        # Elitism: carry best unchanged
-        for i in range(config.elitism_count):
-            next_generation.append(parents[i])
-
-        # Fill rest of population
-        while len(next_generation) < config.population_size:
-            if random.random() < config.mutation_rate:
-                # MUTATION: LLM-guided targeted change
-                parent = random.choice(parents)
-                child_content = await generate_mutation(
-                    parent=parent.content,
-                    mutation_instruction="Improve the weakest dimension based on feedback.",
-                    feedback=parent.score.feedback,
-                    model=ModelTier.CHEAP,
-                )
-                next_generation.append(PromptCandidate(
-                    content=child_content,
-                    score=None,
-                    lineage=parent.lineage + [f"mutation:gen{generation}"],
-                ))
-            else:
-                # CROSSOVER: merge strengths of two parents
-                parent_a, parent_b = random.sample(parents, 2)
-                child_content = await generate_crossover(
-                    parent_a=parent_a.content,
-                    parent_b=parent_b.content,
-                    model=ModelTier.CHEAP,
-                )
-                next_generation.append(PromptCandidate(
-                    content=child_content,
-                    score=None,
-                    lineage=parent_a.lineage + parent_b.lineage + [f"crossover:gen{generation}"],
-                ))
-
-        population = next_generation
-
-    # --- FINAL EVALUATION ---
-    best = population[0]
-    improvement_delta = best.score.weighted_total - baseline_score.weighted_total
-
-    if improvement_delta >= config.min_improvement:
-        regression_result = await eval_framework.run_evalset(
-            prompt_content=best.content,
-            evalset_id=evalset_id,
-        )
-
-        if regression_result.all_passed:
-            await prompt_registry.create_version(
-                prompt_id=prompt_id,
-                content=best.content,
-                author="optimizer:evolutionary-search-v1",
-                method="evolutionary_search",
-                parent_version=current_version,
-                eval_results=best.score,
-                lifecycle_state="draft",
+        # --- GENERATION 0: Seed population ---
+        population: list[PromptCandidate] = [
+            PromptCandidate(
+                content=current_prompt.content,
+                score=baseline_score,
+                lineage=["seed:production"],
             )
+        ]
 
-            return OptimizationResult(
+        # Generate initial mutants using cheap model (p. 258)
+        for i in range(config.population_size - 1):
+            mutant = await generate_mutation(
+                parent=current_prompt.content,
+                mutation_instruction=f"Variant {i+1}: explore a different structural approach.",
+                model=ModelTier.CHEAP,
+            )
+            population.append(PromptCandidate(
+                content=mutant,
+                score=None,
+                lineage=[f"seed:mutation-{i}"],
+            ))
+
+        # --- EVOLUTION LOOP ---
+        for generation in range(config.generations):
+            # Evaluate all unscored candidates (strong model, p. 258)
+            for candidate in population:
+                if candidate.score is None:
+                    candidate.score = await evaluate_prompt_on_evalset(
+                        candidate.content, evalset_id
+                    )
+                    candidate.score.compute_weighted_total()
+
+            # Sort by fitness (RLVR: verifiable reward from evalset, p. 168)
+            population.sort(key=lambda c: c.score.weighted_total, reverse=True)
+
+            logger.info(
+                "evolutionary_search.generation",
                 cycle_id=cycle_id,
-                original_prompt_version=current_version,
-                best_candidate=best.content,
-                best_score=best.score,
-                iterations_used=config.generations,
-                improvement_delta=improvement_delta,
-                promoted=True,
+                generation=generation,
+                best_score=population[0].score.weighted_total,
+                worst_score=population[-1].score.weighted_total,
             )
 
-    return OptimizationResult(
-        cycle_id=cycle_id,
-        original_prompt_version=current_version,
-        best_candidate=None,
-        best_score=best.score,
-        iterations_used=config.generations,
-        improvement_delta=improvement_delta,
-        promoted=False,
-    )
-```
+            if generation == config.generations - 1:
+                break  # Final generation -- skip reproduction
+
+            # --- SELECTION: top-K parents ---
+            parents = population[:config.top_k]
+
+            # --- REPRODUCTION ---
+            next_generation: list[PromptCandidate] = []
+
+            # Elitism: carry best unchanged
+            for i in range(config.elitism_count):
+                next_generation.append(parents[i])
+
+            # Fill rest of population
+            while len(next_generation) < config.population_size:
+                if random.random() < config.mutation_rate:
+                    # MUTATION: LLM-guided targeted change
+                    parent = random.choice(parents)
+                    child_content = await generate_mutation(
+                        parent=parent.content,
+                        mutation_instruction="Improve the weakest dimension based on feedback.",
+                        feedback=parent.score.feedback,
+                        model=ModelTier.CHEAP,
+                    )
+                    next_generation.append(PromptCandidate(
+                        content=child_content,
+                        score=None,
+                        lineage=parent.lineage + [f"mutation:gen{generation}"],
+                    ))
+                else:
+                    # CROSSOVER: merge strengths of two parents
+                    parent_a, parent_b = random.sample(parents, 2)
+                    child_content = await generate_crossover(
+                        parent_a=parent_a.content,
+                        parent_b=parent_b.content,
+                        model=ModelTier.CHEAP,
+                    )
+                    next_generation.append(PromptCandidate(
+                        content=child_content,
+                        score=None,
+                        lineage=parent_a.lineage + parent_b.lineage + [f"crossover:gen{generation}"],
+                    ))
+
+            population = next_generation
+
+        # --- FINAL EVALUATION ---
+        best = population[0]
+        improvement_delta = best.score.weighted_total - baseline_score.weighted_total
+
+        if improvement_delta >= config.min_improvement:
+            regression_result = await eval_framework.run_evalset(
+                prompt_content=best.content,
+                evalset_id=evalset_id,
+            )
+
+            if regression_result.all_passed:
+                await prompt_registry.create_version(
+                    prompt_id=prompt_id,
+                    content=best.content,
+                    author="optimizer:evolutionary-search-v1",
+                    method="evolutionary_search",
+                    parent_version=current_version,
+                    eval_results=best.score,
+                    lifecycle_state="draft",
+                )
+
+                return OptimizationResult(
+                    cycle_id=cycle_id,
+                    original_prompt_version=current_version,
+                    best_candidate=best.content,
+                    best_score=best.score,
+                    iterations_used=config.generations,
+                    improvement_delta=improvement_delta,
+                    promoted=True,
+                )
+
+        return OptimizationResult(
+            cycle_id=cycle_id,
+            original_prompt_version=current_version,
+            best_candidate=None,
+            best_score=best.score,
+            iterations_used=config.generations,
+            improvement_delta=improvement_delta,
+            promoted=False,
+        )
+    ```
 
 ### 4.3 Prompt Creation Pipeline (Prompt Chaining, p. 1-7)
 
 When a user creates a brand new agent (not optimizing an existing one), the Agent Builder uses a **deterministic sequential pipeline** (Prompt Chaining pattern, p. 1-7) to produce a high-quality initial system prompt.
 
-```
-Step 1              Step 2              Step 3              Step 4
-┌──────────┐        ┌──────────┐        ┌──────────┐        ┌──────────┐
-│ Extract  │──gate─>│ Generate │──gate─>│ Safety   │──gate─>│ Eval &   │
-│ Intent & │        │ Draft    │        │ Review   │        │ Baseline │
-│ Schema   │        │ Prompt   │        │ Pass     │        │ Score    │
-└──────────┘        └──────────┘        └──────────┘        └──────────┘
-                                                              │
-                                                              v
-                                                        Save as Draft v1
+```mermaid
+graph LR
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef guardrail fill:#E74C3C,stroke:#C0392B,color:#fff
+
+    S1["Step 1<br/>Extract<br/>Intent & Schema"]
+    S2["Step 2<br/>Generate<br/>Draft Prompt"]
+    S3["Step 3<br/>Safety<br/>Review Pass"]
+    S4["Step 4<br/>Eval &<br/>Baseline Score"]
+    SAVE["Save as Draft v1"]
+
+    S1 -->|"gate"| S2 -->|"gate"| S3 -->|"gate"| S4 --> SAVE
+
+    class S1,S2,S4 core
+    class S3 guardrail
 ```
 
 Each step is a separate LLM call with a validation gate between steps (p. 3). If any gate fails, the pipeline halts and returns an error to the user.
 
-```python
-async def create_agent_pipeline(
-    name: str,
-    description: str,
-    capabilities: list[str],
-    example_inputs: list[str],
-    example_outputs: list[str],
-) -> AgentDefinition:
-    """Prompt Chaining pipeline for new agent creation (p. 1-7).
+??? example "View Python pseudocode"
 
-    Each step feeds its output as input to the next step.
-    Gate checks between steps validate intermediate results
-    before proceeding (p. 3).
-    """
+    ```python
+    async def create_agent_pipeline(
+        name: str,
+        description: str,
+        capabilities: list[str],
+        example_inputs: list[str],
+        example_outputs: list[str],
+    ) -> AgentDefinition:
+        """Prompt Chaining pipeline for new agent creation (p. 1-7).
 
-    # STEP 1: Extract structured intent from user description
-    intent = await llm_call(
-        model=ModelTier.STRONG,
-        system_prompt=INTENT_EXTRACTION_PROMPT,
-        user_prompt=f"Name: {name}\nDescription: {description}\n"
-                    f"Capabilities: {capabilities}\n"
-                    f"Examples: {example_inputs} -> {example_outputs}",
-    )
-    intent_parsed = parse_and_validate(intent, IntentSchema)  # Gate 1
+        Each step feeds its output as input to the next step.
+        Gate checks between steps validate intermediate results
+        before proceeding (p. 3).
+        """
 
-    # STEP 2: Generate draft system prompt from structured intent
-    draft_prompt = await llm_call(
-        model=ModelTier.STRONG,
-        system_prompt=PROMPT_GENERATION_PROMPT,
-        user_prompt=json.dumps(intent_parsed),
-    )
-    validate_prompt_structure(draft_prompt)  # Gate 2
+        # STEP 1: Extract structured intent from user description
+        intent = await llm_call(
+            model=ModelTier.STRONG,
+            system_prompt=INTENT_EXTRACTION_PROMPT,
+            user_prompt=f"Name: {name}\nDescription: {description}\n"
+                        f"Capabilities: {capabilities}\n"
+                        f"Examples: {example_inputs} -> {example_outputs}",
+        )
+        intent_parsed = parse_and_validate(intent, IntentSchema)  # Gate 1
 
-    # STEP 3: Safety review of the generated prompt
-    safety_result = await llm_call(
-        model=ModelTier.STRONG,
-        system_prompt=SAFETY_REVIEW_PROMPT,
-        user_prompt=draft_prompt,
-    )
-    safety_parsed = parse_and_validate(safety_result, SafetyReviewSchema)
-    if not safety_parsed["approved"]:  # Gate 3
-        raise SafetyReviewFailure(
-            issues=safety_parsed["issues"],
-            prompt=draft_prompt,
+        # STEP 2: Generate draft system prompt from structured intent
+        draft_prompt = await llm_call(
+            model=ModelTier.STRONG,
+            system_prompt=PROMPT_GENERATION_PROMPT,
+            user_prompt=json.dumps(intent_parsed),
+        )
+        validate_prompt_structure(draft_prompt)  # Gate 2
+
+        # STEP 3: Safety review of the generated prompt
+        safety_result = await llm_call(
+            model=ModelTier.STRONG,
+            system_prompt=SAFETY_REVIEW_PROMPT,
+            user_prompt=draft_prompt,
+        )
+        safety_parsed = parse_and_validate(safety_result, SafetyReviewSchema)
+        if not safety_parsed["approved"]:  # Gate 3
+            raise SafetyReviewFailure(
+                issues=safety_parsed["issues"],
+                prompt=draft_prompt,
+            )
+
+        # STEP 4: Run baseline evaluation
+        baseline_score = await evaluate_prompt_on_evalset(
+            prompt_content=draft_prompt,
+            evalset_id=generate_bootstrap_evalset(example_inputs, example_outputs),
         )
 
-    # STEP 4: Run baseline evaluation
-    baseline_score = await evaluate_prompt_on_evalset(
-        prompt_content=draft_prompt,
-        evalset_id=generate_bootstrap_evalset(example_inputs, example_outputs),
-    )
+        # Persist as draft v1
+        agent = await create_agent_definition(
+            name=name,
+            description=description,
+            system_prompt=draft_prompt,
+            capabilities=capabilities,
+            baseline_score=baseline_score,
+            lifecycle_state="draft",
+        )
 
-    # Persist as draft v1
-    agent = await create_agent_definition(
-        name=name,
-        description=description,
-        system_prompt=draft_prompt,
-        capabilities=capabilities,
-        baseline_score=baseline_score,
-        lifecycle_state="draft",
-    )
-
-    return agent
-```
+        return agent
+    ```
 
 ---
 
@@ -896,51 +875,26 @@ async def create_agent_pipeline(
 
 ### 5.1 State Diagram
 
-```
-                            ┌──────────────────────────────────────────────┐
-                            │                                              │
-                            │  ┌─────────────────────────────────────┐     │
-                            │  │         OPTIMIZATION LOOP           │     │
-                            │  │  (Reflection p. 61 / Evo p. 172)   │     │
-                            │  └──────────────┬──────────────────────┘     │
-                            │                 │ generates new candidate    │
-                            v                 │                            │
-                     ┌──────────┐             │                            │
-       User creates  │          │◄────────────┘                            │
-       ───────────►  │  DRAFT   │                                          │
-                     │          │──── User deletes ────► [ARCHIVED]        │
-                     └────┬─────┘                                          │
-                          │                                                │
-                          │ submit_for_review()                            │
-                          │ Pre-condition: passes basic validation         │
-                          v                                                │
-                     ┌──────────┐                                          │
-                     │          │                                          │
-                     │  REVIEW  │──── Reviewer rejects ──► [DRAFT]        │
-                     │  (HITL)  │     with feedback                       │
-                     │          │                                          │
-                     └────┬─────┘                                          │
-                          │                                                │
-                          │ approve() -- requires human approval (p. 211)  │
-                          │ Pre-condition: authorized reviewer             │
-                          v                                                │
-                     ┌──────────┐                                          │
-                     │          │                                          │
-                     │  STAGED  │──── Evalset fails ──────► [DRAFT]       │
-                     │  (Eval)  │     regression detected                 │
-                     │          │                                          │
-                     └────┬─────┘                                          │
-                          │                                                │
-                          │ promote() -- requires eval pass + HITL (p.211)│
-                          │ Pre-condition: evalset pass, no regressions    │
-                          v                                                │
-                     ┌──────────┐                                          │
-                     │          │                                          │
-                     │PRODUCTION│──── Score degrades below threshold ──────┘
-                     │          │     triggers optimization loop
-                     │          │
-                     │          │──── Emergency rollback ──► [Previous PRODUCTION]
-                     └──────────┘
+```mermaid
+stateDiagram-v2
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef guardrail fill:#E74C3C,stroke:#C0392B,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+
+    [*] --> DRAFT : User creates
+    DRAFT --> REVIEW : submit_for_review()<br/>Pre-condition: passes basic validation
+    DRAFT --> ARCHIVED : User deletes
+    REVIEW --> STAGED : approve()<br/>requires human approval (p. 211)
+    REVIEW --> DRAFT : Reviewer rejects<br/>with feedback
+    STAGED --> PRODUCTION : promote()<br/>requires eval pass + HITL (p. 211)
+    STAGED --> DRAFT : Evalset fails<br/>regression detected
+    PRODUCTION --> DRAFT : Score degrades below threshold<br/>triggers OPTIMIZATION LOOP<br/>(Reflection p. 61 / Evo p. 172)
+    PRODUCTION --> PRODUCTION : Emergency rollback<br/>to previous version
+
+    class DRAFT core
+    class REVIEW guardrail
+    class STAGED infra
+    class PRODUCTION core
 ```
 
 ### 5.2 State Transition Rules
@@ -972,138 +926,142 @@ The Agent Builder enforces two mandatory HITL gates:
 - Any prompt authored by an AI optimizer (author_type = "ai").
 - Any prompt for an agent that handles PII or financial data.
 
-```python
-from enum import Enum
+??? example "View Python pseudocode"
+
+    ```python
+    from enum import Enum
 
 
-class EscalationReason(Enum):
-    SAFETY_INSTRUCTIONS_MODIFIED = "safety_instructions_modified"
-    LARGE_DIFF = "diff_exceeds_30_percent"
-    AI_AUTHORED = "ai_authored_prompt"
-    SENSITIVE_DATA_AGENT = "handles_pii_or_financial"
-    MANUAL_ESCALATION = "manual_escalation"
+    class EscalationReason(Enum):
+        SAFETY_INSTRUCTIONS_MODIFIED = "safety_instructions_modified"
+        LARGE_DIFF = "diff_exceeds_30_percent"
+        AI_AUTHORED = "ai_authored_prompt"
+        SENSITIVE_DATA_AGENT = "handles_pii_or_financial"
+        MANUAL_ESCALATION = "manual_escalation"
 
 
-async def submit_for_review(
-    agent_id: str,
-    prompt_id: str,
-    version: int,
-) -> ReviewRequest:
-    """Transition a draft prompt to review state.
+    async def submit_for_review(
+        agent_id: str,
+        prompt_id: str,
+        version: int,
+    ) -> ReviewRequest:
+        """Transition a draft prompt to review state.
 
-    Determines escalation level based on the nature of changes.
-    All AI-authored prompts require HITL review (p. 211).
-    """
-    prompt_version = await prompt_registry.get_version(prompt_id, version)
-    parent_version = await prompt_registry.get_version(prompt_id, prompt_version.parent_version)
+        Determines escalation level based on the nature of changes.
+        All AI-authored prompts require HITL review (p. 211).
+        """
+        prompt_version = await prompt_registry.get_version(prompt_id, version)
+        parent_version = await prompt_registry.get_version(prompt_id, prompt_version.parent_version)
 
-    escalation_reasons: list[EscalationReason] = []
+        escalation_reasons: list[EscalationReason] = []
 
-    # Check: AI-authored (always requires HITL)
-    if prompt_version.author_type == "ai":
-        escalation_reasons.append(EscalationReason.AI_AUTHORED)
+        # Check: AI-authored (always requires HITL)
+        if prompt_version.author_type == "ai":
+            escalation_reasons.append(EscalationReason.AI_AUTHORED)
 
-    # Check: Safety instructions modified
-    if safety_instructions_changed(parent_version.content, prompt_version.content):
-        escalation_reasons.append(EscalationReason.SAFETY_INSTRUCTIONS_MODIFIED)
+        # Check: Safety instructions modified
+        if safety_instructions_changed(parent_version.content, prompt_version.content):
+            escalation_reasons.append(EscalationReason.SAFETY_INSTRUCTIONS_MODIFIED)
 
-    # Check: Large diff (>30% change)
-    diff = compute_prompt_diff(parent_version.content, prompt_version.content)
-    change_ratio = (diff.additions + diff.deletions) / max(
-        len(parent_version.content.splitlines()), 1
-    )
-    if change_ratio > 0.30:
-        escalation_reasons.append(EscalationReason.LARGE_DIFF)
+        # Check: Large diff (>30% change)
+        diff = compute_prompt_diff(parent_version.content, prompt_version.content)
+        change_ratio = (diff.additions + diff.deletions) / max(
+            len(parent_version.content.splitlines()), 1
+        )
+        if change_ratio > 0.30:
+            escalation_reasons.append(EscalationReason.LARGE_DIFF)
 
-    # Check: Sensitive data agent
-    agent = await agent_registry.get(agent_id)
-    if agent.handles_sensitive_data:
-        escalation_reasons.append(EscalationReason.SENSITIVE_DATA_AGENT)
+        # Check: Sensitive data agent
+        agent = await agent_registry.get(agent_id)
+        if agent.handles_sensitive_data:
+            escalation_reasons.append(EscalationReason.SENSITIVE_DATA_AGENT)
 
-    # Determine reviewer tier
-    reviewer_tier = "senior" if len(escalation_reasons) >= 2 else "standard"
+        # Determine reviewer tier
+        reviewer_tier = "senior" if len(escalation_reasons) >= 2 else "standard"
 
-    review_request = await review_queue.create(
-        agent_id=agent_id,
-        prompt_id=prompt_id,
-        version=version,
-        diff=diff,
-        escalation_reasons=escalation_reasons,
-        reviewer_tier=reviewer_tier,
-        timeout_hours=48,  # Auto-reject if not reviewed within 48h
-    )
+        review_request = await review_queue.create(
+            agent_id=agent_id,
+            prompt_id=prompt_id,
+            version=version,
+            diff=diff,
+            escalation_reasons=escalation_reasons,
+            reviewer_tier=reviewer_tier,
+            timeout_hours=48,  # Auto-reject if not reviewed within 48h
+        )
 
-    # Transition state
-    await prompt_registry.update_state(prompt_id, version, "review")
+        # Transition state
+        await prompt_registry.update_state(prompt_id, version, "review")
 
-    logger.info(
-        "lifecycle.submit_for_review",
-        agent_id=agent_id,
-        prompt_id=prompt_id,
-        version=version,
-        escalation_reasons=[r.value for r in escalation_reasons],
-        reviewer_tier=reviewer_tier,
-    )
+        logger.info(
+            "lifecycle.submit_for_review",
+            agent_id=agent_id,
+            prompt_id=prompt_id,
+            version=version,
+            escalation_reasons=[r.value for r in escalation_reasons],
+            reviewer_tier=reviewer_tier,
+        )
 
-    return review_request
-```
+        return review_request
+    ```
 
 ### 5.4 Emergency Rollback
 
 If a production prompt causes incidents, operators can trigger an emergency rollback:
 
-```python
-async def emergency_rollback(
-    agent_id: str,
-    prompt_id: str,
-    reason: str,
-    operator_id: str,
-) -> int:
-    """Immediately revert to the previous production prompt version.
+??? example "View Python pseudocode"
 
-    Creates a new version record (no history rewriting) that copies
-    the content of the last known-good production version. This
-    maintains the append-only invariant of the versioning system.
-    """
-    current_prod = await prompt_registry.get_latest(prompt_id, state="production")
-    previous_prod = await prompt_registry.get_previous_production(prompt_id, current_prod.version)
+    ```python
+    async def emergency_rollback(
+        agent_id: str,
+        prompt_id: str,
+        reason: str,
+        operator_id: str,
+    ) -> int:
+        """Immediately revert to the previous production prompt version.
 
-    if previous_prod is None:
-        raise NoRollbackTargetError(f"No previous production version for {prompt_id}")
+        Creates a new version record (no history rewriting) that copies
+        the content of the last known-good production version. This
+        maintains the append-only invariant of the versioning system.
+        """
+        current_prod = await prompt_registry.get_latest(prompt_id, state="production")
+        previous_prod = await prompt_registry.get_previous_production(prompt_id, current_prod.version)
 
-    # Create new version with previous content (append-only -- never overwrite)
-    rollback_version = await prompt_registry.create_version(
-        prompt_id=prompt_id,
-        content=previous_prod.content,
-        author=f"operator:{operator_id}",
-        method="emergency_rollback",
-        parent_version=current_prod.version,
-        lifecycle_state="production",
-        metadata={
-            "rollback_reason": reason,
-            "rolled_back_from": current_prod.version,
-            "rolled_back_to_content_of": previous_prod.version,
-        },
-    )
+        if previous_prod is None:
+            raise NoRollbackTargetError(f"No previous production version for {prompt_id}")
 
-    # Demote the problematic version
-    await prompt_registry.update_state(prompt_id, current_prod.version, "archived")
+        # Create new version with previous content (append-only -- never overwrite)
+        rollback_version = await prompt_registry.create_version(
+            prompt_id=prompt_id,
+            content=previous_prod.content,
+            author=f"operator:{operator_id}",
+            method="emergency_rollback",
+            parent_version=current_prod.version,
+            lifecycle_state="production",
+            metadata={
+                "rollback_reason": reason,
+                "rolled_back_from": current_prod.version,
+                "rolled_back_to_content_of": previous_prod.version,
+            },
+        )
 
-    # Emit high-priority alert
-    await alerting.emit(
-        severity="critical",
-        title=f"Emergency prompt rollback: {agent_id}",
-        details={
-            "agent_id": agent_id,
-            "from_version": current_prod.version,
-            "to_version": rollback_version,
-            "operator": operator_id,
-            "reason": reason,
-        },
-    )
+        # Demote the problematic version
+        await prompt_registry.update_state(prompt_id, current_prod.version, "archived")
 
-    return rollback_version
-```
+        # Emit high-priority alert
+        await alerting.emit(
+            severity="critical",
+            title=f"Emergency prompt rollback: {agent_id}",
+            details={
+                "agent_id": agent_id,
+                "from_version": current_prod.version,
+                "to_version": rollback_version,
+                "operator": operator_id,
+                "reason": reason,
+            },
+        )
+
+        return rollback_version
+    ```
 
 ---
 
@@ -1154,65 +1112,69 @@ All endpoints are served by the Agent Builder service under the `/api/v1/agent-b
 
 **Create Agent**:
 
-```
-POST /api/v1/agent-builder/agents
-Content-Type: application/json
+??? example "View API example"
 
-{
-  "name": "ResearchAgent",
-  "description": "Performs web research and produces cited summaries.",
-  "capabilities": ["web_search", "summarization", "citation_extraction"],
-  "example_inputs": [
-    "What are the latest advances in quantum error correction?"
-  ],
-  "example_outputs": [
-    "Summary with 5+ cited sources covering recent breakthroughs..."
-  ],
-  "tools": ["mcp://search-server/web_search"],
-  "team_id": "team-alpha",
-  "model_config": {
-    "model_tier": "auto",
-    "temperature": 0.3
-  }
-}
+    ```
+    POST /api/v1/agent-builder/agents
+    Content-Type: application/json
 
-Response: 201 Created
-{
-  "agent_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "name": "ResearchAgent",
-  "version": "1.0.0",
-  "lifecycle_state": "draft",
-  "system_prompt": {
-    "prompt_id": "prompt-9f8e7d6c-5b4a-3210-fedc-ba0987654321",
-    "version": 1,
-    "content_hash": "sha256:a3f2b1c0..."
-  },
-  "created_at": "2026-02-27T10:00:00Z"
-}
-```
+    {
+      "name": "ResearchAgent",
+      "description": "Performs web research and produces cited summaries.",
+      "capabilities": ["web_search", "summarization", "citation_extraction"],
+      "example_inputs": [
+        "What are the latest advances in quantum error correction?"
+      ],
+      "example_outputs": [
+        "Summary with 5+ cited sources covering recent breakthroughs..."
+      ],
+      "tools": ["mcp://search-server/web_search"],
+      "team_id": "team-alpha",
+      "model_config": {
+        "model_tier": "auto",
+        "temperature": 0.3
+      }
+    }
+
+    Response: 201 Created
+    {
+      "agent_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "ResearchAgent",
+      "version": "1.0.0",
+      "lifecycle_state": "draft",
+      "system_prompt": {
+        "prompt_id": "prompt-9f8e7d6c-5b4a-3210-fedc-ba0987654321",
+        "version": 1,
+        "content_hash": "sha256:a3f2b1c0..."
+      },
+      "created_at": "2026-02-27T10:00:00Z"
+    }
+    ```
 
 **Trigger Optimization**:
 
-```
-POST /api/v1/agent-builder/agents/a1b2c3d4/optimize
-Content-Type: application/json
+??? example "View API example"
 
-{
-  "strategy": "reflection_loop",
-  "max_iterations": 3,
-  "min_improvement": 0.02,
-  "evalset_id": "evalset-research-v3"
-}
+    ```
+    POST /api/v1/agent-builder/agents/a1b2c3d4/optimize
+    Content-Type: application/json
 
-Response: 202 Accepted
-{
-  "cycle_id": "opt-20260227-001",
-  "status": "running",
-  "strategy": "reflection_loop",
-  "started_at": "2026-02-27T10:05:00Z",
-  "estimated_duration_seconds": 300
-}
-```
+    {
+      "strategy": "reflection_loop",
+      "max_iterations": 3,
+      "min_improvement": 0.02,
+      "evalset_id": "evalset-research-v3"
+    }
+
+    Response: 202 Accepted
+    {
+      "cycle_id": "opt-20260227-001",
+      "status": "running",
+      "strategy": "reflection_loop",
+      "started_at": "2026-02-27T10:05:00Z",
+      "estimated_duration_seconds": 300
+    }
+    ```
 
 ---
 
@@ -1261,18 +1223,20 @@ Each failure mode is derived from the referenced pattern cards, with specific mi
 
 Every operation in the Agent Builder emits structured log entries to the Observability Platform. Log entries follow the platform-wide schema.
 
-```python
-# All log entries include these base fields
-LOG_SCHEMA = {
-    "timestamp": "ISO-8601",
-    "service": "agent-builder",
-    "trace_id": "UUID",
-    "span_id": "UUID",
-    "level": "info|warn|error",
-    "event": "dot.separated.event.name",
-    # Event-specific fields below
-}
-```
+??? example "View Python pseudocode"
+
+    ```python
+    # All log entries include these base fields
+    LOG_SCHEMA = {
+        "timestamp": "ISO-8601",
+        "service": "agent-builder",
+        "trace_id": "UUID",
+        "span_id": "UUID",
+        "level": "info|warn|error",
+        "event": "dot.separated.event.name",
+        # Event-specific fields below
+    }
+    ```
 
 **Key events logged**:
 

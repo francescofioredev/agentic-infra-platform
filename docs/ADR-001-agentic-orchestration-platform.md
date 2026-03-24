@@ -8,27 +8,29 @@
 
 ## Context
 
-We are designing a comprehensive **Agentic Orchestration & Monitoring Platform** (codename: **AgentForge**) — a meta-system that enables users to create, compose, govern, and observe agentic AI systems at scale.
+We are designing an **Agentic Orchestration & Monitoring Platform** (codename: **AgentForge**) — a system that lets users create, compose, govern, and observe agentic AI systems at scale.
 
 **System**: An orchestration platform for building, managing, and monitoring agentic AI infrastructure.
 
 **Scale**: Multi-tenant SaaS platform supporting hundreds of concurrent agent teams, thousands of tool invocations/minute, sub-second monitoring latency.
 
 **Core Requirements**:
+
 1. **Agent Builder**: Create agents via versioned system prompts, optimizable by AI itself (self-improving prompts).
 2. **Team Orchestrator**: Compose agents into teams with explicit communication rules and orchestration topologies.
 3. **Tool & MCP Manager**: Manage MCP servers and tools assignable to individual agents or entire teams, following Least Privilege.
 4. **Guardrail System**: Dedicated guardrail agents that monitor team/agent behavior in real-time, enforcing policies and emitting alerts.
-5. **Observability Platform**: Full visibility into all interactions, decisions, tool calls, and agent trajectories.
+5. **Observability Platform**: Visibility into interactions, decisions, tool calls, and agent trajectories.
 6. **Code Generation Tools**: Specialized tools that enable agents to generate, review, and execute code safely.
 
 **Primary concerns** (from taxonomy.yaml):
+
 - [x] reliability — agents must behave predictably, recover from failures
 - [x] safety — guardrail agents, least privilege, defense-in-depth
 - [x] memory — versioned prompts, cross-session state, agent knowledge
 - [x] tool-use — MCP server management, tool permission scoping
 - [x] orchestration — team topologies, communication rules, routing
-- [x] observability — full trace logging, decision auditing, metrics dashboards
+- [x] observability — trace logging, decision auditing, metrics dashboards
 - [x] eval — agent quality assessment, prompt optimization feedback
 - [x] cost — resource-aware model routing, token budget management
 
@@ -37,6 +39,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 ## Decision
 
 **Chosen pattern(s)**:
+
 - Primary: `multi-agent-collaboration` (Hierarchical Supervisor topology, p. 122-132)
 - Supporting:
   - `routing` (p. 21) — dispatch tasks to specialized agents
@@ -57,7 +60,11 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
   - `prompt-chaining` (p. 1) — deterministic sequential pipelines for internal workflows
 
 **Decision statement**:
-> We will implement AgentForge as a hierarchical multi-agent orchestration platform using a Supervisor topology (p. 127) with A2A communication (p. 240) for distributed team coordination, MCP (p. 155) for standardized tool management, a dedicated Guardrail Agent layer (p. 285) for real-time behavioral monitoring, and a comprehensive observability stack (p. 301) with full trajectory logging and LLM-as-Judge evaluation. Agent prompts will be versioned in a Prompt Registry and optimized using a Reflection-based (p. 61) generator-critic loop combined with evolutionary adaptation (p. 172). The platform is supported by eight infrastructure subsystems: IAM & Access Control for multi-tenancy and RBAC, an Agent Deployment Pipeline for CI/CD with canary releases, an Event Bus for decoupled inter-subsystem communication, a Testing & Simulation framework for red-team and chaos testing, Conversation & Session Management for multi-channel user interactions, Replay & Debugging for time-travel execution analysis, Scheduling & Background Jobs for automated agent execution, and Multi-Provider LLM Management for unified access across AI providers with intelligent failover.
+> We will build AgentForge as a hierarchical multi-agent platform using a Supervisor topology (p. 127). Teams communicate via A2A (p. 240), tools are managed through MCP (p. 155), and a dedicated Guardrail Agent layer (p. 285) monitors agent behavior. Observability (p. 301) covers trajectory logging and LLM-as-Judge evaluation.
+>
+> Agent prompts are versioned in a Prompt Registry and improved through a Reflection-based (p. 61) generator-critic loop with evolutionary adaptation (p. 172).
+>
+> Eight infrastructure subsystems support the platform: IAM & Access Control (multi-tenancy, RBAC), Agent Deployment Pipeline (CI/CD with canary releases), Event Bus (decoupled inter-subsystem messaging), Testing & Simulation (red-team and chaos testing), Conversation & Session Management (multi-channel interactions), Replay & Debugging (time-travel execution analysis), Scheduling & Background Jobs (automated agent execution), and Multi-Provider LLM Management (provider abstraction with failover).
 
 ---
 
@@ -68,18 +75,21 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 **Why this pattern**: The platform fundamentally orchestrates teams of specialized agents. Each team is a multi-agent system requiring coordination, communication, and output validation across agent boundaries (p. 126).
 
 **Variant selected**: **Hierarchical Supervisor** (p. 130) — Three levels:
+
 1. **Platform Orchestrator** (top) — routes user requests, manages global state
 2. **Team Supervisors** (mid) — coordinate agents within a team
 3. **Worker Agents** (bottom) — execute specialized tasks
 
 **Key configuration decisions**:
-- Each agent has a single, well-defined responsibility (p. 124)
+
+- Each agent has a single responsibility (p. 124)
 - Sub-agent outputs are treated as untrusted and validated at boundaries (p. 126)
 - Supervisor agents handle routing, not business logic (p. 127)
 - Maximum hierarchy depth: 3 levels to maintain debuggability (p. 130)
 - Explicit input/output contracts between agents using JSON Schema (p. 126)
 
 **Known failure modes addressed**:
+
 - Cascading failure → output validation at every agent boundary
 - Context explosion → summarize/filter history before passing downstream (p. 127)
 - Coordination deadlock → timeout + escalation on all inter-agent waits
@@ -94,12 +104,14 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 **Variant selected**: LLM-based routing with fallback (p. 25-28)
 
 **Key configuration decisions**:
+
 - Router uses cheap/fast model (Haiku/Flash) for classification (p. 258)
 - Always includes a default fallback handler (p. 27)
 - Routing decisions logged with confidence score for observability (p. 26)
 - Few-shot examples in router prompt for high-stakes routing (p. 27)
 
 **Known failure modes addressed**:
+
 - Mis-routing → confidence threshold below which request is escalated to human
 - No fallback → always define default branch
 - Router bottleneck → router runs on cheap/fast model to minimize latency
@@ -113,6 +125,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 **Variant selected**: Mixed STDIO (dev) + HTTP+SSE (production) transport (p. 160)
 
 **Key configuration decisions**:
+
 - Tool descriptions are self-contained (p. 162) — consuming agents have no other context
 - MCP servers are stateless for horizontal scaling (p. 163)
 - Authentication required on all MCP servers (p. 163)
@@ -120,6 +133,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 - MCP for agent-to-tool; A2A for agent-to-agent (p. 165)
 
 **Known failure modes addressed**:
+
 - Server unavailability → health checks + fallback tools
 - Protocol version mismatch → version negotiation at startup
 - Tool description drift → versioned tool descriptions tied to server releases
@@ -128,20 +142,22 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 
 ### Guardrails / Safety (patterns/18-guardrails-safety.md)
 
-**Why this pattern**: As a platform managing potentially autonomous agent teams, safety is non-negotiable. We implement the full six-layer defense model (p. 286) plus dedicated Guardrail Agents that act as real-time behavioral monitors.
+**Why this pattern**: The platform manages potentially autonomous agent teams, so every layer needs constraints on what agents can do. We implement the six-layer defense model (p. 286) plus dedicated Guardrail Agents that act as behavioral monitors at runtime.
 
 **Variant selected**: Six-layer defense + dedicated Guardrail Agent topology
 
 **Key configuration decisions**:
-- All six defense layers implemented: input validation, output filtering, behavioral constraints, tool restrictions, external moderation, HITL (p. 286)
+
+- Six defense layers: input validation, output filtering, behavioral constraints, tool restrictions, external moderation, HITL (p. 286)
 - Principle of Least Privilege applied at tool assignment (p. 288)
 - Tool outputs treated as untrusted (prompt injection defense, p. 289)
 - Checkpoint & rollback for multi-step tasks with side effects (p. 290)
 - Guardrail Agents use `before_tool_callback` pattern (p. 295)
 - Jailbreak detection via LLM-as-guardrail (p. 296)
-- Every safety intervention logged with full context for audit (p. 297)
+- Every safety intervention logged with context for audit (p. 297)
 
 **Known failure modes addressed**:
+
 - Single-layer bypass → multiple independent defense layers
 - Tool injection → treat tool outputs as untrusted; filter before context inclusion
 - Prompt injection → structural separation (XML tags) between instructions and data
@@ -151,19 +167,21 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 
 ### Evaluation & Monitoring (patterns/19-evaluation-monitoring.md)
 
-**Why this pattern**: Full observability is a core requirement. We implement the five-level best practices pyramid (p. 303): Define → Collect → Evaluate → Reward → Coach.
+**Why this pattern**: Observability is a core requirement. We implement the five-level best practices pyramid (p. 303): Define → Collect → Evaluate → Reward → Coach.
 
 **Variant selected**: Online + offline evaluation with LLM-as-Judge (p. 306)
 
 **Key configuration decisions**:
+
 - Core metrics defined before deployment: accuracy, latency, token usage, tool call accuracy (p. 304)
 - LLM-as-Judge rubric: Clarity, Neutrality, Relevance, Completeness, Audience (p. 306)
 - Agent trajectory evaluation, not just final outputs (p. 308)
-- `LLMInteractionMonitor` class for full interaction logging (p. 310)
+- `LLMInteractionMonitor` class for interaction logging (p. 310)
 - Separate evalset files for regression testing (p. 312)
 - Alerts on metric degradation >10% from baseline (p. 305)
 
 **Known failure modes addressed**:
+
 - Eval-train contamination → strict train/eval separation
 - LLM-Judge bias → judge model different from generator; calibrate against human eval
 - Eval set distribution drift → periodic evalset refresh from production samples
@@ -177,6 +195,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 **Variant selected**: Generator-Critic with multi-agent critic panel (p. 340)
 
 **Key configuration decisions**:
+
 - Separate critic prompt from generator (p. 68)
 - Explicit, measurable quality criteria for the critic (p. 65)
 - Maximum 3 iterations per optimization cycle (cost control)
@@ -184,6 +203,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 - Multi-dimensional critique: task accuracy, prompt clarity, safety, cost efficiency
 
 **Known failure modes addressed**:
+
 - Infinite loop → hard max_iterations limit
 - Sycophantic critique → adversarial framing in critic prompt
 - Degradation → quality score regression detection
@@ -197,6 +217,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 **Variant selected**: Async polling + webhook callbacks for long-running tasks (p. 246)
 
 **Key configuration decisions**:
+
 - Every agent publishes an Agent Card at `/.well-known/agent.json` (p. 243)
 - Task IDs are globally unique UUIDs (p. 245)
 - mTLS + OAuth2 for production deployments (p. 248)
@@ -204,6 +225,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 - Agent Cards version-stamped for capability evolution
 
 **Known failure modes addressed**:
+
 - Agent Card staleness → version cards; validate capabilities at runtime
 - Orphaned tasks → TTL on task results + cleanup job
 - Polling overload → webhook callbacks + exponential backoff
@@ -217,6 +239,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 **Variant selected**: Critique-then-escalate (p. 259) + dynamic model switching (p. 257)
 
 **Key configuration decisions**:
+
 - Three model tiers: Flash/Haiku (simple), Pro/Sonnet (complex), Ultra/Opus (critical) (p. 257)
 - Routing decision uses cheap model (p. 258)
 - Contextual pruning before every LLM call (p. 262)
@@ -224,6 +247,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 - Token budgets per agent and per team
 
 **Known failure modes addressed**:
+
 - Under-classification → default to upclassing on ambiguity (p. 259)
 - Cache poisoning → TTL + similarity threshold for cache hits
 
@@ -231,9 +255,10 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 
 ### IAM & Access Control
 
-**Why this subsystem**: A multi-tenant platform requires robust identity management, role-based access control, and comprehensive audit trails. Without IAM, there is no tenant isolation, no permission enforcement, and no compliance posture.
+**Why this subsystem**: A multi-tenant platform needs identity management, role-based access control, and audit trails. Without IAM, there is no tenant isolation, no permission enforcement, and no compliance posture.
 
 **Key design decisions**:
+
 - RBAC enforced via OPA (Open Policy Agent) for declarative, auditable policies
 - Five role hierarchy: Platform Admin → Tenant Admin → Agent Developer → Operator → Viewer
 - Agent-to-agent authentication uses mTLS + OAuth2 (p. 248)
@@ -242,6 +267,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 - IAM integrates with Tool & MCP Manager's Least Privilege model (p. 288)
 
 **Known failure modes addressed**:
+
 - Privilege escalation → OPA policies evaluated on every request; role changes require HITL approval
 - Cross-tenant data leakage → tenant ID injected into every query; row-level security in PostgreSQL
 - API key compromise → automatic rotation, usage anomaly detection, instant revocation
@@ -250,9 +276,10 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 
 ### Agent Deployment Pipeline
 
-**Why this subsystem**: Agents are living artifacts that evolve. A CI/CD pipeline ensures that every agent change is validated, evaluated, and safely deployed with rollback capability. Without this, prompt changes could degrade production quality undetected.
+**Why this subsystem**: Agents change frequently -- prompts get edited, tools get added, configurations shift. A CI/CD pipeline validates, evaluates, and deploys each change with rollback capability. Without this, prompt changes could degrade production quality undetected.
 
 **Key design decisions**:
+
 - Six-stage pipeline: Build → Validate → Evaluate → Stage → Canary → Production
 - Canary deployment with gradual traffic ramp (1% → 5% → 25% → 50% → 100%)
 - Auto-rollback triggered by metric degradation >10% from baseline (p. 305)
@@ -261,6 +288,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 - Integration with Prompt Registry for version-controlled agent artifacts
 
 **Known failure modes addressed**:
+
 - Bad deployment → canary catches regressions before full rollout; instant rollback
 - Eval regression → mandatory evalset pass before promotion (p. 312)
 - Configuration drift → deployment manifests are version-controlled and immutable
@@ -269,9 +297,10 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 
 ### Event Bus
 
-**Why this subsystem**: A centralized event-driven architecture decouples the 19 subsystems, enabling asynchronous communication, event replay for debugging, and event sourcing for auditability. Without this, subsystems would require point-to-point integrations creating a fragile dependency web.
+**Why this subsystem**: An event bus decouples the 19 subsystems, giving us async communication, event replay for debugging, and event sourcing for auditability. Without it, subsystems would need point-to-point integrations, creating a fragile dependency graph.
 
 **Key design decisions**:
+
 - NATS JetStream selected for at-least-once delivery, consumer groups, and event replay
 - CloudEvents specification for standardized event envelopes with versioning
 - Topic hierarchy: `platform.agents.*`, `platform.teams.*`, `platform.tools.*`, etc.
@@ -280,6 +309,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 - Backpressure with flow control to handle event bursts (p. 205)
 
 **Known failure modes addressed**:
+
 - Consumer lag → backpressure signals, consumer group rebalancing
 - Event schema evolution → backward-compatible versioning with schema registry
 - Message loss → at-least-once delivery with idempotent consumers (p. 246)
@@ -288,9 +318,10 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 
 ### Testing & Simulation
 
-**Why this subsystem**: Agentic systems exhibit emergent behavior that is difficult to predict. A comprehensive testing framework with simulated users, tool mocking, chaos injection, and automated red-teaming is essential for pre-production validation (p. 298).
+**Why this subsystem**: Agentic systems exhibit emergent behavior that is difficult to predict. Simulated users, tool mocking, chaos injection, and automated red-teaming are needed to validate agents before production (p. 298).
 
 **Key design decisions**:
+
 - AI-driven user simulators generate realistic multi-turn interactions
 - Mock MCP servers simulate tool behavior without external dependencies
 - Chaos testing injects failures (tool timeouts, LLM errors, rate limits) per Error Triad (p. 205)
@@ -299,6 +330,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 - Coverage metrics: tool usage, conversation paths, error handling branches
 
 **Known failure modes addressed**:
+
 - Untested edge cases → chaos testing systematically explores failure modes
 - Safety gaps → red-team automation runs before every deployment
 - Mock/reality divergence → mock servers updated from production tool schemas
@@ -307,19 +339,21 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 
 ### Conversation & Session Management
 
-**Why this subsystem**: AgentForge serves end users across multiple channels (REST, WebSocket, Slack, Telegram, web widgets). A unified conversation layer manages session state, handles multi-turn context, routes conversations to agents, and enables seamless agent-to-human handoff (p. 210).
+**Why this subsystem**: AgentForge serves end users across multiple channels (REST, WebSocket, Slack, Telegram, web widgets). A conversation layer manages session state, handles multi-turn context, routes conversations to agents, and supports agent-to-human handoff (p. 210).
 
 **Key design decisions**:
+
 - Channel adapters abstract platform-specific APIs into a unified interface
 - Conversation state machine: active → paused → waiting_human → escalated → terminated
-- Agent-to-human handoff with full context transfer (p. 210)
+- Agent-to-human handoff with context transfer (p. 210)
 - SSE/WebSocket streaming for real-time typing indicators and token streaming
 - Multi-turn context management integrates with Memory & Context Management subsystem (p. 148)
 - User identity resolution maps external IDs to internal identities across channels
 
 **Known failure modes addressed**:
+
 - Session loss → session state persisted to Redis with PostgreSQL backup
-- Handoff context loss → full conversation history attached to handoff request
+- Handoff context loss → conversation history attached to handoff request
 - Channel-specific failures → per-channel circuit breakers with fallback channels
 
 ---
@@ -329,6 +363,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 **Why this subsystem**: When an agent produces unexpected behavior, operators need to replay the exact execution, step through decisions, and test alternative inputs. This subsystem provides time-travel debugging and AI-assisted root cause analysis (p. 65).
 
 **Key design decisions**:
+
 - Deterministic replay from recorded OpenTelemetry traces and event logs
 - Time-travel: step forward/backward through agent execution steps
 - What-if analysis: modify inputs at any step and re-execute
@@ -337,6 +372,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 - Breakpoints on tool calls, guardrail checks, or routing decisions
 
 **Known failure modes addressed**:
+
 - Non-deterministic replay → capture all random seeds, model responses, and timestamps
 - Snapshot storage bloat → tiered retention (7d hot, 30d warm, 90d cold)
 - Replay fidelity → mock external tools with recorded responses during replay
@@ -348,6 +384,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 **Why this subsystem**: Many agentic workflows require scheduled execution (daily reports, periodic analysis, data syncs) or event-triggered activation. A job scheduling subsystem enables agents to operate autonomously on defined schedules with priority management (p. 326).
 
 **Key design decisions**:
+
 - Four job types: cron-based, one-shot (delayed), event-triggered, interval-based
 - Priority queues with preemption for critical jobs (p. 326)
 - DAG-based job dependencies (job B after job A) using Planning pattern (p. 107)
@@ -356,6 +393,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 - Retry with exponential backoff and dead letter queue (p. 206)
 
 **Known failure modes addressed**:
+
 - Missed schedule → persistent schedule store; job-missed detection and alerting
 - Duplicate execution → distributed locks with Redis; idempotent job handlers
 - Worker crash → heartbeat monitoring; orphaned job detection and reassignment
@@ -364,18 +402,20 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 
 ### Multi-Provider LLM Management
 
-**Why this subsystem**: AgentForge must not be locked into a single LLM provider. A unified LLM gateway abstracts Anthropic, OpenAI, Google, and open-source models behind a common interface, enabling intelligent routing, failover, and cost optimization (p. 257).
+**Why this subsystem**: AgentForge must not be locked into a single LLM provider. An LLM gateway abstracts Anthropic, OpenAI, Google, and open-source models behind a common interface, handling routing, failover, and cost optimization (p. 257).
 
 **Key design decisions**:
+
 - Single `LLMGateway` abstraction over all providers with normalized request/response
 - Three-tier model routing: Flash/Haiku (simple) → Pro/Sonnet (complex) → Ultra/Opus (critical) (p. 257)
 - Automatic failover to alternative provider on errors or rate limits (p. 208)
 - API key pools per provider with rotation, usage tracking, rate limit awareness
-- Unified streaming interface (SSE) across all providers
+- Common streaming interface (SSE) across all providers
 - Semantic caching layer to avoid redundant LLM calls (p. 264)
 - Per-request cost tracking integrated with Cost & Resource Manager
 
 **Known failure modes addressed**:
+
 - Provider outage → automatic failover chain with health-based routing
 - Rate limiting → API key pool rotation; queue-based request smoothing
 - Cost spike → budget enforcement with configurable hard/soft limits per tenant
@@ -385,15 +425,17 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 ## Consequences
 
 ### Positive
-- **Comprehensive safety**: Six-layer defense + dedicated guardrail agents provide defense-in-depth
-- **Full observability**: Every interaction, decision, and tool call is traced and auditable
-- **Self-improving prompts**: Reflection-based optimization creates a flywheel for prompt quality
-- **Flexible orchestration**: Hierarchical supervisor topology supports simple to complex team configurations
-- **Standardized tooling**: MCP provides reusable, discoverable tool definitions across agents
-- **Cost efficiency**: Dynamic model routing prevents overspending on simple tasks
-- **Interoperability**: A2A protocol enables cross-framework, cross-team agent collaboration
+
+- **Layered safety**: Six defense layers plus dedicated guardrail agents reduce the chance of any single bypass
+- **Observability**: Every interaction, decision, and tool call is traced and auditable
+- **Self-improving prompts**: Reflection-based optimization feeds back into prompt quality over time
+- **Flexible orchestration**: Hierarchical supervisor topology supports both simple and complex team configurations
+- **Standardized tooling**: MCP gives agents reusable, discoverable tool definitions
+- **Cost control**: Dynamic model routing avoids using expensive models for simple tasks
+- **Interoperability**: A2A protocol allows cross-framework, cross-team agent communication
 
 ### Negative / Risks
+
 - **Complexity** (Severity: High) — Hierarchical multi-agent + guardrail layer adds significant system complexity
 - **Latency overhead** (Severity: Medium) — Guardrail checks, routing decisions, and validation add per-request latency
 - **Cost of observability** (Severity: Medium) — Logging every interaction consumes storage and processing
@@ -401,7 +443,8 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 - **Prompt optimization risk** (Severity: Low) — AI-optimized prompts may drift from intended behavior
 
 ### Mitigations
-- Complexity → comprehensive documentation, modular architecture, independent subsystem testing
+
+- Complexity → per-subsystem design docs, modular architecture, independent subsystem testing
 - Latency → async guardrail checks where possible, cheap models for routing/classification
 - Observability cost → tiered log retention, sampling for low-value events, log compression
 - Guardrail FP → calibrate against legitimate request set, track FP rate, human review of blocked actions
@@ -468,6 +511,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 ## Safety Boundaries
 
 **Guardrail layers implemented** (per p. 286):
+
 - [x] Input validation/sanitization — all user inputs validated before agent processing
 - [x] Output filtering — agent outputs filtered before returning to users
 - [x] Behavioral constraints (system prompt) — each agent has explicit behavioral rules
@@ -476,6 +520,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 - [x] HITL escalation — human review for high-stakes actions
 
 **Escalation triggers** (required per p. 211):
+
 1. Guardrail agent detects policy violation on any team member
 2. Agent confidence < 0.6 on critical decisions
 3. Any irreversible action (data deletion, external API calls with side effects)
@@ -489,6 +534,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 11. LLM: All providers in failover chain unavailable
 
 **Irreversible actions requiring HITL approval**:
+
 - Deploying agent prompts to production
 - Granting new tool access to agents
 - Executing generated code outside sandbox
@@ -505,6 +551,7 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 ## Evaluation Plan
 
 **Metrics** (per p. 303):
+
 - Accuracy target: >90% task completion rate per agent
 - Latency target: P95 < 5s for agent response, P95 < 500ms for guardrail check
 - Token budget: configurable per agent, per team, and per task
@@ -512,9 +559,10 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 - Prompt optimization: measurable quality improvement per optimization cycle
 
 **Eval method**:
+
 - [x] Evalset file — per-agent regression test suites
 - [x] LLM-as-Judge rubric (dimensions: Clarity, Neutrality, Relevance, Completeness, Audience) (p. 306)
-- [x] Trajectory evaluation — full action sequence validation (p. 308)
+- [x] Trajectory evaluation — action sequence validation (p. 308)
 - [x] Human eval — gold standard for guardrail calibration and prompt approval
 
 **Baseline established**: Required before any agent goes to production
@@ -592,3 +640,4 @@ We are designing a comprehensive **Agentic Orchestration & Monitoring Platform**
 | 20 | Multi-Provider LLM Management | 20-multi-provider-llm-management.md |
 | 21 | Runtime & Deployment Environment | 21-runtime-deployment-environment.md |
 | 22 | Cost Analysis | 22-cost-analysis.md |
+| 23 | Open-Source Technology Map | 23-open-source-technology-map.md |

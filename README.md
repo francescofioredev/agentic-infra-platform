@@ -1,20 +1,19 @@
 # AgentForge
 
-**Agentic Orchestration & Monitoring Platform** — multi-tenant SaaS infrastructure for creating, composing, governing, and observing production-grade agentic AI systems.
+**Agentic Orchestration & Monitoring Platform** — multi-tenant SaaS for building, deploying, and managing multi-agent systems.
 
 > **Status**: Design phase — architecture decision records and subsystem specifications complete. No implementation yet.
 > **Design review score**: 62/62 ✓ ([see assessment](docs/architecture/10-review-checklist-assessment.md))
+>
+> **[Read the full documentation on the website →](https://francescofioredev.github.io/agentic-infra-platform/)**
 
 ---
 
 ## What is AgentForge?
 
-AgentForge is the infrastructure layer that sits between raw LLM APIs and production-grade agentic applications. It provides a unified control plane for:
+AgentForge handles the operational side of running LLM-based agents at scale: defining agents with versioned system prompts, wiring them into teams, enforcing safety policies across six guardrail layers, and tracing every decision end-to-end with OpenTelemetry.
 
-- **Building** agents with versioned, AI-optimizable system prompts
-- **Composing** agents into teams with explicit orchestration topologies
-- **Governing** behavior through a six-layer defense-in-depth guardrail model
-- **Observing** every interaction, decision, and tool call with full trace fidelity
+It targets multi-tenant environments where you need per-tenant isolation, RBAC, cost controls, and a repeatable deployment pipeline for agents.
 
 ---
 
@@ -22,22 +21,52 @@ AgentForge is the infrastructure layer that sits between raw LLM APIs and produc
 
 AgentForge uses a **Hierarchical Supervisor** topology across three levels, with cross-cutting guardrail agents monitoring every layer.
 
-```
-                    ┌─────────────────────────┐
-                    │   Platform Orchestrator │  Level 0 — Global routing
-                    │   (LLM-based router)    │  via cheap/fast model
-                    └────────────┬────────────┘
-                                 │
-               ┌─────────────────┼────────────────┐
-               │                 │                │
-      ┌────────┴───────┐ ┌───────┴──────┐ ┌───────┴────────┐
-      │  Team Alpha    │ │  Team Beta   │ │  Team Gamma    │  Level 1 — Team
-      │  Supervisor    │ │  Supervisor  │ │  Supervisor    │  coordination
-      └──┬──┬──┬───────┘ └──┬──┬────────┘ └──┬──┬──┬───────┘
-         │  │  │            │  │             │  │  │
-        A1 A2  A3          B1  B2           C1  C2 C3        Level 2 — Workers
+```mermaid
+graph TD
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef guardrail fill:#E74C3C,stroke:#C0392B,color:#fff
 
-    ── Guardrail Agents observe ALL levels ──────────────────
+    subgraph L0["Level 0 — Global Routing"]
+        direction TB
+        PO["Platform Orchestrator<br/><small>LLM-based router via cheap/fast model</small>"]
+    end
+
+    subgraph L1["Level 1 — Team Coordination"]
+        direction LR
+        TA["Team Alpha<br/>Supervisor"]
+        TB["Team Beta<br/>Supervisor"]
+        TG["Team Gamma<br/>Supervisor"]
+    end
+
+    subgraph L2["Level 2 — Workers"]
+        direction LR
+        A1["A1"] --- A2["A2"] --- A3["A3"]
+        B1["B1"] --- B2["B2"]
+        C1["C1"] --- C2["C2"] --- C3["C3"]
+    end
+
+    PO --> TA
+    PO --> TB
+    PO --> TG
+    TA --> A1
+    TA --> A2
+    TA --> A3
+    TB --> B1
+    TB --> B2
+    TG --> C1
+    TG --> C2
+    TG --> C3
+
+    GR["Guardrail Agents"]
+    GR -.->|"observe"| L0
+    GR -.->|"observe"| L1
+    GR -.->|"observe"| L2
+
+    class PO core
+    class TA,TB,TG infra
+    class A1,A2,A3,B1,B2,C1,C2,C3 core
+    class GR guardrail
 ```
 
 **Agent communication**:
@@ -47,7 +76,9 @@ AgentForge uses a **Hierarchical Supervisor** topology across three levels, with
 
 ---
 
-## Documentation
+## Repository Structure
+
+The repo is documentation only — no implementation code yet. Everything lives under `docs/`.
 
 ### Start here
 
@@ -133,15 +164,13 @@ AgentForge uses a **Hierarchical Supervisor** topology across three levels, with
 
 ## Design Principles
 
-Every subsystem and agent in AgentForge is designed around these non-negotiable rules:
-
 1. **Single responsibility** — every agent has one well-defined purpose; supervisors route, workers execute
 2. **Explicit contracts** — all inter-agent communication uses typed JSON Schema input/output schemas
-3. **Untrusted boundaries** — sub-agent outputs and tool results are treated as untrusted and validated at every boundary
-4. **Least Privilege** — every agent receives only the tools required for its specific task, no more
+3. **Untrusted boundaries** — sub-agent outputs and tool results are validated at every boundary
+4. **Least Privilege** — every agent receives only the tools required for its specific task
 5. **Defense in depth** — no single guardrail layer is sufficient; all six layers are always active
 6. **HITL gates** — irreversible actions (prompt promotion, new tool grants, policy changes) always require human approval
-7. **Full observability** — every decision, routing choice, and tool call is captured in a structured trace
+7. **Observability everywhere** — every decision, routing choice, and tool call is captured in a structured trace
 8. **Pattern citations** — all design decisions cite the *Agentic Design Patterns* PDF (482 pages) by page number
 
 ---
@@ -182,4 +211,16 @@ Human approval is required before any of the following actions:
 
 ---
 
-*All pattern references cite the "Agentic Design Patterns" PDF (482 pages). Start with [00-system-overview.md](docs/architecture/00-system-overview.md) for the full architecture picture.*
+## Contributing
+
+This project is in its early design phase and **contributions are very welcome**. Whether you want to challenge an architectural decision, suggest an alternative pattern, share real-world experience, or just ask a question — I'd love to hear from you.
+
+- **Open an Issue** to share feedback, report gaps, or propose ideas
+- **Start a Discussion** for broader architectural conversations
+- **Submit a Pull Request** if you want to improve or extend the documentation
+
+No contribution is too small — even a typo fix or a clarifying question helps move the project forward.
+
+---
+
+*All pattern references cite the "Agentic Design Patterns" PDF (482 pages). Start with [00-system-overview.md](docs/architecture/00-system-overview.md) for the full picture.*

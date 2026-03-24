@@ -16,34 +16,31 @@ Core responsibilities:
 
 This subsystem is classified as **high-risk** because it produces and executes arbitrary code. Every operation is subject to the platform's defense-in-depth security model (see System Overview, Section 3.4), and code execution is always treated as an irreversible tool invocation (p. 91) requiring additional gating.
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                    Code Generation Tools Subsystem                   │
-│                                                                      │
-│  ┌────────────┐   ┌────────────┐   ┌────────────┐   ┌────────────┐   │
-│  │  Code      │──>│  Code      │──>│  Test      │──>│  Code      │   │
-│  │  Generator │   │  Reviewer  │   │  Runner    │   │  Executor  │   │
-│  │  (LLM)     │   │  (LLM)     │   │  (Sandbox) │   │  (Sandbox) │   │
-│  └─────┬──────┘   └─────┬──────┘   └─────┬──────┘   └─────┬──────┘   │
-│        │                │                │                │          │
-│        └────────────────┴────────────────┴────────────────┘          │
-│                              │                                       │
-│                    ┌─────────┴──────────┐                            │
-│                    │  Reflection Loop   │                            │
-│                    │  Controller        │                            │
-│                    └────────────────────┘                            │
-│                                                                      │
-│  ┌──────────────────────────────────────────────────────────────┐    │
-│  │  MCP Server (FastMCP)                                        │    │
-│  │  Tools: generate_code | execute_code | review_code |         │    │
-│  │         run_tests | refine_code                              │    │
-│  └──────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-│  ┌──────────────────────────────────────────────────────────────┐    │
-│  │  Sandbox Manager (Firecracker / gVisor)                      │    │
-│  │  Resource Limits | Network Isolation | Filesystem Jailing    │    │
-│  └──────────────────────────────────────────────────────────────┘    │
-└──────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph CGT["Code Generation Tools Subsystem"]
+        direction TB
+        GEN["Code Generator<br/><small>LLM</small>"] --> REV["Code Reviewer<br/><small>LLM</small>"]
+        REV --> TEST["Test Runner<br/><small>Sandbox</small>"]
+        TEST --> EXEC["Code Executor<br/><small>Sandbox</small>"]
+        GEN --> RLC["Reflection Loop Controller"]
+        REV --> RLC
+        TEST --> RLC
+        EXEC --> RLC
+        MCP["MCP Server (FastMCP)<br/><small>Tools: generate_code | execute_code | review_code |<br/>run_tests | refine_code</small>"]
+        SBX["Sandbox Manager<br/><small>Firecracker / gVisor<br/>Resource Limits | Network Isolation | Filesystem Jailing</small>"]
+    end
+
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef guardrail fill:#E74C3C,stroke:#C0392B,color:#fff
+    classDef runtime fill:#E67E22,stroke:#CA6F1E,color:#fff
+
+    class GEN,REV core
+    class TEST,EXEC runtime
+    class RLC infra
+    class MCP core
+    class SBX guardrail
 ```
 
 ---
@@ -54,27 +51,30 @@ The pipeline follows a linear-then-iterative flow: **Prompt --> Generate --> Rev
 
 ### 2.1 Pipeline Stages
 
-```
- ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
- │  Prompt  │────>│ Generate │────>│  Review  │────>│   Test   │
- │ (User    │     │ (LLM)    │     │ (Critic) │     │ (Sandbox)│
- │  Spec)   │     │          │     │          │     │          │
- └──────────┘     └──────────┘     └────┬─────┘     └────┬─────┘
-                                        │                │
-                                        │   ┌────────────┘
-                                        │   │
-                                        ▼   ▼
-                                   ┌──────────┐
-                                   │  Iterate │  (Reflection loop,
-                                   │  / Refine│   max N iterations)
-                                   └────┬─────┘
-                                        │
-                                        ▼
-                                   ┌──────────┐
-                                   │  Output  │
-                                   │ (Approved│
-                                   │   Code)  │
-                                   └──────────┘
+```mermaid
+graph TD
+    PROMPT["Prompt<br/><small>User Spec</small>"]
+    GEN["Generate<br/><small>LLM</small>"]
+    REV["Review<br/><small>Critic</small>"]
+    TEST["Test<br/><small>Sandbox</small>"]
+    ITER["Iterate / Refine<br/><small>Reflection loop, max N iterations</small>"]
+    OUT["Output<br/><small>Approved Code</small>"]
+
+    PROMPT --> GEN --> REV --> TEST
+    REV --> ITER
+    TEST --> ITER
+    ITER --> OUT
+
+    classDef userFacing fill:#2ECC71,stroke:#1FA855,color:#fff
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef runtime fill:#E67E22,stroke:#CA6F1E,color:#fff
+
+    class PROMPT userFacing
+    class GEN,REV core
+    class TEST runtime
+    class ITER infra
+    class OUT userFacing
 ```
 
 **Stage 1 -- Prompt Composition**: The user's natural-language specification is enriched with context: target language, framework constraints, coding style guidelines, and any existing code context. This follows the prompt chaining principle (p. 1) where each stage's output becomes the next stage's input.
@@ -89,203 +89,205 @@ The pipeline follows a linear-then-iterative flow: **Prompt --> Generate --> Rev
 
 ### 2.2 Pipeline Pseudocode
 
-```python
-import uuid
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Optional
+??? example "View Python pseudocode"
 
-from opentelemetry import trace
+    ```python
+    import uuid
+    from dataclasses import dataclass, field
+    from enum import Enum
+    from typing import Optional
 
-tracer = trace.get_tracer("agentforge.codegen")
+    from opentelemetry import trace
 
-
-class PipelineStatus(Enum):
-    SUCCESS = "success"
-    REVIEW_FAILED = "review_failed"
-    TESTS_FAILED = "tests_failed"
-    MAX_ITERATIONS = "max_iterations_reached"
-    EXECUTION_BLOCKED = "execution_blocked"
+    tracer = trace.get_tracer("agentforge.codegen")
 
 
-@dataclass
-class CodeSpec:
-    """Natural-language code specification from the user."""
-    description: str
-    language: str
-    framework: Optional[str] = None
-    constraints: list[str] = field(default_factory=list)
-    test_requirements: list[str] = field(default_factory=list)
-    existing_context: Optional[str] = None
+    class PipelineStatus(Enum):
+        SUCCESS = "success"
+        REVIEW_FAILED = "review_failed"
+        TESTS_FAILED = "tests_failed"
+        MAX_ITERATIONS = "max_iterations_reached"
+        EXECUTION_BLOCKED = "execution_blocked"
 
 
-@dataclass
-class GeneratedCode:
-    """Structured output from the code generator."""
-    code: str
-    language: str
-    explanation: str
-    confidence: float  # 0.0 - 1.0
-    imports: list[str] = field(default_factory=list)
+    @dataclass
+    class CodeSpec:
+        """Natural-language code specification from the user."""
+        description: str
+        language: str
+        framework: Optional[str] = None
+        constraints: list[str] = field(default_factory=list)
+        test_requirements: list[str] = field(default_factory=list)
+        existing_context: Optional[str] = None
 
 
-@dataclass
-class ReviewResult:
-    """Structured output from the code reviewer (Critic)."""
-    approved: bool
-    correctness_score: float  # 0.0 - 1.0
-    security_score: float
-    style_score: float
-    issues: list[dict]  # [{"severity": "high", "description": "...", "line": 12}]
-    suggestions: list[str]
+    @dataclass
+    class GeneratedCode:
+        """Structured output from the code generator."""
+        code: str
+        language: str
+        explanation: str
+        confidence: float  # 0.0 - 1.0
+        imports: list[str] = field(default_factory=list)
 
 
-@dataclass
-class TestResult:
-    """Structured output from the test runner."""
-    passed: bool
-    total_tests: int
-    passed_tests: int
-    failed_tests: int
-    failures: list[dict]  # [{"test_name": "...", "error": "...", "traceback": "..."}]
-    execution_time_ms: float
-    stdout: str
-    stderr: str
+    @dataclass
+    class ReviewResult:
+        """Structured output from the code reviewer (Critic)."""
+        approved: bool
+        correctness_score: float  # 0.0 - 1.0
+        security_score: float
+        style_score: float
+        issues: list[dict]  # [{"severity": "high", "description": "...", "line": 12}]
+        suggestions: list[str]
 
 
-@dataclass
-class PipelineResult:
-    """Final output of the code generation pipeline."""
-    status: PipelineStatus
-    code: Optional[GeneratedCode]
-    review: Optional[ReviewResult]
-    test_result: Optional[TestResult]
-    iterations: int
-    trace_id: str
+    @dataclass
+    class TestResult:
+        """Structured output from the test runner."""
+        passed: bool
+        total_tests: int
+        passed_tests: int
+        failed_tests: int
+        failures: list[dict]  # [{"test_name": "...", "error": "...", "traceback": "..."}]
+        execution_time_ms: float
+        stdout: str
+        stderr: str
 
 
-class CodeGenerationPipeline:
-    """
-    Orchestrates the full code generation lifecycle:
-    Prompt -> Generate -> Review -> Test -> Iterate.
+    @dataclass
+    class PipelineResult:
+        """Final output of the code generation pipeline."""
+        status: PipelineStatus
+        code: Optional[GeneratedCode]
+        review: Optional[ReviewResult]
+        test_result: Optional[TestResult]
+        iterations: int
+        trace_id: str
 
-    Implements the Generator-Critic reflection pattern (p. 65)
-    with a maximum iteration bound (p. 67).
-    """
 
-    def __init__(
-        self,
-        generator: "CodeGeneratorAgent",
-        reviewer: "CodeReviewAgent",
-        test_runner: "TestRunner",
-        sandbox: "SandboxManager",
-        max_iterations: int = 5,
-        review_threshold: float = 0.7,
-    ):
-        self.generator = generator
-        self.reviewer = reviewer
-        self.test_runner = test_runner
-        self.sandbox = sandbox
-        self.max_iterations = max_iterations
-        self.review_threshold = review_threshold
-
-    async def run(self, spec: CodeSpec) -> PipelineResult:
+    class CodeGenerationPipeline:
         """
-        Execute the full pipeline with reflection loop.
+        Orchestrates the full code generation lifecycle:
+        Prompt -> Generate -> Review -> Test -> Iterate.
 
-        The reflection loop (p. 65) alternates between:
-          - Generator: produces/refines code
-          - Critic: reviews code for correctness, security, style
-          - Test runner: validates code against test suite
-
-        Loop terminates when:
-          1. Review passes AND tests pass -> SUCCESS
-          2. max_iterations reached -> MAX_ITERATIONS (p. 67)
+        Implements the Generator-Critic reflection pattern (p. 65)
+        with a maximum iteration bound (p. 67).
         """
-        trace_id = str(uuid.uuid4())
-        feedback_history: list[str] = []
 
-        with tracer.start_as_current_span("codegen.pipeline", attributes={
-            "trace_id": trace_id,
-            "spec.language": spec.language,
-            "max_iterations": self.max_iterations,
-        }) as span:
+        def __init__(
+            self,
+            generator: "CodeGeneratorAgent",
+            reviewer: "CodeReviewAgent",
+            test_runner: "TestRunner",
+            sandbox: "SandboxManager",
+            max_iterations: int = 5,
+            review_threshold: float = 0.7,
+        ):
+            self.generator = generator
+            self.reviewer = reviewer
+            self.test_runner = test_runner
+            self.sandbox = sandbox
+            self.max_iterations = max_iterations
+            self.review_threshold = review_threshold
 
-            for iteration in range(1, self.max_iterations + 1):
-                span.set_attribute("current_iteration", iteration)
+        async def run(self, spec: CodeSpec) -> PipelineResult:
+            """
+            Execute the full pipeline with reflection loop.
 
-                # --- Stage 1-2: Generate code ---
-                with tracer.start_as_current_span("codegen.generate"):
-                    generated = await self.generator.generate(
-                        spec=spec,
-                        feedback=feedback_history,
-                        iteration=iteration,
-                    )
+            The reflection loop (p. 65) alternates between:
+              - Generator: produces/refines code
+              - Critic: reviews code for correctness, security, style
+              - Test runner: validates code against test suite
 
-                # --- Stage 3: Review code (Critic, p. 65) ---
-                with tracer.start_as_current_span("codegen.review"):
-                    review = await self.reviewer.review(
-                        code=generated,
-                        spec=spec,
-                    )
+            Loop terminates when:
+              1. Review passes AND tests pass -> SUCCESS
+              2. max_iterations reached -> MAX_ITERATIONS (p. 67)
+            """
+            trace_id = str(uuid.uuid4())
+            feedback_history: list[str] = []
 
-                if not review.approved or review.correctness_score < self.review_threshold:
-                    # Critic rejected: feed issues back to generator
-                    feedback_history.append(
-                        f"[Iteration {iteration}] Review failed: "
-                        + "; ".join(issue["description"] for issue in review.issues)
-                    )
-                    span.add_event("review_rejected", {
-                        "iteration": iteration,
-                        "correctness_score": review.correctness_score,
-                        "issue_count": len(review.issues),
-                    })
-                    continue  # Loop back to generation
+            with tracer.start_as_current_span("codegen.pipeline", attributes={
+                "trace_id": trace_id,
+                "spec.language": spec.language,
+                "max_iterations": self.max_iterations,
+            }) as span:
 
-                # --- Stage 4: Run tests in sandbox ---
-                with tracer.start_as_current_span("codegen.test"):
-                    test_result = await self.test_runner.run(
-                        code=generated,
-                        spec=spec,
-                        sandbox=self.sandbox,
-                    )
+                for iteration in range(1, self.max_iterations + 1):
+                    span.set_attribute("current_iteration", iteration)
 
-                if test_result.passed:
-                    span.set_attribute("result", "success")
-                    return PipelineResult(
-                        status=PipelineStatus.SUCCESS,
-                        code=generated,
-                        review=review,
-                        test_result=test_result,
-                        iterations=iteration,
-                        trace_id=trace_id,
-                    )
-                else:
-                    # Tests failed: feed failures back to generator
-                    # (SICA pattern: test-driven feedback, p. 169)
-                    feedback_history.append(
-                        f"[Iteration {iteration}] Test failures: "
-                        + "; ".join(
-                            f"{f['test_name']}: {f['error']}"
-                            for f in test_result.failures
+                    # --- Stage 1-2: Generate code ---
+                    with tracer.start_as_current_span("codegen.generate"):
+                        generated = await self.generator.generate(
+                            spec=spec,
+                            feedback=feedback_history,
+                            iteration=iteration,
                         )
-                    )
-                    span.add_event("tests_failed", {
-                        "iteration": iteration,
-                        "failed_tests": test_result.failed_tests,
-                    })
 
-            # Max iterations reached (p. 67)
-            span.set_attribute("result", "max_iterations_reached")
-            return PipelineResult(
-                status=PipelineStatus.MAX_ITERATIONS,
-                code=generated,
-                review=review,
-                test_result=test_result,
-                iterations=self.max_iterations,
-                trace_id=trace_id,
-            )
-```
+                    # --- Stage 3: Review code (Critic, p. 65) ---
+                    with tracer.start_as_current_span("codegen.review"):
+                        review = await self.reviewer.review(
+                            code=generated,
+                            spec=spec,
+                        )
+
+                    if not review.approved or review.correctness_score < self.review_threshold:
+                        # Critic rejected: feed issues back to generator
+                        feedback_history.append(
+                            f"[Iteration {iteration}] Review failed: "
+                            + "; ".join(issue["description"] for issue in review.issues)
+                        )
+                        span.add_event("review_rejected", {
+                            "iteration": iteration,
+                            "correctness_score": review.correctness_score,
+                            "issue_count": len(review.issues),
+                        })
+                        continue  # Loop back to generation
+
+                    # --- Stage 4: Run tests in sandbox ---
+                    with tracer.start_as_current_span("codegen.test"):
+                        test_result = await self.test_runner.run(
+                            code=generated,
+                            spec=spec,
+                            sandbox=self.sandbox,
+                        )
+
+                    if test_result.passed:
+                        span.set_attribute("result", "success")
+                        return PipelineResult(
+                            status=PipelineStatus.SUCCESS,
+                            code=generated,
+                            review=review,
+                            test_result=test_result,
+                            iterations=iteration,
+                            trace_id=trace_id,
+                        )
+                    else:
+                        # Tests failed: feed failures back to generator
+                        # (SICA pattern: test-driven feedback, p. 169)
+                        feedback_history.append(
+                            f"[Iteration {iteration}] Test failures: "
+                            + "; ".join(
+                                f"{f['test_name']}: {f['error']}"
+                                for f in test_result.failures
+                            )
+                        )
+                        span.add_event("tests_failed", {
+                            "iteration": iteration,
+                            "failed_tests": test_result.failed_tests,
+                        })
+
+                # Max iterations reached (p. 67)
+                span.set_attribute("result", "max_iterations_reached")
+                return PipelineResult(
+                    status=PipelineStatus.MAX_ITERATIONS,
+                    code=generated,
+                    review=review,
+                    test_result=test_result,
+                    iterations=self.max_iterations,
+                    trace_id=trace_id,
+                )
+    ```
 
 ---
 
@@ -295,31 +297,28 @@ All code execution occurs inside a sandbox that enforces the **Least Privilege**
 
 ### 3.1 Isolation Model
 
-```
-┌──────────────────────────────────────────────────────────┐
-│  Host (AgentForge Platform)                              │
-│                                                          │
-│  ┌─────────────────────────────────────────────────────┐ │
-│  │  Sandbox Manager                                    │ │
-│  │                                                     │ │
-│  │  ┌──────────────┐  ┌──────────────┐                 │ │
-│  │  │ MicroVM A    │  │ MicroVM B    │   ...           │ │
-│  │  │ (Firecracker)│  │ (Firecracker)│                 │ │
-│  │  │              │  │              │                 │ │
-│  │  │  ┌────────┐  │  │  ┌────────┐  │                 │ │
-│  │  │  │ User   │  │  │  │ User   │  │                 │ │
-│  │  │  │ Code   │  │  │  │ Code   │  │                 │ │
-│  │  │  └────────┘  │  │  └────────┘  │                 │ │
-│  │  │              │  │              │                 │ │
-│  │  │  Resources:  │  │  Resources:  │                 │ │
-│  │  │  CPU: 1 core │  │  CPU: 1 core │                 │ │
-│  │  │  RAM: 256MB  │  │  RAM: 256MB  │                 │ │
-│  │  │  Disk: 100MB │  │  Disk: 100MB │                 │ │
-│  │  │  Net: NONE   │  │  Net: NONE   │                 │ │
-│  │  │  Time: 30s   │  │  Time: 30s   │                 │ │
-│  │  └──────────────┘  └──────────────┘                 │ │
-│  └─────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph HOST["Host (AgentForge Platform)"]
+        subgraph SM["Sandbox Manager"]
+            subgraph MVA["MicroVM A (Firecracker)"]
+                UCA["User Code"]
+                RA["Resources:<br/><small>CPU: 1 core | RAM: 256MB<br/>Disk: 100MB | Net: NONE | Time: 30s</small>"]
+            end
+            subgraph MVB["MicroVM B (Firecracker)"]
+                UCB["User Code"]
+                RB["Resources:<br/><small>CPU: 1 core | RAM: 256MB<br/>Disk: 100MB | Net: NONE | Time: 30s</small>"]
+            end
+        end
+    end
+
+    classDef guardrail fill:#E74C3C,stroke:#C0392B,color:#fff
+    classDef runtime fill:#E67E22,stroke:#CA6F1E,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+
+    class UCA,UCB runtime
+    class RA,RB infra
+    class MVA,MVB guardrail
 ```
 
 The sandbox uses **Firecracker microVMs** (primary) or **gVisor** (alternative) to provide hardware-level isolation. Each code execution request receives its own ephemeral microVM that is destroyed after execution completes.
@@ -353,213 +352,215 @@ The sandbox uses **Firecracker microVMs** (primary) or **gVisor** (alternative) 
 
 ### 3.4 Sandbox Execution Pseudocode
 
-```python
-import asyncio
-import time
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Optional
+??? example "View Python pseudocode"
 
-from opentelemetry import trace
+    ```python
+    import asyncio
+    import time
+    from dataclasses import dataclass, field
+    from enum import Enum
+    from typing import Optional
 
-tracer = trace.get_tracer("agentforge.codegen.sandbox")
+    from opentelemetry import trace
 
-
-class SandboxStatus(Enum):
-    READY = "ready"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    TIMEOUT = "timeout"
-    OOM_KILLED = "oom_killed"
-    ERROR = "error"
-    DESTROYED = "destroyed"
+    tracer = trace.get_tracer("agentforge.codegen.sandbox")
 
 
-@dataclass
-class SandboxConfig:
-    """Configuration for a sandbox instance. Enforces Least Privilege (p. 288)."""
-    cpu_count: int = 1
-    memory_mb: int = 256
-    disk_mb: int = 100
-    timeout_seconds: int = 30
-    max_processes: int = 32
-    network_enabled: bool = False
-    network_allowlist: list[str] = field(default_factory=list)
-    allowed_imports: list[str] = field(default_factory=lambda: [
-        "json", "math", "datetime", "collections", "itertools",
-        "functools", "typing", "dataclasses", "re", "hashlib",
-        "base64", "csv", "io", "os.path", "pathlib", "textwrap",
-    ])
-    allowed_packages: list[str] = field(default_factory=lambda: [
-        "numpy", "pandas", "requests",  # requests only if network enabled
-    ])
+    class SandboxStatus(Enum):
+        READY = "ready"
+        RUNNING = "running"
+        COMPLETED = "completed"
+        TIMEOUT = "timeout"
+        OOM_KILLED = "oom_killed"
+        ERROR = "error"
+        DESTROYED = "destroyed"
 
 
-@dataclass
-class ExecutionResult:
-    """Result of a sandbox execution."""
-    status: SandboxStatus
-    stdout: str
-    stderr: str
-    exit_code: int
-    execution_time_ms: float
-    memory_peak_mb: float
-    files_created: list[str] = field(default_factory=list)
+    @dataclass
+    class SandboxConfig:
+        """Configuration for a sandbox instance. Enforces Least Privilege (p. 288)."""
+        cpu_count: int = 1
+        memory_mb: int = 256
+        disk_mb: int = 100
+        timeout_seconds: int = 30
+        max_processes: int = 32
+        network_enabled: bool = False
+        network_allowlist: list[str] = field(default_factory=list)
+        allowed_imports: list[str] = field(default_factory=lambda: [
+            "json", "math", "datetime", "collections", "itertools",
+            "functools", "typing", "dataclasses", "re", "hashlib",
+            "base64", "csv", "io", "os.path", "pathlib", "textwrap",
+        ])
+        allowed_packages: list[str] = field(default_factory=lambda: [
+            "numpy", "pandas", "requests",  # requests only if network enabled
+        ])
 
 
-class SandboxManager:
-    """
-    Manages ephemeral sandbox instances for code execution.
+    @dataclass
+    class ExecutionResult:
+        """Result of a sandbox execution."""
+        status: SandboxStatus
+        stdout: str
+        stderr: str
+        exit_code: int
+        execution_time_ms: float
+        memory_peak_mb: float
+        files_created: list[str] = field(default_factory=list)
 
-    Each execution gets a fresh microVM. Code outputs are
-    treated as untrusted (p. 289) and sanitized before
-    returning to the calling agent.
 
-    A checkpoint is created before execution (p. 290) so the
-    platform can recover if the sandbox misbehaves.
-    """
-
-    def __init__(self, config: SandboxConfig):
-        self.config = config
-        self._pool: asyncio.Queue = asyncio.Queue()
-
-    async def execute(
-        self,
-        code: str,
-        language: str,
-        execution_id: str,
-    ) -> ExecutionResult:
+    class SandboxManager:
         """
-        Execute code in an isolated sandbox.
+        Manages ephemeral sandbox instances for code execution.
 
-        Steps:
-          1. Validate code against import allowlist
-          2. Create checkpoint (p. 290)
-          3. Provision ephemeral microVM
-          4. Write code to sandbox workspace
-          5. Execute with resource limits and timeout
-          6. Capture output and sanitize (untrusted, p. 289)
-          7. Destroy sandbox
+        Each execution gets a fresh microVM. Code outputs are
+        treated as untrusted (p. 289) and sanitized before
+        returning to the calling agent.
+
+        A checkpoint is created before execution (p. 290) so the
+        platform can recover if the sandbox misbehaves.
         """
-        with tracer.start_as_current_span("sandbox.execute", attributes={
-            "execution_id": execution_id,
-            "language": language,
-            "timeout_seconds": self.config.timeout_seconds,
-        }) as span:
 
-            # Step 1: Pre-execution validation
-            # Reject code that imports disallowed modules
-            validation_result = self._validate_imports(code, language)
-            if not validation_result["valid"]:
-                span.set_attribute("blocked_reason", "disallowed_import")
-                return ExecutionResult(
-                    status=SandboxStatus.ERROR,
-                    stdout="",
-                    stderr=f"Blocked import: {validation_result['violations']}",
-                    exit_code=-1,
-                    execution_time_ms=0,
-                    memory_peak_mb=0,
-                )
+        def __init__(self, config: SandboxConfig):
+            self.config = config
+            self._pool: asyncio.Queue = asyncio.Queue()
 
-            # Step 2: Checkpoint before execution (p. 290)
-            checkpoint = await self._create_checkpoint(execution_id)
-            span.add_event("checkpoint_created", {"checkpoint_id": checkpoint.id})
+        async def execute(
+            self,
+            code: str,
+            language: str,
+            execution_id: str,
+        ) -> ExecutionResult:
+            """
+            Execute code in an isolated sandbox.
 
-            # Step 3: Provision ephemeral sandbox
-            sandbox_instance = await self._provision_sandbox(execution_id)
+            Steps:
+              1. Validate code against import allowlist
+              2. Create checkpoint (p. 290)
+              3. Provision ephemeral microVM
+              4. Write code to sandbox workspace
+              5. Execute with resource limits and timeout
+              6. Capture output and sanitize (untrusted, p. 289)
+              7. Destroy sandbox
+            """
+            with tracer.start_as_current_span("sandbox.execute", attributes={
+                "execution_id": execution_id,
+                "language": language,
+                "timeout_seconds": self.config.timeout_seconds,
+            }) as span:
 
-            try:
-                # Step 4: Write code to sandbox workspace
-                await sandbox_instance.write_file(
-                    path="/tmp/workspace/main.py" if language == "python"
-                    else f"/tmp/workspace/main.{language}",
-                    content=code,
-                )
-
-                # Step 5: Execute with timeout enforcement
-                start_time = time.monotonic()
-                try:
-                    raw_result = await asyncio.wait_for(
-                        sandbox_instance.run(
-                            command=self._build_run_command(language),
-                            cwd="/tmp/workspace",
-                        ),
-                        timeout=self.config.timeout_seconds,
-                    )
-                    execution_time = (time.monotonic() - start_time) * 1000
-                except asyncio.TimeoutError:
-                    execution_time = self.config.timeout_seconds * 1000
-                    span.set_attribute("result", "timeout")
+                # Step 1: Pre-execution validation
+                # Reject code that imports disallowed modules
+                validation_result = self._validate_imports(code, language)
+                if not validation_result["valid"]:
+                    span.set_attribute("blocked_reason", "disallowed_import")
                     return ExecutionResult(
-                        status=SandboxStatus.TIMEOUT,
+                        status=SandboxStatus.ERROR,
                         stdout="",
-                        stderr=f"Execution exceeded {self.config.timeout_seconds}s timeout",
+                        stderr=f"Blocked import: {validation_result['violations']}",
                         exit_code=-1,
-                        execution_time_ms=execution_time,
-                        memory_peak_mb=self.config.memory_mb,
+                        execution_time_ms=0,
+                        memory_peak_mb=0,
                     )
 
-                # Step 6: Sanitize output (untrusted, p. 289)
-                sanitized_stdout = self._sanitize_output(raw_result.stdout)
-                sanitized_stderr = self._sanitize_output(raw_result.stderr)
+                # Step 2: Checkpoint before execution (p. 290)
+                checkpoint = await self._create_checkpoint(execution_id)
+                span.add_event("checkpoint_created", {"checkpoint_id": checkpoint.id})
 
-                span.set_attribute("result", "completed")
-                span.set_attribute("exit_code", raw_result.exit_code)
+                # Step 3: Provision ephemeral sandbox
+                sandbox_instance = await self._provision_sandbox(execution_id)
 
-                return ExecutionResult(
-                    status=SandboxStatus.COMPLETED,
-                    stdout=sanitized_stdout,
-                    stderr=sanitized_stderr,
-                    exit_code=raw_result.exit_code,
-                    execution_time_ms=execution_time,
-                    memory_peak_mb=raw_result.memory_peak_mb,
-                    files_created=raw_result.files_created,
-                )
+                try:
+                    # Step 4: Write code to sandbox workspace
+                    await sandbox_instance.write_file(
+                        path="/tmp/workspace/main.py" if language == "python"
+                        else f"/tmp/workspace/main.{language}",
+                        content=code,
+                    )
 
-            finally:
-                # Step 7: Always destroy sandbox after execution
-                await self._destroy_sandbox(sandbox_instance)
-                span.add_event("sandbox_destroyed")
+                    # Step 5: Execute with timeout enforcement
+                    start_time = time.monotonic()
+                    try:
+                        raw_result = await asyncio.wait_for(
+                            sandbox_instance.run(
+                                command=self._build_run_command(language),
+                                cwd="/tmp/workspace",
+                            ),
+                            timeout=self.config.timeout_seconds,
+                        )
+                        execution_time = (time.monotonic() - start_time) * 1000
+                    except asyncio.TimeoutError:
+                        execution_time = self.config.timeout_seconds * 1000
+                        span.set_attribute("result", "timeout")
+                        return ExecutionResult(
+                            status=SandboxStatus.TIMEOUT,
+                            stdout="",
+                            stderr=f"Execution exceeded {self.config.timeout_seconds}s timeout",
+                            exit_code=-1,
+                            execution_time_ms=execution_time,
+                            memory_peak_mb=self.config.memory_mb,
+                        )
 
-    def _validate_imports(self, code: str, language: str) -> dict:
-        """
-        Static analysis: ensure code only imports allowed modules.
-        This is a defense-in-depth check; the sandbox also restricts
-        available packages at the filesystem level.
-        """
-        # Implementation: AST-based import extraction for Python,
-        # regex-based for other languages.
-        ...
+                    # Step 6: Sanitize output (untrusted, p. 289)
+                    sanitized_stdout = self._sanitize_output(raw_result.stdout)
+                    sanitized_stderr = self._sanitize_output(raw_result.stderr)
 
-    def _sanitize_output(self, output: str) -> str:
-        """
-        Sanitize sandbox output before returning to the agent.
-        Strips ANSI escape codes, truncates to max length,
-        removes any leaked filesystem paths or system info.
-        """
-        ...
+                    span.set_attribute("result", "completed")
+                    span.set_attribute("exit_code", raw_result.exit_code)
 
-    def _build_run_command(self, language: str) -> list[str]:
-        commands = {
-            "python": ["python3", "-u", "/tmp/workspace/main.py"],
-            "javascript": ["node", "/tmp/workspace/main.js"],
-            "go": ["go", "run", "/tmp/workspace/main.go"],
-            "rust": ["bash", "-c", "cd /tmp/workspace && rustc main.rs -o main && ./main"],
-        }
-        return commands.get(language, ["python3", "-u", "/tmp/workspace/main.py"])
+                    return ExecutionResult(
+                        status=SandboxStatus.COMPLETED,
+                        stdout=sanitized_stdout,
+                        stderr=sanitized_stderr,
+                        exit_code=raw_result.exit_code,
+                        execution_time_ms=execution_time,
+                        memory_peak_mb=raw_result.memory_peak_mb,
+                        files_created=raw_result.files_created,
+                    )
 
-    async def _create_checkpoint(self, execution_id: str):
-        """Create a checkpoint so we can recover if execution causes issues (p. 290)."""
-        ...
+                finally:
+                    # Step 7: Always destroy sandbox after execution
+                    await self._destroy_sandbox(sandbox_instance)
+                    span.add_event("sandbox_destroyed")
 
-    async def _provision_sandbox(self, execution_id: str):
-        """Spin up a fresh Firecracker microVM or gVisor container."""
-        ...
+        def _validate_imports(self, code: str, language: str) -> dict:
+            """
+            Static analysis: ensure code only imports allowed modules.
+            This is a defense-in-depth check; the sandbox also restricts
+            available packages at the filesystem level.
+            """
+            # Implementation: AST-based import extraction for Python,
+            # regex-based for other languages.
+            ...
 
-    async def _destroy_sandbox(self, sandbox_instance):
-        """Tear down and deallocate the sandbox. Idempotent."""
-        ...
-```
+        def _sanitize_output(self, output: str) -> str:
+            """
+            Sanitize sandbox output before returning to the agent.
+            Strips ANSI escape codes, truncates to max length,
+            removes any leaked filesystem paths or system info.
+            """
+            ...
+
+        def _build_run_command(self, language: str) -> list[str]:
+            commands = {
+                "python": ["python3", "-u", "/tmp/workspace/main.py"],
+                "javascript": ["node", "/tmp/workspace/main.js"],
+                "go": ["go", "run", "/tmp/workspace/main.go"],
+                "rust": ["bash", "-c", "cd /tmp/workspace && rustc main.rs -o main && ./main"],
+            }
+            return commands.get(language, ["python3", "-u", "/tmp/workspace/main.py"])
+
+        async def _create_checkpoint(self, execution_id: str):
+            """Create a checkpoint so we can recover if execution causes issues (p. 290)."""
+            ...
+
+        async def _provision_sandbox(self, execution_id: str):
+            """Spin up a fresh Firecracker microVM or gVisor container."""
+            ...
+
+        async def _destroy_sandbox(self, sandbox_instance):
+            """Tear down and deallocate the sandbox. Idempotent."""
+            ...
+    ```
 
 ---
 
@@ -591,22 +592,26 @@ The security review is particularly critical for a code generation system. The r
 
 ### 4.3 Review Flow
 
-```
-┌──────────────┐     ┌─────────────────────────────────────────┐
-│  Generated   │────>│  Code Review Agent (Critic, p. 65)      │
-│  Code        │     │                                         │
-└──────────────┘     │  1. Static analysis (AST-based)         │
-                     │  2. LLM-based semantic review           │
-                     │  3. Security pattern matching           │
-                     │  4. Style/lint check                    │
-                     │                                         │
-                     │  Output: ReviewResult                   │
-                     │    - approved: bool                     │
-                     │    - scores: {correctness, security,    │
-                     │               style, efficiency}        │
-                     │    - issues: [{severity, description,   │
-                     │               line, suggestion}]        │
-                     └─────────────────────────────────────────┘
+```mermaid
+graph LR
+    CODE["Generated Code"] --> CRA["Code Review Agent<br/><small>Critic, p. 65</small>"]
+    CRA --> S1["1. Static analysis<br/><small>AST-based</small>"]
+    CRA --> S2["2. LLM-based<br/>semantic review"]
+    CRA --> S3["3. Security<br/>pattern matching"]
+    CRA --> S4["4. Style/lint check"]
+    S1 --> RR["ReviewResult<br/><small>approved: bool<br/>scores: correctness, security, style, efficiency<br/>issues: severity, description, line, suggestion</small>"]
+    S2 --> RR
+    S3 --> RR
+    S4 --> RR
+
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef userFacing fill:#2ECC71,stroke:#1FA855,color:#fff
+
+    class CODE core
+    class CRA infra
+    class S1,S2,S3,S4 core
+    class RR userFacing
 ```
 
 The reviewer combines two approaches:
@@ -632,22 +637,23 @@ Tests can originate from three sources:
 
 ### 5.2 Test Execution Flow
 
-```
-┌────────────┐    ┌─────────────────┐    ┌──────────────┐
-│ Generated  │    │ Test Generation │    │ Sandbox      │
-│ Code       │───>│ (from spec &    │───>│ Execution    │
-│            │    │  user tests)    │    │              │
-└────────────┘    └─────────────────┘    └──────┬───────┘
-                                                │
-                                    ┌───────────┴───────────┐
-                                    │                       │
-                               ┌────┴─────┐           ┌─────┴──────┐
-                               │  PASS    │           │  FAIL      │
-                               │          │           │            │
-                               │  -> next │           │  -> feed   │
-                               │  stage   │           │  back to   │
-                               │          │           │  generator │
-                               └──────────┘           └────────────┘
+```mermaid
+graph TD
+    CODE["Generated Code"] --> TGEN["Test Generation<br/><small>from spec & user tests</small>"]
+    TGEN --> SBX["Sandbox Execution"]
+    SBX --> PASS["PASS<br/><small>next stage</small>"]
+    SBX --> FAIL["FAIL<br/><small>feed back to generator</small>"]
+
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef runtime fill:#E67E22,stroke:#CA6F1E,color:#fff
+    classDef pass fill:#2ECC71,stroke:#1FA855,color:#fff
+    classDef fail fill:#E74C3C,stroke:#C0392B,color:#fff
+
+    class CODE core
+    class TGEN core
+    class SBX runtime
+    class PASS pass
+    class FAIL fail
 ```
 
 ### 5.3 Result Interpretation
@@ -677,302 +683,304 @@ All code generation capabilities are exposed via an **MCP server** (p. 155-165),
 
 ### 6.2 MCP Server Pseudocode
 
-```python
-from mcp.server.fastmcp import FastMCP
-from pydantic import BaseModel, Field
+??? example "View Python pseudocode"
 
-# Initialize MCP server for code generation tools (p. 162)
-mcp = FastMCP(
-    "agentforge-codegen",
-    description="Code generation, execution, and review tools for AgentForge agents.",
-)
+    ```python
+    from mcp.server.fastmcp import FastMCP
+    from pydantic import BaseModel, Field
 
-
-# --- JSON Schema definitions for tool parameters (p. 85) ---
-
-class GenerateCodeParams(BaseModel):
-    """Parameters for code generation."""
-    description: str = Field(
-        ..., description="Natural-language description of the code to generate."
-    )
-    language: str = Field(
-        default="python", description="Target programming language."
-    )
-    framework: str | None = Field(
-        default=None, description="Target framework (e.g., 'fastapi', 'react')."
-    )
-    constraints: list[str] = Field(
-        default_factory=list,
-        description="Additional constraints or requirements.",
-    )
-    existing_context: str | None = Field(
-        default=None,
-        description="Existing code context the generated code must integrate with.",
+    # Initialize MCP server for code generation tools (p. 162)
+    mcp = FastMCP(
+        "agentforge-codegen",
+        description="Code generation, execution, and review tools for AgentForge agents.",
     )
 
 
-class ExecuteCodeParams(BaseModel):
-    """Parameters for sandbox code execution. Flagged as irreversible (p. 91)."""
-    code: str = Field(..., description="The code to execute.")
-    language: str = Field(default="python", description="Programming language.")
-    timeout_seconds: int = Field(
-        default=30, ge=5, le=120,
-        description="Maximum execution time in seconds.",
-    )
-    network_enabled: bool = Field(
-        default=False,
-        description="Whether to allow network access. Requires HITL approval (p. 213).",
-    )
+    # --- JSON Schema definitions for tool parameters (p. 85) ---
 
-
-class ReviewCodeParams(BaseModel):
-    """Parameters for automated code review."""
-    code: str = Field(..., description="The code to review.")
-    language: str = Field(default="python", description="Programming language.")
-    spec: str | None = Field(
-        default=None,
-        description="Original specification to check correctness against.",
-    )
-    focus: list[str] = Field(
-        default_factory=lambda: ["correctness", "security", "style"],
-        description="Review focus areas.",
-    )
-
-
-class RunTestsParams(BaseModel):
-    """Parameters for test execution."""
-    code: str = Field(..., description="The code under test.")
-    tests: str = Field(..., description="The test code to run.")
-    language: str = Field(default="python", description="Programming language.")
-    timeout_seconds: int = Field(default=30, ge=5, le=120)
-
-
-class RefineCodeParams(BaseModel):
-    """Parameters for the full iterative refinement pipeline."""
-    description: str = Field(
-        ..., description="Natural-language specification."
-    )
-    language: str = Field(default="python")
-    framework: str | None = None
-    constraints: list[str] = Field(default_factory=list)
-    test_requirements: list[str] = Field(default_factory=list)
-    max_iterations: int = Field(default=5, ge=1, le=10)
-
-
-# --- Tool definitions using FastMCP decorators (p. 162) ---
-
-@mcp.tool()
-async def generate_code(params: GenerateCodeParams) -> dict:
-    """
-    Generate code from a natural-language specification.
-
-    Uses an LLM to produce code matching the given description,
-    language, and constraints. Returns structured output with
-    the generated code, explanation, and confidence score.
-
-    This tool is NOT irreversible -- it only generates code
-    without executing it.
-    """
-    spec = CodeSpec(
-        description=params.description,
-        language=params.language,
-        framework=params.framework,
-        constraints=params.constraints,
-        existing_context=params.existing_context,
-    )
-
-    generator = CodeGeneratorAgent()
-    result = await generator.generate(spec=spec, feedback=[], iteration=1)
-
-    return {
-        "code": result.code,
-        "language": result.language,
-        "explanation": result.explanation,
-        "confidence": result.confidence,
-        "imports": result.imports,
-    }
-
-
-@mcp.tool()
-async def execute_code(params: ExecuteCodeParams) -> dict:
-    """
-    Execute code in a secure sandbox.
-
-    *** IRREVERSIBLE TOOL (p. 91) ***
-
-    Code is executed inside an isolated Firecracker microVM with:
-    - Limited CPU, memory, and disk
-    - No network access by default
-    - Read-only rootfs
-    - Timeout enforcement
-
-    If network_enabled=True, this tool requires human approval
-    (HITL gate, p. 213) before execution.
-
-    Code outputs are treated as untrusted (p. 289).
-    """
-    # HITL gate: network access requires human approval (p. 213)
-    if params.network_enabled:
-        approval = await request_human_approval(
-            action="execute_code_with_network",
-            details={
-                "code_preview": params.code[:500],
-                "language": params.language,
-                "timeout": params.timeout_seconds,
-            },
-            reason="Code execution with network access requires human approval.",
+    class GenerateCodeParams(BaseModel):
+        """Parameters for code generation."""
+        description: str = Field(
+            ..., description="Natural-language description of the code to generate."
         )
-        if not approval.granted:
-            return {
-                "status": "blocked",
-                "reason": "Human approval denied for network-enabled execution.",
-            }
-
-    sandbox = SandboxManager(config=SandboxConfig(
-        timeout_seconds=params.timeout_seconds,
-        network_enabled=params.network_enabled,
-    ))
-
-    result = await sandbox.execute(
-        code=params.code,
-        language=params.language,
-        execution_id=str(uuid.uuid4()),
-    )
-
-    # Tool error handling: errors returned as observations (p. 90)
-    return {
-        "status": result.status.value,
-        "stdout": result.stdout,
-        "stderr": result.stderr,
-        "exit_code": result.exit_code,
-        "execution_time_ms": result.execution_time_ms,
-        "memory_peak_mb": result.memory_peak_mb,
-    }
+        language: str = Field(
+            default="python", description="Target programming language."
+        )
+        framework: str | None = Field(
+            default=None, description="Target framework (e.g., 'fastapi', 'react')."
+        )
+        constraints: list[str] = Field(
+            default_factory=list,
+            description="Additional constraints or requirements.",
+        )
+        existing_context: str | None = Field(
+            default=None,
+            description="Existing code context the generated code must integrate with.",
+        )
 
 
-@mcp.tool()
-async def review_code(params: ReviewCodeParams) -> dict:
-    """
-    Run automated code review on a code snippet.
-
-    Combines static analysis (AST-based) and LLM-based semantic
-    review to evaluate correctness, security, and style.
-
-    Implements the Critic role from the Generator-Critic
-    reflection pattern (p. 65).
-    """
-    reviewer = CodeReviewAgent()
-    generated = GeneratedCode(
-        code=params.code,
-        language=params.language,
-        explanation="",
-        confidence=0.0,
-    )
-    spec = CodeSpec(description=params.spec or "", language=params.language)
-
-    result = await reviewer.review(code=generated, spec=spec)
-
-    return {
-        "approved": result.approved,
-        "scores": {
-            "correctness": result.correctness_score,
-            "security": result.security_score,
-            "style": result.style_score,
-        },
-        "issues": result.issues,
-        "suggestions": result.suggestions,
-    }
+    class ExecuteCodeParams(BaseModel):
+        """Parameters for sandbox code execution. Flagged as irreversible (p. 91)."""
+        code: str = Field(..., description="The code to execute.")
+        language: str = Field(default="python", description="Programming language.")
+        timeout_seconds: int = Field(
+            default=30, ge=5, le=120,
+            description="Maximum execution time in seconds.",
+        )
+        network_enabled: bool = Field(
+            default=False,
+            description="Whether to allow network access. Requires HITL approval (p. 213).",
+        )
 
 
-@mcp.tool()
-async def run_tests(params: RunTestsParams) -> dict:
-    """
-    Run tests against code in the sandbox.
-
-    *** IRREVERSIBLE TOOL (p. 91) ***
-
-    Both the code under test and the test code are executed
-    inside the sandbox. Test results are returned as structured
-    observations for the SICA feedback loop (p. 169).
-    """
-    sandbox = SandboxManager(config=SandboxConfig(
-        timeout_seconds=params.timeout_seconds,
-    ))
-    runner = TestRunner()
-
-    spec = CodeSpec(description="", language=params.language)
-    generated = GeneratedCode(
-        code=params.code,
-        language=params.language,
-        explanation="",
-        confidence=0.0,
-    )
-
-    result = await runner.run(code=generated, spec=spec, sandbox=sandbox)
-
-    return {
-        "passed": result.passed,
-        "total_tests": result.total_tests,
-        "passed_tests": result.passed_tests,
-        "failed_tests": result.failed_tests,
-        "failures": result.failures,
-        "execution_time_ms": result.execution_time_ms,
-    }
+    class ReviewCodeParams(BaseModel):
+        """Parameters for automated code review."""
+        code: str = Field(..., description="The code to review.")
+        language: str = Field(default="python", description="Programming language.")
+        spec: str | None = Field(
+            default=None,
+            description="Original specification to check correctness against.",
+        )
+        focus: list[str] = Field(
+            default_factory=lambda: ["correctness", "security", "style"],
+            description="Review focus areas.",
+        )
 
 
-@mcp.tool()
-async def refine_code(params: RefineCodeParams) -> dict:
-    """
-    Run the full code generation pipeline with iterative refinement.
-
-    *** IRREVERSIBLE TOOL (p. 91) ***
-
-    Executes the complete Generate -> Review -> Test -> Iterate
-    loop up to max_iterations times (p. 67). Returns the final
-    code, review scores, test results, and iteration count.
-
-    This implements the SICA (Self-Improving Coding Agent)
-    pattern (p. 169).
-    """
-    spec = CodeSpec(
-        description=params.description,
-        language=params.language,
-        framework=params.framework,
-        constraints=params.constraints,
-        test_requirements=params.test_requirements,
-    )
-
-    pipeline = CodeGenerationPipeline(
-        generator=CodeGeneratorAgent(),
-        reviewer=CodeReviewAgent(),
-        test_runner=TestRunner(),
-        sandbox=SandboxManager(config=SandboxConfig()),
-        max_iterations=params.max_iterations,
-    )
-
-    result = await pipeline.run(spec)
-
-    return {
-        "status": result.status.value,
-        "code": result.code.code if result.code else None,
-        "review_scores": {
-            "correctness": result.review.correctness_score,
-            "security": result.review.security_score,
-            "style": result.review.style_score,
-        } if result.review else None,
-        "test_result": {
-            "passed": result.test_result.passed,
-            "total": result.test_result.total_tests,
-            "failures": result.test_result.failures,
-        } if result.test_result else None,
-        "iterations": result.iterations,
-        "trace_id": result.trace_id,
-    }
+    class RunTestsParams(BaseModel):
+        """Parameters for test execution."""
+        code: str = Field(..., description="The code under test.")
+        tests: str = Field(..., description="The test code to run.")
+        language: str = Field(default="python", description="Programming language.")
+        timeout_seconds: int = Field(default=30, ge=5, le=120)
 
 
-if __name__ == "__main__":
-    mcp.run(transport="stdio")
-```
+    class RefineCodeParams(BaseModel):
+        """Parameters for the full iterative refinement pipeline."""
+        description: str = Field(
+            ..., description="Natural-language specification."
+        )
+        language: str = Field(default="python")
+        framework: str | None = None
+        constraints: list[str] = Field(default_factory=list)
+        test_requirements: list[str] = Field(default_factory=list)
+        max_iterations: int = Field(default=5, ge=1, le=10)
+
+
+    # --- Tool definitions using FastMCP decorators (p. 162) ---
+
+    @mcp.tool()
+    async def generate_code(params: GenerateCodeParams) -> dict:
+        """
+        Generate code from a natural-language specification.
+
+        Uses an LLM to produce code matching the given description,
+        language, and constraints. Returns structured output with
+        the generated code, explanation, and confidence score.
+
+        This tool is NOT irreversible -- it only generates code
+        without executing it.
+        """
+        spec = CodeSpec(
+            description=params.description,
+            language=params.language,
+            framework=params.framework,
+            constraints=params.constraints,
+            existing_context=params.existing_context,
+        )
+
+        generator = CodeGeneratorAgent()
+        result = await generator.generate(spec=spec, feedback=[], iteration=1)
+
+        return {
+            "code": result.code,
+            "language": result.language,
+            "explanation": result.explanation,
+            "confidence": result.confidence,
+            "imports": result.imports,
+        }
+
+
+    @mcp.tool()
+    async def execute_code(params: ExecuteCodeParams) -> dict:
+        """
+        Execute code in a secure sandbox.
+
+        *** IRREVERSIBLE TOOL (p. 91) ***
+
+        Code is executed inside an isolated Firecracker microVM with:
+        - Limited CPU, memory, and disk
+        - No network access by default
+        - Read-only rootfs
+        - Timeout enforcement
+
+        If network_enabled=True, this tool requires human approval
+        (HITL gate, p. 213) before execution.
+
+        Code outputs are treated as untrusted (p. 289).
+        """
+        # HITL gate: network access requires human approval (p. 213)
+        if params.network_enabled:
+            approval = await request_human_approval(
+                action="execute_code_with_network",
+                details={
+                    "code_preview": params.code[:500],
+                    "language": params.language,
+                    "timeout": params.timeout_seconds,
+                },
+                reason="Code execution with network access requires human approval.",
+            )
+            if not approval.granted:
+                return {
+                    "status": "blocked",
+                    "reason": "Human approval denied for network-enabled execution.",
+                }
+
+        sandbox = SandboxManager(config=SandboxConfig(
+            timeout_seconds=params.timeout_seconds,
+            network_enabled=params.network_enabled,
+        ))
+
+        result = await sandbox.execute(
+            code=params.code,
+            language=params.language,
+            execution_id=str(uuid.uuid4()),
+        )
+
+        # Tool error handling: errors returned as observations (p. 90)
+        return {
+            "status": result.status.value,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "exit_code": result.exit_code,
+            "execution_time_ms": result.execution_time_ms,
+            "memory_peak_mb": result.memory_peak_mb,
+        }
+
+
+    @mcp.tool()
+    async def review_code(params: ReviewCodeParams) -> dict:
+        """
+        Run automated code review on a code snippet.
+
+        Combines static analysis (AST-based) and LLM-based semantic
+        review to evaluate correctness, security, and style.
+
+        Implements the Critic role from the Generator-Critic
+        reflection pattern (p. 65).
+        """
+        reviewer = CodeReviewAgent()
+        generated = GeneratedCode(
+            code=params.code,
+            language=params.language,
+            explanation="",
+            confidence=0.0,
+        )
+        spec = CodeSpec(description=params.spec or "", language=params.language)
+
+        result = await reviewer.review(code=generated, spec=spec)
+
+        return {
+            "approved": result.approved,
+            "scores": {
+                "correctness": result.correctness_score,
+                "security": result.security_score,
+                "style": result.style_score,
+            },
+            "issues": result.issues,
+            "suggestions": result.suggestions,
+        }
+
+
+    @mcp.tool()
+    async def run_tests(params: RunTestsParams) -> dict:
+        """
+        Run tests against code in the sandbox.
+
+        *** IRREVERSIBLE TOOL (p. 91) ***
+
+        Both the code under test and the test code are executed
+        inside the sandbox. Test results are returned as structured
+        observations for the SICA feedback loop (p. 169).
+        """
+        sandbox = SandboxManager(config=SandboxConfig(
+            timeout_seconds=params.timeout_seconds,
+        ))
+        runner = TestRunner()
+
+        spec = CodeSpec(description="", language=params.language)
+        generated = GeneratedCode(
+            code=params.code,
+            language=params.language,
+            explanation="",
+            confidence=0.0,
+        )
+
+        result = await runner.run(code=generated, spec=spec, sandbox=sandbox)
+
+        return {
+            "passed": result.passed,
+            "total_tests": result.total_tests,
+            "passed_tests": result.passed_tests,
+            "failed_tests": result.failed_tests,
+            "failures": result.failures,
+            "execution_time_ms": result.execution_time_ms,
+        }
+
+
+    @mcp.tool()
+    async def refine_code(params: RefineCodeParams) -> dict:
+        """
+        Run the full code generation pipeline with iterative refinement.
+
+        *** IRREVERSIBLE TOOL (p. 91) ***
+
+        Executes the complete Generate -> Review -> Test -> Iterate
+        loop up to max_iterations times (p. 67). Returns the final
+        code, review scores, test results, and iteration count.
+
+        This implements the SICA (Self-Improving Coding Agent)
+        pattern (p. 169).
+        """
+        spec = CodeSpec(
+            description=params.description,
+            language=params.language,
+            framework=params.framework,
+            constraints=params.constraints,
+            test_requirements=params.test_requirements,
+        )
+
+        pipeline = CodeGenerationPipeline(
+            generator=CodeGeneratorAgent(),
+            reviewer=CodeReviewAgent(),
+            test_runner=TestRunner(),
+            sandbox=SandboxManager(config=SandboxConfig()),
+            max_iterations=params.max_iterations,
+        )
+
+        result = await pipeline.run(spec)
+
+        return {
+            "status": result.status.value,
+            "code": result.code.code if result.code else None,
+            "review_scores": {
+                "correctness": result.review.correctness_score,
+                "security": result.review.security_score,
+                "style": result.review.style_score,
+            } if result.review else None,
+            "test_result": {
+                "passed": result.test_result.passed,
+                "total": result.test_result.total_tests,
+                "failures": result.test_result.failures,
+            } if result.test_result else None,
+            "iterations": result.iterations,
+            "trace_id": result.trace_id,
+        }
+
+
+    if __name__ == "__main__":
+        mcp.run(transport="stdio")
+    ```
 
 ---
 
@@ -994,41 +1002,27 @@ The security model for code generation applies **defense-in-depth** (System Over
 
 ### 7.2 Security Layers
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│  Layer 1: Pre-Execution Validation                             │
-│  - AST-based import analysis                                   │
-│  - Static security scan (bandit, semgrep)                      │
-│  - Known vulnerability pattern matching                        │
-│  - Reject code before it ever reaches the sandbox              │
-├────────────────────────────────────────────────────────────────┤
-│  Layer 2: Sandbox Isolation (Least Privilege, p. 288)          │
-│  - Firecracker microVM or gVisor                               │
-│  - Seccomp profile: ~60 allowed syscalls                       │
-│  - Read-only rootfs + tmpfs workspace                          │
-│  - No host PID/network/IPC namespace sharing                   │
-├────────────────────────────────────────────────────────────────┤
-│  Layer 3: Resource Limits                                      │
-│  - cgroup CPU, memory, pids limits                             │
-│  - Wall-clock timeout with SIGKILL                             │
-│  - tmpfs disk quota                                            │
-├────────────────────────────────────────────────────────────────┤
-│  Layer 4: Network Isolation                                    │
-│  - Network disabled by default (no veth)                       │
-│  - Optional allowlist-only egress via proxy                    │
-│  - Network access requires HITL approval (p. 213)              │
-├────────────────────────────────────────────────────────────────┤
-│  Layer 5: Output Sanitization (Untrusted, p. 289)              │
-│  - Strip ANSI escape codes                                     │
-│  - Truncate to maximum output size                             │
-│  - Remove filesystem paths, system metadata                    │
-│  - PII/secret detection on output                              │
-├────────────────────────────────────────────────────────────────┤
-│  Layer 6: Checkpoint & Recovery (p. 290)                       │
-│  - Checkpoint before every execution                           │
-│  - Sandbox destruction is idempotent                           │
-│  - Execution result recorded regardless of outcome             │
-└────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    L1["Layer 1: Pre-Execution Validation<br/><small>AST-based import analysis<br/>Static security scan (bandit, semgrep)<br/>Known vulnerability pattern matching<br/>Reject code before sandbox</small>"]
+    L2["Layer 2: Sandbox Isolation<br/><small>Least Privilege, p. 288<br/>Firecracker microVM or gVisor<br/>Seccomp profile: ~60 allowed syscalls<br/>Read-only rootfs + tmpfs workspace</small>"]
+    L3["Layer 3: Resource Limits<br/><small>cgroup CPU, memory, pids limits<br/>Wall-clock timeout with SIGKILL<br/>tmpfs disk quota</small>"]
+    L4["Layer 4: Network Isolation<br/><small>Network disabled by default (no veth)<br/>Optional allowlist-only egress via proxy<br/>Network access requires HITL approval (p. 213)</small>"]
+    L5["Layer 5: Output Sanitization<br/><small>Untrusted, p. 289<br/>Strip ANSI escape codes, truncate output<br/>Remove filesystem paths, PII/secret detection</small>"]
+    L6["Layer 6: Checkpoint & Recovery<br/><small>p. 290<br/>Checkpoint before every execution<br/>Sandbox destruction is idempotent<br/>Execution result recorded regardless of outcome</small>"]
+
+    L1 --> L2 --> L3 --> L4 --> L5 --> L6
+
+    classDef guardrail fill:#E74C3C,stroke:#C0392B,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef runtime fill:#E67E22,stroke:#CA6F1E,color:#fff
+
+    class L1 guardrail
+    class L2 guardrail
+    class L3 infra
+    class L4 guardrail
+    class L5 infra
+    class L6 runtime
 ```
 
 ### 7.3 Network Access Policy
@@ -1058,23 +1052,26 @@ Human-in-the-loop gates (p. 207-215) are placed at decision points where the ris
 
 ### 8.2 Approval Flow
 
-```
-┌──────────────┐     ┌────────────────────┐     ┌──────────────────┐
-│  Agent       │────>│  HITL Gate         │────>│  Human Reviewer  │
-│  requests    │     │                    │     │                  │
-│  execution   │     │  - Formats context │     │  - Sees code     │
-│              │     │  - Sets timeout    │     │  - Sees risk     │
-│              │     │  - Queues request  │     │  - Approves or   │
-│              │     │                    │     │    denies        │
-└──────────────┘     └────────┬───────────┘     └────────┬─────────┘
-                              │                          │
-                              │  ┌────────────────────┐  │
-                              └─>│  Decision          │<─┘
-                                 │                    │
-                                 │  approved -> exec  │
-                                 │  denied -> block   │
-                                 │  timeout -> block  │
-                                 └────────────────────┘
+```mermaid
+graph LR
+    AGENT["Agent<br/><small>requests execution</small>"]
+    HITL["HITL Gate<br/><small>Formats context<br/>Sets timeout<br/>Queues request</small>"]
+    HUMAN["Human Reviewer<br/><small>Sees code, Sees risk<br/>Approves or denies</small>"]
+    DEC["Decision<br/><small>approved -> exec<br/>denied -> block<br/>timeout -> block</small>"]
+
+    AGENT --> HITL --> HUMAN
+    HITL --> DEC
+    HUMAN --> DEC
+
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef guardrail fill:#E74C3C,stroke:#C0392B,color:#fff
+    classDef userFacing fill:#2ECC71,stroke:#1FA855,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+
+    class AGENT core
+    class HITL guardrail
+    class HUMAN userFacing
+    class DEC infra
 ```
 
 The HITL request includes:
@@ -1097,40 +1094,42 @@ The human reviewer can:
 
 All pipeline operations are available via a FastAPI REST surface in addition to the MCP tools.
 
-```
-POST /api/v1/codegen/generate
-  Body: GenerateCodeParams
-  Response: { code, language, explanation, confidence, imports }
+??? example "View API example"
 
-POST /api/v1/codegen/execute
-  Body: ExecuteCodeParams
-  Response: { status, stdout, stderr, exit_code, execution_time_ms, memory_peak_mb }
+    ```
+    POST /api/v1/codegen/generate
+      Body: GenerateCodeParams
+      Response: { code, language, explanation, confidence, imports }
 
-POST /api/v1/codegen/review
-  Body: ReviewCodeParams
-  Response: { approved, scores, issues, suggestions }
+    POST /api/v1/codegen/execute
+      Body: ExecuteCodeParams
+      Response: { status, stdout, stderr, exit_code, execution_time_ms, memory_peak_mb }
 
-POST /api/v1/codegen/test
-  Body: RunTestsParams
-  Response: { passed, total_tests, passed_tests, failed_tests, failures, execution_time_ms }
+    POST /api/v1/codegen/review
+      Body: ReviewCodeParams
+      Response: { approved, scores, issues, suggestions }
 
-POST /api/v1/codegen/refine
-  Body: RefineCodeParams
-  Response: { status, code, review_scores, test_result, iterations, trace_id }
+    POST /api/v1/codegen/test
+      Body: RunTestsParams
+      Response: { passed, total_tests, passed_tests, failed_tests, failures, execution_time_ms }
 
-GET  /api/v1/codegen/executions/{execution_id}
-  Response: { execution_id, status, result, created_at, completed_at }
+    POST /api/v1/codegen/refine
+      Body: RefineCodeParams
+      Response: { status, code, review_scores, test_result, iterations, trace_id }
 
-GET  /api/v1/codegen/executions/{execution_id}/trace
-  Response: { trace_id, spans }
+    GET  /api/v1/codegen/executions/{execution_id}
+      Response: { execution_id, status, result, created_at, completed_at }
 
-GET  /api/v1/codegen/sandbox/config
-  Response: { default_config, limits }
+    GET  /api/v1/codegen/executions/{execution_id}/trace
+      Response: { trace_id, spans }
 
-POST /api/v1/codegen/sandbox/config
-  Body: SandboxConfig overrides (requires admin role)
-  Response: { updated_config }
-```
+    GET  /api/v1/codegen/sandbox/config
+      Response: { default_config, limits }
+
+    POST /api/v1/codegen/sandbox/config
+      Body: SandboxConfig overrides (requires admin role)
+      Response: { updated_config }
+    ```
 
 ### 9.2 Authentication & Authorization
 
@@ -1269,23 +1268,25 @@ All metrics are exported as OpenTelemetry metrics and are available in Grafana d
 
 All subsystem logs follow structured JSON format and are shipped to the Observability Platform:
 
-```json
-{
-  "timestamp": "2026-02-27T14:32:01.123Z",
-  "level": "INFO",
-  "service": "agentforge.codegen",
-  "trace_id": "abc-123-def",
-  "span_id": "span-456",
-  "event": "pipeline.iteration_complete",
-  "attributes": {
-    "iteration": 2,
-    "review_approved": true,
-    "tests_passed": true,
-    "language": "python",
-    "execution_time_ms": 1240
-  }
-}
-```
+??? example "View JSON example"
+
+    ```json
+    {
+      "timestamp": "2026-02-27T14:32:01.123Z",
+      "level": "INFO",
+      "service": "agentforge.codegen",
+      "trace_id": "abc-123-def",
+      "span_id": "span-456",
+      "event": "pipeline.iteration_complete",
+      "attributes": {
+        "iteration": 2,
+        "review_approved": true,
+        "tests_passed": true,
+        "language": "python",
+        "execution_time_ms": 1240
+      }
+    }
+    ```
 
 Security-relevant events (sandbox violations, HITL decisions, blocked executions) are additionally forwarded to the security audit log, which is append-only and immutable.
 

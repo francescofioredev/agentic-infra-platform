@@ -27,33 +27,44 @@ In a production agentic system, hard-coding a single provider creates brittlenes
 
 **Core design philosophy**: Every LLM call flows through a unified client that selects the optimal provider for the request, falls back automatically on failure, and tracks every token for cost and quality analysis. Agents never know or care which provider served their request (p. 258).
 
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                  Multi-Provider LLM Management                           │
-│                                                                          │
-│  ┌──────────────┐  ┌──────────────┐  ┌───────────────────────────────┐   │
-│  │  Unified      │  │  Provider    │  │  Routing & Selection          │  │
-│  │  LLM Client   │  │  Registry    │  │  Engine                       │  │
-│  │  (single API) │  │  & Catalog   │  │  (p. 258, p. 25)              │  │
-│  └──────┬───────┘  └──────┬───────┘  └──────────────┬────────────────┘   │
-│         │                 │                          │                   │
-│  ┌──────┴─────────────────┴──────────────────────────┴────────────────┐  │
-│  │                    Provider Adapter Layer                            │  │
-│  │   Anthropic │ OpenAI │ Google │ Ollama │ vLLM │ OpenRouter          │ │
-│  └──────┬─────────────────┬──────────────────────────┬────────────────┘  │
-│         │                 │                          │                   │
-│  ┌──────┴───────┐  ┌─────┴────────┐  ┌──────────────┴────────────────┐   │
-│  │  Circuit      │  │  API Key     │  │  Cost Tracking &              │  │
-│  │  Breaker      │  │  Pool        │  │  Optimization                 │  │
-│  │  (p. 208)     │  │  Manager     │  │  (p. 304)                     │  │
-│  └──────────────┘  └──────────────┘  └───────────────────────────────┘   │
-└──────────────────────────────────────────────────────────────────────────┘
-         │                    │                    │
-    ┌────┴────┐         ┌────┴────┐          ┌────┴────┐
-    │ Cost &  │         │Observ-  │          │Guardrail│
-    │Resource │         │ability  │          │ System  │
-    │ Manager │         │Platform │          │         │
-    └─────────┘         └─────────┘          └─────────┘
+```mermaid
+graph TD
+    subgraph MPLLM["Multi-Provider LLM Management"]
+        direction TB
+        ULC["Unified LLM Client<br/><small>(single API)</small>"]
+        PR["Provider Registry<br/>& Catalog"]
+        RSE["Routing & Selection<br/>Engine<br/><small>(p. 258, p. 25)</small>"]
+
+        ULC --> PAL
+        PR --> PAL
+        RSE --> PAL
+
+        PAL["Provider Adapter Layer<br/><small>Anthropic | OpenAI | Google | Ollama | vLLM | OpenRouter</small>"]
+
+        PAL --> CB
+        PAL --> AKP
+        PAL --> CTO
+
+        CB["Circuit Breaker<br/><small>(p. 208)</small>"]
+        AKP["API Key Pool<br/>Manager"]
+        CTO["Cost Tracking &<br/>Optimization<br/><small>(p. 304)</small>"]
+    end
+
+    MPLLM -.-> CRM["Cost & Resource<br/>Manager"]
+    MPLLM -.-> OBS["Observability<br/>Platform"]
+    MPLLM -.-> GS["Guardrail<br/>System"]
+
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef foundational fill:#F39C12,stroke:#D68910,color:#fff
+    classDef guardrail fill:#E74C3C,stroke:#C0392B,color:#fff
+    classDef external fill:#95A5A6,stroke:#7F8C8D,color:#fff
+    class ULC,PR,RSE core
+    class PAL infra
+    class CB,AKP,CTO core
+    class CRM foundational
+    class OBS foundational
+    class GS guardrail
 ```
 
 ### Core Responsibilities
@@ -76,14 +87,18 @@ Subsystem 09 owns **budget enforcement, model tier selection, and token accounti
 - Subsystem 09 decides the **model tier** (Tier 1/2/3) and **token budget** for a request.
 - Subsystem 20 decides which **specific provider and model** fulfills the tier, manages the API call, and reports actual cost back.
 
-```
-Subsystem 09 (Cost & Resource)          Subsystem 20 (Multi-Provider LLM)
-┌─────────────────────────┐             ┌─────────────────────────────┐
-│ "Use Tier 2, budget     │────────────►│ "Route to Claude Sonnet     │
-│  2000 tokens"           │             │  via Anthropic key pool #3, │
-│                         │◄────────────│  actual cost: $0.0032"      │
-│ Budget ledger updated   │             │                             │
-└─────────────────────────┘             └─────────────────────────────┘
+```mermaid
+graph LR
+    S09["Subsystem 09<br/>(Cost & Resource)<br/><small>Use Tier 2, budget 2000 tokens</small>"]
+    S20["Subsystem 20<br/>(Multi-Provider LLM)<br/><small>Route to Claude Sonnet via<br/>Anthropic key pool #3</small>"]
+
+    S09 -->|"tier + budget"| S20
+    S20 -->|"actual cost: $0.0032"| S09
+
+    classDef foundational fill:#F39C12,stroke:#D68910,color:#fff
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    class S09 foundational
+    class S20 core
 ```
 
 ---
@@ -94,305 +109,309 @@ The Unified LLM Interface is the single entry point through which every componen
 
 ### 2.1 Interface Contract
 
-```python
-# --- Unified LLM Interface ---
+??? example "View Python pseudocode"
 
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Optional, AsyncIterator
-from abc import ABC, abstractmethod
+    ```python
+    # --- Unified LLM Interface ---
 
-
-class Role(Enum):
-    SYSTEM = "system"
-    USER = "user"
-    ASSISTANT = "assistant"
-    TOOL_RESULT = "tool_result"
+    from dataclasses import dataclass, field
+    from enum import Enum
+    from typing import Optional, AsyncIterator
+    from abc import ABC, abstractmethod
 
 
-@dataclass
-class Message:
-    role: Role
-    content: str | list[dict]           # str for text, list for multimodal (vision)
-    tool_call_id: Optional[str] = None  # for tool results
-    name: Optional[str] = None          # optional sender name
+    class Role(Enum):
+        SYSTEM = "system"
+        USER = "user"
+        ASSISTANT = "assistant"
+        TOOL_RESULT = "tool_result"
 
 
-@dataclass
-class ToolDefinition:
-    """Provider-agnostic tool definition. Translated to provider-specific
-    format (OpenAI function_calling vs Anthropic tool_use) by the adapter layer.
-    See Tool Use format translation (p. 90)."""
-    name: str
-    description: str
-    parameters: dict                     # JSON Schema
-    required: list[str] = field(default_factory=list)
+    @dataclass
+    class Message:
+        role: Role
+        content: str | list[dict]           # str for text, list for multimodal (vision)
+        tool_call_id: Optional[str] = None  # for tool results
+        name: Optional[str] = None          # optional sender name
 
 
-@dataclass
-class ToolCall:
-    """A tool invocation requested by the model."""
-    id: str
-    name: str
-    arguments: dict
+    @dataclass
+    class ToolDefinition:
+        """Provider-agnostic tool definition. Translated to provider-specific
+        format (OpenAI function_calling vs Anthropic tool_use) by the adapter layer.
+        See Tool Use format translation (p. 90)."""
+        name: str
+        description: str
+        parameters: dict                     # JSON Schema
+        required: list[str] = field(default_factory=list)
 
 
-@dataclass
-class LLMRequest:
-    """Provider-agnostic request. The unified client translates this into
-    whatever format the selected provider requires."""
-    messages: list[Message]
-    model_tier: Optional[str] = None     # "tier_1", "tier_2", "tier_3" (p. 257)
-    model: Optional[str] = None          # explicit model override (e.g. "claude-sonnet-4-20250514")
-    provider: Optional[str] = None       # explicit provider override (e.g. "anthropic")
-    max_tokens: int = 4096
-    temperature: float = 0.7
-    top_p: Optional[float] = None
-    stop_sequences: Optional[list[str]] = None
-    tools: Optional[list[ToolDefinition]] = None
-    tool_choice: Optional[str] = None    # "auto", "required", "none", or specific tool name
-    stream: bool = False
-    response_format: Optional[dict] = None  # {"type": "json_object"} etc.
-
-    # Extended features (mapped to provider-specific params by adapter)
-    extended_thinking: bool = False       # Anthropic extended thinking
-    thinking_budget: Optional[int] = None
-    seed: Optional[int] = None           # deterministic generation where supported
-
-    # Routing hints (consumed by the routing engine, not sent to provider)
-    routing_hints: dict = field(default_factory=dict)
-    # e.g. {"requires_vision": True, "requires_tool_use": True,
-    #        "quality_critical": True, "latency_sensitive": True}
+    @dataclass
+    class ToolCall:
+        """A tool invocation requested by the model."""
+        id: str
+        name: str
+        arguments: dict
 
 
-@dataclass
-class TokenUsage:
-    input_tokens: int
-    output_tokens: int
-    cache_read_tokens: int = 0
-    cache_write_tokens: int = 0
-    thinking_tokens: int = 0             # Anthropic extended thinking tokens
-    total_tokens: int = 0
+    @dataclass
+    class LLMRequest:
+        """Provider-agnostic request. The unified client translates this into
+        whatever format the selected provider requires."""
+        messages: list[Message]
+        model_tier: Optional[str] = None     # "tier_1", "tier_2", "tier_3" (p. 257)
+        model: Optional[str] = None          # explicit model override (e.g. "claude-sonnet-4-20250514")
+        provider: Optional[str] = None       # explicit provider override (e.g. "anthropic")
+        max_tokens: int = 4096
+        temperature: float = 0.7
+        top_p: Optional[float] = None
+        stop_sequences: Optional[list[str]] = None
+        tools: Optional[list[ToolDefinition]] = None
+        tool_choice: Optional[str] = None    # "auto", "required", "none", or specific tool name
+        stream: bool = False
+        response_format: Optional[dict] = None  # {"type": "json_object"} etc.
 
-    def __post_init__(self):
-        if self.total_tokens == 0:
-            self.total_tokens = self.input_tokens + self.output_tokens
+        # Extended features (mapped to provider-specific params by adapter)
+        extended_thinking: bool = False       # Anthropic extended thinking
+        thinking_budget: Optional[int] = None
+        seed: Optional[int] = None           # deterministic generation where supported
 
-
-@dataclass
-class LLMResponse:
-    """Provider-agnostic response. All provider-specific response formats
-    are normalized to this structure by the adapter layer."""
-    content: str
-    tool_calls: list[ToolCall] = field(default_factory=list)
-    thinking: Optional[str] = None       # extended thinking content
-    usage: Optional[TokenUsage] = None
-    model: str = ""                       # actual model used (e.g. "claude-sonnet-4-20250514")
-    provider: str = ""                    # actual provider used (e.g. "anthropic")
-    finish_reason: str = ""              # "stop", "tool_use", "max_tokens", "content_filter"
-    latency_ms: float = 0.0
-    cost_usd: float = 0.0               # computed from usage + pricing table
-    request_id: str = ""                 # provider's request ID for debugging
-
-    # Metadata for observability
-    key_id: str = ""                     # which API key was used (hashed)
-    circuit_state: str = ""              # "closed", "half_open" at time of call
-    routing_decision: Optional[dict] = None  # why this provider was chosen
+        # Routing hints (consumed by the routing engine, not sent to provider)
+        routing_hints: dict = field(default_factory=dict)
+        # e.g. {"requires_vision": True, "requires_tool_use": True,
+        #        "quality_critical": True, "latency_sensitive": True}
 
 
-@dataclass
-class StreamChunk:
-    """A single chunk from a streaming response."""
-    content_delta: str = ""
-    tool_call_delta: Optional[dict] = None
-    thinking_delta: Optional[str] = None
-    is_final: bool = False
-    usage: Optional[TokenUsage] = None   # only present on final chunk
-```
+    @dataclass
+    class TokenUsage:
+        input_tokens: int
+        output_tokens: int
+        cache_read_tokens: int = 0
+        cache_write_tokens: int = 0
+        thinking_tokens: int = 0             # Anthropic extended thinking tokens
+        total_tokens: int = 0
+
+        def __post_init__(self):
+            if self.total_tokens == 0:
+                self.total_tokens = self.input_tokens + self.output_tokens
+
+
+    @dataclass
+    class LLMResponse:
+        """Provider-agnostic response. All provider-specific response formats
+        are normalized to this structure by the adapter layer."""
+        content: str
+        tool_calls: list[ToolCall] = field(default_factory=list)
+        thinking: Optional[str] = None       # extended thinking content
+        usage: Optional[TokenUsage] = None
+        model: str = ""                       # actual model used (e.g. "claude-sonnet-4-20250514")
+        provider: str = ""                    # actual provider used (e.g. "anthropic")
+        finish_reason: str = ""              # "stop", "tool_use", "max_tokens", "content_filter"
+        latency_ms: float = 0.0
+        cost_usd: float = 0.0               # computed from usage + pricing table
+        request_id: str = ""                 # provider's request ID for debugging
+
+        # Metadata for observability
+        key_id: str = ""                     # which API key was used (hashed)
+        circuit_state: str = ""              # "closed", "half_open" at time of call
+        routing_decision: Optional[dict] = None  # why this provider was chosen
+
+
+    @dataclass
+    class StreamChunk:
+        """A single chunk from a streaming response."""
+        content_delta: str = ""
+        tool_call_delta: Optional[dict] = None
+        thinking_delta: Optional[str] = None
+        is_final: bool = False
+        usage: Optional[TokenUsage] = None   # only present on final chunk
+    ```
 
 ### 2.2 Unified LLM Client
 
 The `UnifiedLLMClient` is the facade through which all platform components issue LLM calls. It orchestrates provider selection, adapter dispatch, failover, and response normalization. It is the only class in the platform that interacts with provider adapters.
 
-```python
-# --- Unified LLM Client ---
+??? example "View Python pseudocode"
 
-import time
-import asyncio
-from typing import Optional, AsyncIterator
+    ```python
+    # --- Unified LLM Client ---
+
+    import time
+    import asyncio
+    from typing import Optional, AsyncIterator
 
 
-class UnifiedLLMClient:
-    """Single entry point for all LLM interactions across the platform.
+    class UnifiedLLMClient:
+        """Single entry point for all LLM interactions across the platform.
 
-    Implements the Resource-Aware Optimization pattern (p. 257): callers
-    specify intent (model tier, required features) rather than a specific
-    provider. The client resolves the best provider/model combination at
-    call time based on availability, cost, and capability.
-    """
-
-    def __init__(
-        self,
-        provider_registry: "ProviderRegistry",
-        routing_engine: "RoutingEngine",
-        circuit_breaker_manager: "CircuitBreakerManager",
-        key_pool_manager: "APIKeyPoolManager",
-        cost_tracker: "CostTracker",
-        config: dict,
-    ):
-        self.registry = provider_registry
-        self.router = routing_engine
-        self.breakers = circuit_breaker_manager
-        self.keys = key_pool_manager
-        self.costs = cost_tracker
-        self.max_failover_attempts = config.get("max_failover_attempts", 3)
-
-    async def generate(self, request: LLMRequest) -> LLMResponse:
-        """Execute an LLM generation with automatic routing and failover.
-
-        Flow:
-        1. Routing engine selects ordered list of provider/model candidates (p. 25).
-        2. For each candidate, check circuit breaker state (p. 208).
-        3. Acquire an API key from the pool for the selected provider.
-        4. Translate request to provider format via adapter (p. 90).
-        5. Execute the call; on success, return normalized response.
-        6. On failure, classify error (p. 205) and either retry or failover.
+        Implements the Resource-Aware Optimization pattern (p. 257): callers
+        specify intent (model tier, required features) rather than a specific
+        provider. The client resolves the best provider/model combination at
+        call time based on availability, cost, and capability.
         """
-        # Step 1: Get ranked list of provider/model candidates
-        candidates = await self.router.select_candidates(request)
 
-        last_error = None
-        for attempt, candidate in enumerate(candidates[:self.max_failover_attempts]):
-            provider_name = candidate.provider
-            model_name = candidate.model
+        def __init__(
+            self,
+            provider_registry: "ProviderRegistry",
+            routing_engine: "RoutingEngine",
+            circuit_breaker_manager: "CircuitBreakerManager",
+            key_pool_manager: "APIKeyPoolManager",
+            cost_tracker: "CostTracker",
+            config: dict,
+        ):
+            self.registry = provider_registry
+            self.router = routing_engine
+            self.breakers = circuit_breaker_manager
+            self.keys = key_pool_manager
+            self.costs = cost_tracker
+            self.max_failover_attempts = config.get("max_failover_attempts", 3)
 
-            # Step 2: Check circuit breaker -- skip if open (p. 208)
-            breaker = self.breakers.get_breaker(provider_name)
-            if not breaker.allow_request():
-                continue
+        async def generate(self, request: LLMRequest) -> LLMResponse:
+            """Execute an LLM generation with automatic routing and failover.
 
-            # Step 3: Acquire API key from pool
-            key = await self.keys.acquire_key(provider_name)
-            if key is None:
-                continue  # all keys exhausted for this provider
+            Flow:
+            1. Routing engine selects ordered list of provider/model candidates (p. 25).
+            2. For each candidate, check circuit breaker state (p. 208).
+            3. Acquire an API key from the pool for the selected provider.
+            4. Translate request to provider format via adapter (p. 90).
+            5. Execute the call; on success, return normalized response.
+            6. On failure, classify error (p. 205) and either retry or failover.
+            """
+            # Step 1: Get ranked list of provider/model candidates
+            candidates = await self.router.select_candidates(request)
 
-            try:
-                # Step 4: Get the adapter and translate the request
-                adapter = self.registry.get_adapter(provider_name)
-                start_time = time.monotonic()
+            last_error = None
+            for attempt, candidate in enumerate(candidates[:self.max_failover_attempts]):
+                provider_name = candidate.provider
+                model_name = candidate.model
 
-                # Step 5: Execute the call
-                response = await adapter.generate(request, model_name, key)
-                elapsed_ms = (time.monotonic() - start_time) * 1000
-
-                # Enrich response metadata
-                response.provider = provider_name
-                response.model = model_name
-                response.latency_ms = elapsed_ms
-                response.key_id = key.hashed_id
-                response.circuit_state = breaker.state.value
-                response.routing_decision = candidate.to_dict()
-
-                # Compute cost from usage + pricing table
-                response.cost_usd = self.costs.compute_cost(
-                    provider_name, model_name, response.usage
-                )
-
-                # Report success to circuit breaker and key pool
-                breaker.record_success()
-                self.keys.release_key(key, success=True)
-
-                # Emit cost event for subsystem 09 integration
-                await self.costs.record(response)
-
-                return response
-
-            except ProviderError as e:
-                elapsed_ms = (time.monotonic() - start_time) * 1000
-
-                # Step 6: Classify error (p. 205)
-                classification = classify_error(e)
-                self.keys.release_key(key, success=False)
-
-                if classification == ErrorClass.TRANSIENT:
-                    # Rate limit or temporary failure -- mark key and try next
-                    breaker.record_failure()
-                    last_error = e
-                    continue  # failover to next candidate (p. 27)
-
-                elif classification == ErrorClass.RATE_LIMITED:
-                    # Retry with backoff on same provider (p. 206)
-                    await asyncio.sleep(e.retry_after or 1.0)
-                    breaker.record_failure()
-                    last_error = e
+                # Step 2: Check circuit breaker -- skip if open (p. 208)
+                breaker = self.breakers.get_breaker(provider_name)
+                if not breaker.allow_request():
                     continue
 
-                elif classification == ErrorClass.PERMANENT:
-                    # Model deprecated, invalid request -- do not retry (p. 205)
-                    raise PermanentProviderError(provider_name, model_name, e)
+                # Step 3: Acquire API key from pool
+                key = await self.keys.acquire_key(provider_name)
+                if key is None:
+                    continue  # all keys exhausted for this provider
 
-                else:
-                    breaker.record_failure()
-                    last_error = e
+                try:
+                    # Step 4: Get the adapter and translate the request
+                    adapter = self.registry.get_adapter(provider_name)
+                    start_time = time.monotonic()
+
+                    # Step 5: Execute the call
+                    response = await adapter.generate(request, model_name, key)
+                    elapsed_ms = (time.monotonic() - start_time) * 1000
+
+                    # Enrich response metadata
+                    response.provider = provider_name
+                    response.model = model_name
+                    response.latency_ms = elapsed_ms
+                    response.key_id = key.hashed_id
+                    response.circuit_state = breaker.state.value
+                    response.routing_decision = candidate.to_dict()
+
+                    # Compute cost from usage + pricing table
+                    response.cost_usd = self.costs.compute_cost(
+                        provider_name, model_name, response.usage
+                    )
+
+                    # Report success to circuit breaker and key pool
+                    breaker.record_success()
+                    self.keys.release_key(key, success=True)
+
+                    # Emit cost event for subsystem 09 integration
+                    await self.costs.record(response)
+
+                    return response
+
+                except ProviderError as e:
+                    elapsed_ms = (time.monotonic() - start_time) * 1000
+
+                    # Step 6: Classify error (p. 205)
+                    classification = classify_error(e)
+                    self.keys.release_key(key, success=False)
+
+                    if classification == ErrorClass.TRANSIENT:
+                        # Rate limit or temporary failure -- mark key and try next
+                        breaker.record_failure()
+                        last_error = e
+                        continue  # failover to next candidate (p. 27)
+
+                    elif classification == ErrorClass.RATE_LIMITED:
+                        # Retry with backoff on same provider (p. 206)
+                        await asyncio.sleep(e.retry_after or 1.0)
+                        breaker.record_failure()
+                        last_error = e
+                        continue
+
+                    elif classification == ErrorClass.PERMANENT:
+                        # Model deprecated, invalid request -- do not retry (p. 205)
+                        raise PermanentProviderError(provider_name, model_name, e)
+
+                    else:
+                        breaker.record_failure()
+                        last_error = e
+                        continue
+
+            # All candidates exhausted
+            raise AllProvidersExhaustedError(
+                f"Failed after {self.max_failover_attempts} attempts. "
+                f"Last error: {last_error}"
+            )
+
+        async def generate_stream(
+            self, request: LLMRequest
+        ) -> AsyncIterator[StreamChunk]:
+            """Streaming variant of generate(). Same routing and failover logic,
+            but yields StreamChunks as they arrive from the provider."""
+            request.stream = True
+            candidates = await self.router.select_candidates(request)
+
+            for candidate in candidates[:self.max_failover_attempts]:
+                breaker = self.breakers.get_breaker(candidate.provider)
+                if not breaker.allow_request():
                     continue
 
-        # All candidates exhausted
-        raise AllProvidersExhaustedError(
-            f"Failed after {self.max_failover_attempts} attempts. "
-            f"Last error: {last_error}"
-        )
+                key = await self.keys.acquire_key(candidate.provider)
+                if key is None:
+                    continue
 
-    async def generate_stream(
-        self, request: LLMRequest
-    ) -> AsyncIterator[StreamChunk]:
-        """Streaming variant of generate(). Same routing and failover logic,
-        but yields StreamChunks as they arrive from the provider."""
-        request.stream = True
-        candidates = await self.router.select_candidates(request)
+                try:
+                    adapter = self.registry.get_adapter(candidate.provider)
+                    start_time = time.monotonic()
 
-        for candidate in candidates[:self.max_failover_attempts]:
-            breaker = self.breakers.get_breaker(candidate.provider)
-            if not breaker.allow_request():
-                continue
+                    async for chunk in adapter.generate_stream(
+                        request, candidate.model, key
+                    ):
+                        yield chunk
+                        if chunk.is_final and chunk.usage:
+                            elapsed_ms = (time.monotonic() - start_time) * 1000
+                            response_meta = LLMResponse(
+                                content="",
+                                usage=chunk.usage,
+                                model=candidate.model,
+                                provider=candidate.provider,
+                                latency_ms=elapsed_ms,
+                                key_id=key.hashed_id,
+                            )
+                            response_meta.cost_usd = self.costs.compute_cost(
+                                candidate.provider, candidate.model, chunk.usage
+                            )
+                            await self.costs.record(response_meta)
 
-            key = await self.keys.acquire_key(candidate.provider)
-            if key is None:
-                continue
+                    breaker.record_success()
+                    self.keys.release_key(key, success=True)
+                    return  # stream completed successfully
 
-            try:
-                adapter = self.registry.get_adapter(candidate.provider)
-                start_time = time.monotonic()
+                except ProviderError:
+                    breaker.record_failure()
+                    self.keys.release_key(key, success=False)
+                    continue  # failover to next candidate
 
-                async for chunk in adapter.generate_stream(
-                    request, candidate.model, key
-                ):
-                    yield chunk
-                    if chunk.is_final and chunk.usage:
-                        elapsed_ms = (time.monotonic() - start_time) * 1000
-                        response_meta = LLMResponse(
-                            content="",
-                            usage=chunk.usage,
-                            model=candidate.model,
-                            provider=candidate.provider,
-                            latency_ms=elapsed_ms,
-                            key_id=key.hashed_id,
-                        )
-                        response_meta.cost_usd = self.costs.compute_cost(
-                            candidate.provider, candidate.model, chunk.usage
-                        )
-                        await self.costs.record(response_meta)
-
-                breaker.record_success()
-                self.keys.release_key(key, success=True)
-                return  # stream completed successfully
-
-            except ProviderError:
-                breaker.record_failure()
-                self.keys.release_key(key, success=False)
-                continue  # failover to next candidate
-
-        raise AllProvidersExhaustedError("Streaming failed across all candidates")
-```
+            raise AllProvidersExhaustedError("Streaming failed across all candidates")
+    ```
 
 ### 2.3 Design Rationale
 
@@ -414,120 +433,122 @@ The Provider Registry is the source of truth for all available LLM providers, mo
 
 ### 3.1 Provider Definition Schema
 
-```json
-{
-  "provider_id": "anthropic",
-  "display_name": "Anthropic",
-  "adapter_class": "AnthropicAdapter",
-  "base_url": "https://api.anthropic.com",
-  "api_version": "2024-01-01",
-  "auth_type": "api_key",
-  "status": "active",
+??? example "View JSON example"
 
-  "rate_limits": {
-    "requests_per_minute": 4000,
-    "tokens_per_minute": 400000,
-    "tokens_per_day": 10000000
-  },
+    ```json
+    {
+      "provider_id": "anthropic",
+      "display_name": "Anthropic",
+      "adapter_class": "AnthropicAdapter",
+      "base_url": "https://api.anthropic.com",
+      "api_version": "2024-01-01",
+      "auth_type": "api_key",
+      "status": "active",
 
-  "models": [
-    {
-      "model_id": "claude-sonnet-4-20250514",
-      "display_name": "Claude Sonnet 4",
-      "tier": "tier_2",
-      "context_window": 200000,
-      "max_output_tokens": 64000,
-      "pricing": {
-        "input_per_million": 3.00,
-        "output_per_million": 15.00,
-        "cache_read_per_million": 0.30,
-        "cache_write_per_million": 3.75
+      "rate_limits": {
+        "requests_per_minute": 4000,
+        "tokens_per_minute": 400000,
+        "tokens_per_day": 10000000
       },
-      "capabilities": {
-        "tool_use": true,
-        "vision": true,
-        "streaming": true,
-        "extended_thinking": true,
-        "json_mode": true,
-        "system_prompt": true,
-        "multi_turn": true,
-        "pdf_input": true,
-        "batch_api": true
-      },
-      "quality_scores": {
-        "coding": 0.92,
-        "reasoning": 0.90,
-        "creative_writing": 0.88,
-        "instruction_following": 0.93,
-        "multilingual": 0.85
-      },
-      "status": "active"
-    },
-    {
-      "model_id": "claude-opus-4-20250514",
-      "display_name": "Claude Opus 4",
-      "tier": "tier_3",
-      "context_window": 200000,
-      "max_output_tokens": 32000,
-      "pricing": {
-        "input_per_million": 15.00,
-        "output_per_million": 75.00,
-        "cache_read_per_million": 1.50,
-        "cache_write_per_million": 18.75
-      },
-      "capabilities": {
-        "tool_use": true,
-        "vision": true,
-        "streaming": true,
-        "extended_thinking": true,
-        "json_mode": true,
-        "system_prompt": true,
-        "multi_turn": true,
-        "pdf_input": true,
-        "batch_api": true
-      },
-      "quality_scores": {
-        "coding": 0.97,
-        "reasoning": 0.96,
-        "creative_writing": 0.95,
-        "instruction_following": 0.97,
-        "multilingual": 0.92
-      },
-      "status": "active"
-    },
-    {
-      "model_id": "claude-haiku-3.5",
-      "display_name": "Claude 3.5 Haiku",
-      "tier": "tier_1",
-      "context_window": 200000,
-      "max_output_tokens": 8192,
-      "pricing": {
-        "input_per_million": 0.80,
-        "output_per_million": 4.00
-      },
-      "capabilities": {
-        "tool_use": true,
-        "vision": true,
-        "streaming": true,
-        "extended_thinking": false,
-        "json_mode": true,
-        "system_prompt": true,
-        "multi_turn": true,
-        "pdf_input": false,
-        "batch_api": true
-      },
-      "quality_scores": {
-        "coding": 0.78,
-        "reasoning": 0.74,
-        "creative_writing": 0.72,
-        "instruction_following": 0.80,
-        "multilingual": 0.70
-      },
-      "status": "active"
+
+      "models": [
+        {
+          "model_id": "claude-sonnet-4-20250514",
+          "display_name": "Claude Sonnet 4",
+          "tier": "tier_2",
+          "context_window": 200000,
+          "max_output_tokens": 64000,
+          "pricing": {
+            "input_per_million": 3.00,
+            "output_per_million": 15.00,
+            "cache_read_per_million": 0.30,
+            "cache_write_per_million": 3.75
+          },
+          "capabilities": {
+            "tool_use": true,
+            "vision": true,
+            "streaming": true,
+            "extended_thinking": true,
+            "json_mode": true,
+            "system_prompt": true,
+            "multi_turn": true,
+            "pdf_input": true,
+            "batch_api": true
+          },
+          "quality_scores": {
+            "coding": 0.92,
+            "reasoning": 0.90,
+            "creative_writing": 0.88,
+            "instruction_following": 0.93,
+            "multilingual": 0.85
+          },
+          "status": "active"
+        },
+        {
+          "model_id": "claude-opus-4-20250514",
+          "display_name": "Claude Opus 4",
+          "tier": "tier_3",
+          "context_window": 200000,
+          "max_output_tokens": 32000,
+          "pricing": {
+            "input_per_million": 15.00,
+            "output_per_million": 75.00,
+            "cache_read_per_million": 1.50,
+            "cache_write_per_million": 18.75
+          },
+          "capabilities": {
+            "tool_use": true,
+            "vision": true,
+            "streaming": true,
+            "extended_thinking": true,
+            "json_mode": true,
+            "system_prompt": true,
+            "multi_turn": true,
+            "pdf_input": true,
+            "batch_api": true
+          },
+          "quality_scores": {
+            "coding": 0.97,
+            "reasoning": 0.96,
+            "creative_writing": 0.95,
+            "instruction_following": 0.97,
+            "multilingual": 0.92
+          },
+          "status": "active"
+        },
+        {
+          "model_id": "claude-haiku-3.5",
+          "display_name": "Claude 3.5 Haiku",
+          "tier": "tier_1",
+          "context_window": 200000,
+          "max_output_tokens": 8192,
+          "pricing": {
+            "input_per_million": 0.80,
+            "output_per_million": 4.00
+          },
+          "capabilities": {
+            "tool_use": true,
+            "vision": true,
+            "streaming": true,
+            "extended_thinking": false,
+            "json_mode": true,
+            "system_prompt": true,
+            "multi_turn": true,
+            "pdf_input": false,
+            "batch_api": true
+          },
+          "quality_scores": {
+            "coding": 0.78,
+            "reasoning": 0.74,
+            "creative_writing": 0.72,
+            "instruction_following": 0.80,
+            "multilingual": 0.70
+          },
+          "status": "active"
+        }
+      ]
     }
-  ]
-}
-```
+    ```
 
 ### 3.2 Full Provider Catalog
 
@@ -570,122 +591,124 @@ OpenRouter (openrouter)
 
 ### 3.3 Provider Registry Implementation
 
-```python
-# --- Provider Registry ---
+??? example "View Python pseudocode"
 
-from dataclasses import dataclass, field
-from typing import Optional
-import json
+    ```python
+    # --- Provider Registry ---
 
-
-@dataclass
-class ModelInfo:
-    model_id: str
-    display_name: str
-    tier: str                              # "tier_1", "tier_2", "tier_3"
-    context_window: int
-    max_output_tokens: int
-    pricing: dict                          # per-million token costs
-    capabilities: dict[str, bool]
-    quality_scores: dict[str, float]
-    status: str = "active"                 # "active", "deprecated", "beta"
+    from dataclasses import dataclass, field
+    from typing import Optional
+    import json
 
 
-@dataclass
-class ProviderInfo:
-    provider_id: str
-    display_name: str
-    adapter_class: str
-    base_url: str
-    auth_type: str
-    rate_limits: dict
-    models: dict[str, ModelInfo] = field(default_factory=dict)
-    status: str = "active"
+    @dataclass
+    class ModelInfo:
+        model_id: str
+        display_name: str
+        tier: str                              # "tier_1", "tier_2", "tier_3"
+        context_window: int
+        max_output_tokens: int
+        pricing: dict                          # per-million token costs
+        capabilities: dict[str, bool]
+        quality_scores: dict[str, float]
+        status: str = "active"                 # "active", "deprecated", "beta"
 
 
-class ProviderRegistry:
-    """Central registry of all LLM providers and their models.
+    @dataclass
+    class ProviderInfo:
+        provider_id: str
+        display_name: str
+        adapter_class: str
+        base_url: str
+        auth_type: str
+        rate_limits: dict
+        models: dict[str, ModelInfo] = field(default_factory=dict)
+        status: str = "active"
 
-    Loaded from configuration at startup and can be hot-reloaded at runtime
-    when pricing changes or new models are added.
-    """
 
-    def __init__(self):
-        self._providers: dict[str, ProviderInfo] = {}
-        self._adapters: dict[str, "ProviderAdapter"] = {}
+    class ProviderRegistry:
+        """Central registry of all LLM providers and their models.
 
-    def register_provider(self, config: dict, adapter: "ProviderAdapter"):
-        """Register a provider from its configuration and adapter instance."""
-        models = {}
-        for m in config.get("models", []):
-            models[m["model_id"]] = ModelInfo(**m)
+        Loaded from configuration at startup and can be hot-reloaded at runtime
+        when pricing changes or new models are added.
+        """
 
-        provider = ProviderInfo(
-            provider_id=config["provider_id"],
-            display_name=config["display_name"],
-            adapter_class=config["adapter_class"],
-            base_url=config["base_url"],
-            auth_type=config["auth_type"],
-            rate_limits=config["rate_limits"],
-            models=models,
-            status=config.get("status", "active"),
-        )
-        self._providers[provider.provider_id] = provider
-        self._adapters[provider.provider_id] = adapter
+        def __init__(self):
+            self._providers: dict[str, ProviderInfo] = {}
+            self._adapters: dict[str, "ProviderAdapter"] = {}
 
-    def get_adapter(self, provider_id: str) -> "ProviderAdapter":
-        """Return the adapter instance for a provider."""
-        return self._adapters[provider_id]
+        def register_provider(self, config: dict, adapter: "ProviderAdapter"):
+            """Register a provider from its configuration and adapter instance."""
+            models = {}
+            for m in config.get("models", []):
+                models[m["model_id"]] = ModelInfo(**m)
 
-    def get_models_for_tier(self, tier: str) -> list[tuple[str, ModelInfo]]:
-        """Return all (provider_id, model) pairs matching a tier.
-        Used by the routing engine to find candidates (p. 258)."""
-        results = []
-        for pid, provider in self._providers.items():
-            if provider.status != "active":
-                continue
-            for model in provider.models.values():
-                if model.tier == tier and model.status == "active":
-                    results.append((pid, model))
-        return results
+            provider = ProviderInfo(
+                provider_id=config["provider_id"],
+                display_name=config["display_name"],
+                adapter_class=config["adapter_class"],
+                base_url=config["base_url"],
+                auth_type=config["auth_type"],
+                rate_limits=config["rate_limits"],
+                models=models,
+                status=config.get("status", "active"),
+            )
+            self._providers[provider.provider_id] = provider
+            self._adapters[provider.provider_id] = adapter
 
-    def get_models_with_capability(
-        self, capability: str, tier: Optional[str] = None
-    ) -> list[tuple[str, ModelInfo]]:
-        """Return all models that support a given capability (e.g. 'vision').
-        Optionally filter by tier."""
-        results = []
-        for pid, provider in self._providers.items():
-            if provider.status != "active":
-                continue
-            for model in provider.models.values():
-                if model.status != "active":
+        def get_adapter(self, provider_id: str) -> "ProviderAdapter":
+            """Return the adapter instance for a provider."""
+            return self._adapters[provider_id]
+
+        def get_models_for_tier(self, tier: str) -> list[tuple[str, ModelInfo]]:
+            """Return all (provider_id, model) pairs matching a tier.
+            Used by the routing engine to find candidates (p. 258)."""
+            results = []
+            for pid, provider in self._providers.items():
+                if provider.status != "active":
                     continue
-                if tier and model.tier != tier:
+                for model in provider.models.values():
+                    if model.tier == tier and model.status == "active":
+                        results.append((pid, model))
+            return results
+
+        def get_models_with_capability(
+            self, capability: str, tier: Optional[str] = None
+        ) -> list[tuple[str, ModelInfo]]:
+            """Return all models that support a given capability (e.g. 'vision').
+            Optionally filter by tier."""
+            results = []
+            for pid, provider in self._providers.items():
+                if provider.status != "active":
                     continue
-                if model.capabilities.get(capability, False):
-                    results.append((pid, model))
-        return results
+                for model in provider.models.values():
+                    if model.status != "active":
+                        continue
+                    if tier and model.tier != tier:
+                        continue
+                    if model.capabilities.get(capability, False):
+                        results.append((pid, model))
+            return results
 
-    def get_pricing(self, provider_id: str, model_id: str) -> dict:
-        """Return the pricing table for a specific provider/model pair."""
-        provider = self._providers.get(provider_id)
-        if provider and model_id in provider.models:
-            return provider.models[model_id].pricing
-        raise ModelNotFoundError(f"{provider_id}/{model_id}")
+        def get_pricing(self, provider_id: str, model_id: str) -> dict:
+            """Return the pricing table for a specific provider/model pair."""
+            provider = self._providers.get(provider_id)
+            if provider and model_id in provider.models:
+                return provider.models[model_id].pricing
+            raise ModelNotFoundError(f"{provider_id}/{model_id}")
 
-    def hot_reload(self, config_path: str):
-        """Reload provider configuration without restarting.
-        Used when pricing updates or new models are added."""
-        with open(config_path) as f:
-            configs = json.load(f)
-        for config in configs:
-            pid = config["provider_id"]
-            if pid in self._providers:
-                # Update models and pricing in place
-                for m in config.get("models", []):
-                    self._providers[pid].models[m["model_id"]] = ModelInfo(**m)
-```
+        def hot_reload(self, config_path: str):
+            """Reload provider configuration without restarting.
+            Used when pricing updates or new models are added."""
+            with open(config_path) as f:
+                configs = json.load(f)
+            for config in configs:
+                pid = config["provider_id"]
+                if pid in self._providers:
+                    # Update models and pricing in place
+                    for m in config.get("models", []):
+                        self._providers[pid].models[m["model_id"]] = ModelInfo(**m)
+    ```
 
 ---
 
@@ -697,475 +720,485 @@ This is a strict application of the **Adapter pattern**: the unified client depe
 
 ### 4.1 Abstract Adapter Interface
 
-```python
-# --- Provider Adapter (abstract) ---
+??? example "View Python pseudocode"
 
-from abc import ABC, abstractmethod
-from typing import AsyncIterator
+    ```python
+    # --- Provider Adapter (abstract) ---
+
+    from abc import ABC, abstractmethod
+    from typing import AsyncIterator
 
 
-class ProviderAdapter(ABC):
-    """Abstract base class for all provider adapters.
+    class ProviderAdapter(ABC):
+        """Abstract base class for all provider adapters.
 
-    Each adapter translates between the unified LLMRequest/LLMResponse
-    contract and the provider's native API format. This includes:
+        Each adapter translates between the unified LLMRequest/LLMResponse
+        contract and the provider's native API format. This includes:
 
-    - Request body construction (message format, tool definitions)
-    - Authentication header injection
-    - Response parsing and normalization
-    - Error code mapping to platform error classes
-    - Streaming protocol handling (SSE, WebSocket, etc.)
+        - Request body construction (message format, tool definitions)
+        - Authentication header injection
+        - Response parsing and normalization
+        - Error code mapping to platform error classes
+        - Streaming protocol handling (SSE, WebSocket, etc.)
 
-    Tool calling format translation (p. 90): OpenAI uses 'functions'/'tools'
-    with 'function_call', Anthropic uses 'tools' with 'tool_use' content
-    blocks. The adapter handles this translation transparently.
-    """
+        Tool calling format translation (p. 90): OpenAI uses 'functions'/'tools'
+        with 'function_call', Anthropic uses 'tools' with 'tool_use' content
+        blocks. The adapter handles this translation transparently.
+        """
 
-    @abstractmethod
-    async def generate(
-        self,
-        request: LLMRequest,
-        model: str,
-        api_key: "APIKey",
-    ) -> LLMResponse:
-        """Execute a non-streaming LLM call and return normalized response."""
-        ...
+        @abstractmethod
+        async def generate(
+            self,
+            request: LLMRequest,
+            model: str,
+            api_key: "APIKey",
+        ) -> LLMResponse:
+            """Execute a non-streaming LLM call and return normalized response."""
+            ...
 
-    @abstractmethod
-    async def generate_stream(
-        self,
-        request: LLMRequest,
-        model: str,
-        api_key: "APIKey",
-    ) -> AsyncIterator[StreamChunk]:
-        """Execute a streaming LLM call and yield normalized chunks."""
-        ...
+        @abstractmethod
+        async def generate_stream(
+            self,
+            request: LLMRequest,
+            model: str,
+            api_key: "APIKey",
+        ) -> AsyncIterator[StreamChunk]:
+            """Execute a streaming LLM call and yield normalized chunks."""
+            ...
 
-    @abstractmethod
-    def translate_request(self, request: LLMRequest, model: str) -> dict:
-        """Convert a unified LLMRequest into the provider's native format."""
-        ...
+        @abstractmethod
+        def translate_request(self, request: LLMRequest, model: str) -> dict:
+            """Convert a unified LLMRequest into the provider's native format."""
+            ...
 
-    @abstractmethod
-    def translate_response(self, raw_response: dict) -> LLMResponse:
-        """Convert a provider's native response into a unified LLMResponse."""
-        ...
+        @abstractmethod
+        def translate_response(self, raw_response: dict) -> LLMResponse:
+            """Convert a provider's native response into a unified LLMResponse."""
+            ...
 
-    @abstractmethod
-    def translate_error(self, error: Exception) -> "ProviderError":
-        """Map provider-specific errors to platform error classes (p. 205)."""
-        ...
+        @abstractmethod
+        def translate_error(self, error: Exception) -> "ProviderError":
+            """Map provider-specific errors to platform error classes (p. 205)."""
+            ...
 
-    @abstractmethod
-    def supports_feature(self, feature: str) -> bool:
-        """Check if this adapter supports a feature at the API level."""
-        ...
-```
+        @abstractmethod
+        def supports_feature(self, feature: str) -> bool:
+            """Check if this adapter supports a feature at the API level."""
+            ...
+    ```
 
 ### 4.2 Anthropic Adapter Implementation
 
-```python
-# --- Anthropic Adapter ---
+??? example "View Python pseudocode"
 
-import httpx
-from typing import AsyncIterator
+    ```python
+    # --- Anthropic Adapter ---
+
+    import httpx
+    from typing import AsyncIterator
 
 
-class AnthropicAdapter(ProviderAdapter):
-    """Adapter for the Anthropic Messages API.
+    class AnthropicAdapter(ProviderAdapter):
+        """Adapter for the Anthropic Messages API.
 
-    Handles Anthropic-specific concerns:
-    - System prompt as a top-level parameter (not a message)
-    - Tool use via 'tools' parameter with 'tool_use' content blocks
-    - Extended thinking via 'thinking' parameter
-    - Streaming via Server-Sent Events (SSE)
-    - Cache control headers for prompt caching
-    """
-
-    BASE_URL = "https://api.anthropic.com/v1"
-
-    def __init__(self, config: dict):
-        self.api_version = config.get("api_version", "2024-01-01")
-        self.http_client = httpx.AsyncClient(timeout=120.0)
-
-    def translate_request(self, request: LLMRequest, model: str) -> dict:
-        """Translate unified request to Anthropic Messages API format.
-
-        Key differences from OpenAI format (p. 90):
-        - System prompt is a top-level 'system' field, not a message
-        - Tool definitions use 'input_schema' instead of 'parameters'
-        - Vision content uses base64 'source' blocks
-        - Extended thinking is a first-class parameter
+        Handles Anthropic-specific concerns:
+        - System prompt as a top-level parameter (not a message)
+        - Tool use via 'tools' parameter with 'tool_use' content blocks
+        - Extended thinking via 'thinking' parameter
+        - Streaming via Server-Sent Events (SSE)
+        - Cache control headers for prompt caching
         """
-        # Separate system message from conversation messages
-        system_content = None
-        messages = []
-        for msg in request.messages:
-            if msg.role == Role.SYSTEM:
-                system_content = msg.content
-            elif msg.role == Role.TOOL_RESULT:
-                messages.append({
-                    "role": "user",
-                    "content": [{
-                        "type": "tool_result",
-                        "tool_use_id": msg.tool_call_id,
+
+        BASE_URL = "https://api.anthropic.com/v1"
+
+        def __init__(self, config: dict):
+            self.api_version = config.get("api_version", "2024-01-01")
+            self.http_client = httpx.AsyncClient(timeout=120.0)
+
+        def translate_request(self, request: LLMRequest, model: str) -> dict:
+            """Translate unified request to Anthropic Messages API format.
+
+            Key differences from OpenAI format (p. 90):
+            - System prompt is a top-level 'system' field, not a message
+            - Tool definitions use 'input_schema' instead of 'parameters'
+            - Vision content uses base64 'source' blocks
+            - Extended thinking is a first-class parameter
+            """
+            # Separate system message from conversation messages
+            system_content = None
+            messages = []
+            for msg in request.messages:
+                if msg.role == Role.SYSTEM:
+                    system_content = msg.content
+                elif msg.role == Role.TOOL_RESULT:
+                    messages.append({
+                        "role": "user",
+                        "content": [{
+                            "type": "tool_result",
+                            "tool_use_id": msg.tool_call_id,
+                            "content": msg.content,
+                        }]
+                    })
+                else:
+                    messages.append({
+                        "role": msg.role.value,
                         "content": msg.content,
-                    }]
-                })
-            else:
-                messages.append({
-                    "role": msg.role.value,
-                    "content": msg.content,
-                })
+                    })
 
-        body = {
-            "model": model,
-            "messages": messages,
-            "max_tokens": request.max_tokens,
-            "temperature": request.temperature,
-        }
-
-        if system_content:
-            body["system"] = system_content
-
-        if request.stop_sequences:
-            body["stop_sequences"] = request.stop_sequences
-
-        # Tool use translation (p. 90): Anthropic format
-        if request.tools:
-            body["tools"] = [
-                {
-                    "name": tool.name,
-                    "description": tool.description,
-                    "input_schema": {
-                        "type": "object",
-                        "properties": tool.parameters.get("properties", {}),
-                        "required": tool.required,
-                    },
-                }
-                for tool in request.tools
-            ]
-
-        # Extended thinking (Anthropic-specific feature)
-        if request.extended_thinking:
-            body["thinking"] = {
-                "type": "enabled",
-                "budget_tokens": request.thinking_budget or 10000,
+            body = {
+                "model": model,
+                "messages": messages,
+                "max_tokens": request.max_tokens,
+                "temperature": request.temperature,
             }
-            # Extended thinking requires temperature = 1.0
-            body["temperature"] = 1.0
 
-        if request.stream:
-            body["stream"] = True
+            if system_content:
+                body["system"] = system_content
 
-        return body
+            if request.stop_sequences:
+                body["stop_sequences"] = request.stop_sequences
 
-    def translate_response(self, raw: dict) -> LLMResponse:
-        """Parse Anthropic response into unified LLMResponse."""
-        content_parts = []
-        tool_calls = []
-        thinking = None
-
-        for block in raw.get("content", []):
-            if block["type"] == "text":
-                content_parts.append(block["text"])
-            elif block["type"] == "tool_use":
-                tool_calls.append(ToolCall(
-                    id=block["id"],
-                    name=block["name"],
-                    arguments=block["input"],
-                ))
-            elif block["type"] == "thinking":
-                thinking = block["thinking"]
-
-        usage_data = raw.get("usage", {})
-        usage = TokenUsage(
-            input_tokens=usage_data.get("input_tokens", 0),
-            output_tokens=usage_data.get("output_tokens", 0),
-            cache_read_tokens=usage_data.get("cache_read_input_tokens", 0),
-            cache_write_tokens=usage_data.get("cache_creation_input_tokens", 0),
-        )
-
-        return LLMResponse(
-            content="\n".join(content_parts),
-            tool_calls=tool_calls,
-            thinking=thinking,
-            usage=usage,
-            model=raw.get("model", ""),
-            finish_reason=raw.get("stop_reason", ""),
-            request_id=raw.get("id", ""),
-        )
-
-    def translate_error(self, error: Exception) -> "ProviderError":
-        """Map Anthropic HTTP errors to platform error classes (p. 205)."""
-        if isinstance(error, httpx.HTTPStatusError):
-            status = error.response.status_code
-            if status == 429:
-                retry_after = float(
-                    error.response.headers.get("retry-after", "1")
-                )
-                return RateLimitError("anthropic", retry_after=retry_after)
-            elif status == 529:
-                return OverloadedError("anthropic")
-            elif status in (401, 403):
-                return AuthenticationError("anthropic")
-            elif status == 400:
-                return InvalidRequestError("anthropic", str(error))
-            else:
-                return TransientError("anthropic", status)
-        return UnknownProviderError("anthropic", str(error))
-
-    def supports_feature(self, feature: str) -> bool:
-        return feature in {
-            "tool_use", "vision", "streaming", "extended_thinking",
-            "json_mode", "system_prompt", "multi_turn", "pdf_input",
-            "prompt_caching", "batch_api",
-        }
-
-    async def generate(
-        self, request: LLMRequest, model: str, api_key: "APIKey"
-    ) -> LLMResponse:
-        body = self.translate_request(request, model)
-        headers = {
-            "x-api-key": api_key.value,
-            "anthropic-version": self.api_version,
-            "content-type": "application/json",
-        }
-        try:
-            resp = await self.http_client.post(
-                f"{self.BASE_URL}/messages",
-                json=body,
-                headers=headers,
-            )
-            resp.raise_for_status()
-            return self.translate_response(resp.json())
-        except Exception as e:
-            raise self.translate_error(e)
-
-    async def generate_stream(
-        self, request: LLMRequest, model: str, api_key: "APIKey"
-    ) -> AsyncIterator[StreamChunk]:
-        body = self.translate_request(request, model)
-        body["stream"] = True
-        headers = {
-            "x-api-key": api_key.value,
-            "anthropic-version": self.api_version,
-            "content-type": "application/json",
-        }
-        async with self.http_client.stream(
-            "POST", f"{self.BASE_URL}/messages", json=body, headers=headers
-        ) as resp:
-            async for line in resp.aiter_lines():
-                if line.startswith("data: "):
-                    chunk_data = json.loads(line[6:])
-                    yield self._parse_stream_event(chunk_data)
-
-    def _parse_stream_event(self, event: dict) -> StreamChunk:
-        event_type = event.get("type", "")
-        if event_type == "content_block_delta":
-            delta = event.get("delta", {})
-            if delta.get("type") == "text_delta":
-                return StreamChunk(content_delta=delta.get("text", ""))
-            elif delta.get("type") == "thinking_delta":
-                return StreamChunk(thinking_delta=delta.get("thinking", ""))
-        elif event_type == "message_delta":
-            usage = event.get("usage", {})
-            return StreamChunk(
-                is_final=True,
-                usage=TokenUsage(
-                    input_tokens=usage.get("input_tokens", 0),
-                    output_tokens=usage.get("output_tokens", 0),
-                ),
-            )
-        return StreamChunk()
-```
-
-### 4.3 OpenAI Adapter (Key Differences)
-
-```python
-# --- OpenAI Adapter (abbreviated -- highlighting format differences) ---
-
-class OpenAIAdapter(ProviderAdapter):
-    """Adapter for the OpenAI Chat Completions API.
-
-    Key format differences from Anthropic (p. 90):
-    - System prompt is a message with role='system', not a top-level field
-    - Tool definitions use 'parameters' (not 'input_schema')
-    - Tool calls appear in 'tool_calls' array on the assistant message
-    - Streaming uses 'choices[0].delta' structure
-    - No native extended thinking (mapped to chain-of-thought prompting)
-    """
-
-    def translate_request(self, request: LLMRequest, model: str) -> dict:
-        messages = []
-        for msg in request.messages:
-            if msg.role == Role.TOOL_RESULT:
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": msg.tool_call_id,
-                    "content": msg.content,
-                })
-            else:
-                messages.append({
-                    "role": msg.role.value,
-                    "content": msg.content,
-                })
-
-        body = {
-            "model": model,
-            "messages": messages,
-            "max_completion_tokens": request.max_tokens,
-            "temperature": request.temperature,
-            "stream": request.stream,
-        }
-
-        # Tool use translation (p. 90): OpenAI 'tools' format
-        if request.tools:
-            body["tools"] = [
-                {
-                    "type": "function",
-                    "function": {
+            # Tool use translation (p. 90): Anthropic format
+            if request.tools:
+                body["tools"] = [
+                    {
                         "name": tool.name,
                         "description": tool.description,
-                        "parameters": {
+                        "input_schema": {
                             "type": "object",
                             "properties": tool.parameters.get("properties", {}),
                             "required": tool.required,
                         },
-                    },
+                    }
+                    for tool in request.tools
+                ]
+
+            # Extended thinking (Anthropic-specific feature)
+            if request.extended_thinking:
+                body["thinking"] = {
+                    "type": "enabled",
+                    "budget_tokens": request.thinking_budget or 10000,
                 }
-                for tool in request.tools
-            ]
+                # Extended thinking requires temperature = 1.0
+                body["temperature"] = 1.0
 
-        if request.response_format:
-            body["response_format"] = request.response_format
+            if request.stream:
+                body["stream"] = True
 
-        # Extended thinking not natively supported -- fallback to
-        # system prompt instruction for chain-of-thought
-        if request.extended_thinking:
-            cot_instruction = {
-                "role": "system",
-                "content": (
-                    "Think step by step before answering. "
-                    "Show your reasoning process."
-                ),
+            return body
+
+        def translate_response(self, raw: dict) -> LLMResponse:
+            """Parse Anthropic response into unified LLMResponse."""
+            content_parts = []
+            tool_calls = []
+            thinking = None
+
+            for block in raw.get("content", []):
+                if block["type"] == "text":
+                    content_parts.append(block["text"])
+                elif block["type"] == "tool_use":
+                    tool_calls.append(ToolCall(
+                        id=block["id"],
+                        name=block["name"],
+                        arguments=block["input"],
+                    ))
+                elif block["type"] == "thinking":
+                    thinking = block["thinking"]
+
+            usage_data = raw.get("usage", {})
+            usage = TokenUsage(
+                input_tokens=usage_data.get("input_tokens", 0),
+                output_tokens=usage_data.get("output_tokens", 0),
+                cache_read_tokens=usage_data.get("cache_read_input_tokens", 0),
+                cache_write_tokens=usage_data.get("cache_creation_input_tokens", 0),
+            )
+
+            return LLMResponse(
+                content="\n".join(content_parts),
+                tool_calls=tool_calls,
+                thinking=thinking,
+                usage=usage,
+                model=raw.get("model", ""),
+                finish_reason=raw.get("stop_reason", ""),
+                request_id=raw.get("id", ""),
+            )
+
+        def translate_error(self, error: Exception) -> "ProviderError":
+            """Map Anthropic HTTP errors to platform error classes (p. 205)."""
+            if isinstance(error, httpx.HTTPStatusError):
+                status = error.response.status_code
+                if status == 429:
+                    retry_after = float(
+                        error.response.headers.get("retry-after", "1")
+                    )
+                    return RateLimitError("anthropic", retry_after=retry_after)
+                elif status == 529:
+                    return OverloadedError("anthropic")
+                elif status in (401, 403):
+                    return AuthenticationError("anthropic")
+                elif status == 400:
+                    return InvalidRequestError("anthropic", str(error))
+                else:
+                    return TransientError("anthropic", status)
+            return UnknownProviderError("anthropic", str(error))
+
+        def supports_feature(self, feature: str) -> bool:
+            return feature in {
+                "tool_use", "vision", "streaming", "extended_thinking",
+                "json_mode", "system_prompt", "multi_turn", "pdf_input",
+                "prompt_caching", "batch_api",
             }
-            messages.insert(0, cot_instruction)
 
-        return body
+        async def generate(
+            self, request: LLMRequest, model: str, api_key: "APIKey"
+        ) -> LLMResponse:
+            body = self.translate_request(request, model)
+            headers = {
+                "x-api-key": api_key.value,
+                "anthropic-version": self.api_version,
+                "content-type": "application/json",
+            }
+            try:
+                resp = await self.http_client.post(
+                    f"{self.BASE_URL}/messages",
+                    json=body,
+                    headers=headers,
+                )
+                resp.raise_for_status()
+                return self.translate_response(resp.json())
+            except Exception as e:
+                raise self.translate_error(e)
 
-    def translate_response(self, raw: dict) -> LLMResponse:
-        choice = raw["choices"][0]
-        message = choice["message"]
-        tool_calls = []
-        if message.get("tool_calls"):
-            for tc in message["tool_calls"]:
-                tool_calls.append(ToolCall(
-                    id=tc["id"],
-                    name=tc["function"]["name"],
-                    arguments=json.loads(tc["function"]["arguments"]),
-                ))
+        async def generate_stream(
+            self, request: LLMRequest, model: str, api_key: "APIKey"
+        ) -> AsyncIterator[StreamChunk]:
+            body = self.translate_request(request, model)
+            body["stream"] = True
+            headers = {
+                "x-api-key": api_key.value,
+                "anthropic-version": self.api_version,
+                "content-type": "application/json",
+            }
+            async with self.http_client.stream(
+                "POST", f"{self.BASE_URL}/messages", json=body, headers=headers
+            ) as resp:
+                async for line in resp.aiter_lines():
+                    if line.startswith("data: "):
+                        chunk_data = json.loads(line[6:])
+                        yield self._parse_stream_event(chunk_data)
 
-        usage_data = raw.get("usage", {})
-        return LLMResponse(
-            content=message.get("content", "") or "",
-            tool_calls=tool_calls,
-            usage=TokenUsage(
-                input_tokens=usage_data.get("prompt_tokens", 0),
-                output_tokens=usage_data.get("completion_tokens", 0),
-            ),
-            model=raw.get("model", ""),
-            finish_reason=choice.get("finish_reason", ""),
-            request_id=raw.get("id", ""),
-        )
-```
+        def _parse_stream_event(self, event: dict) -> StreamChunk:
+            event_type = event.get("type", "")
+            if event_type == "content_block_delta":
+                delta = event.get("delta", {})
+                if delta.get("type") == "text_delta":
+                    return StreamChunk(content_delta=delta.get("text", ""))
+                elif delta.get("type") == "thinking_delta":
+                    return StreamChunk(thinking_delta=delta.get("thinking", ""))
+            elif event_type == "message_delta":
+                usage = event.get("usage", {})
+                return StreamChunk(
+                    is_final=True,
+                    usage=TokenUsage(
+                        input_tokens=usage.get("input_tokens", 0),
+                        output_tokens=usage.get("output_tokens", 0),
+                    ),
+                )
+            return StreamChunk()
+    ```
+
+### 4.3 OpenAI Adapter (Key Differences)
+
+??? example "View Python pseudocode"
+
+    ```python
+    # --- OpenAI Adapter (abbreviated -- highlighting format differences) ---
+
+    class OpenAIAdapter(ProviderAdapter):
+        """Adapter for the OpenAI Chat Completions API.
+
+        Key format differences from Anthropic (p. 90):
+        - System prompt is a message with role='system', not a top-level field
+        - Tool definitions use 'parameters' (not 'input_schema')
+        - Tool calls appear in 'tool_calls' array on the assistant message
+        - Streaming uses 'choices[0].delta' structure
+        - No native extended thinking (mapped to chain-of-thought prompting)
+        """
+
+        def translate_request(self, request: LLMRequest, model: str) -> dict:
+            messages = []
+            for msg in request.messages:
+                if msg.role == Role.TOOL_RESULT:
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": msg.tool_call_id,
+                        "content": msg.content,
+                    })
+                else:
+                    messages.append({
+                        "role": msg.role.value,
+                        "content": msg.content,
+                    })
+
+            body = {
+                "model": model,
+                "messages": messages,
+                "max_completion_tokens": request.max_tokens,
+                "temperature": request.temperature,
+                "stream": request.stream,
+            }
+
+            # Tool use translation (p. 90): OpenAI 'tools' format
+            if request.tools:
+                body["tools"] = [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": tool.name,
+                            "description": tool.description,
+                            "parameters": {
+                                "type": "object",
+                                "properties": tool.parameters.get("properties", {}),
+                                "required": tool.required,
+                            },
+                        },
+                    }
+                    for tool in request.tools
+                ]
+
+            if request.response_format:
+                body["response_format"] = request.response_format
+
+            # Extended thinking not natively supported -- fallback to
+            # system prompt instruction for chain-of-thought
+            if request.extended_thinking:
+                cot_instruction = {
+                    "role": "system",
+                    "content": (
+                        "Think step by step before answering. "
+                        "Show your reasoning process."
+                    ),
+                }
+                messages.insert(0, cot_instruction)
+
+            return body
+
+        def translate_response(self, raw: dict) -> LLMResponse:
+            choice = raw["choices"][0]
+            message = choice["message"]
+            tool_calls = []
+            if message.get("tool_calls"):
+                for tc in message["tool_calls"]:
+                    tool_calls.append(ToolCall(
+                        id=tc["id"],
+                        name=tc["function"]["name"],
+                        arguments=json.loads(tc["function"]["arguments"]),
+                    ))
+
+            usage_data = raw.get("usage", {})
+            return LLMResponse(
+                content=message.get("content", "") or "",
+                tool_calls=tool_calls,
+                usage=TokenUsage(
+                    input_tokens=usage_data.get("prompt_tokens", 0),
+                    output_tokens=usage_data.get("completion_tokens", 0),
+                ),
+                model=raw.get("model", ""),
+                finish_reason=choice.get("finish_reason", ""),
+                request_id=raw.get("id", ""),
+            )
+    ```
 
 ### 4.4 Local Model Adapter (Ollama)
 
-```python
-# --- Ollama Adapter (local models) ---
+??? example "View Python pseudocode"
 
-class OllamaAdapter(ProviderAdapter):
-    """Adapter for locally-hosted models via Ollama.
+    ```python
+    # --- Ollama Adapter (local models) ---
 
-    Key considerations for local models:
-    - No API key required (auth_type: "none")
-    - Latency depends on local GPU/CPU resources
-    - Context window and capabilities vary per model
-    - Tool use support is model-dependent
-    - No per-token cost (only infrastructure cost)
-    - The circuit breaker monitors local process health
-    """
+    class OllamaAdapter(ProviderAdapter):
+        """Adapter for locally-hosted models via Ollama.
 
-    def __init__(self, config: dict):
-        self.base_url = config.get("base_url", "http://localhost:11434")
-        self.http_client = httpx.AsyncClient(timeout=300.0)  # longer timeout for local
+        Key considerations for local models:
+        - No API key required (auth_type: "none")
+        - Latency depends on local GPU/CPU resources
+        - Context window and capabilities vary per model
+        - Tool use support is model-dependent
+        - No per-token cost (only infrastructure cost)
+        - The circuit breaker monitors local process health
+        """
 
-    def translate_request(self, request: LLMRequest, model: str) -> dict:
-        messages = []
-        for msg in request.messages:
-            messages.append({
-                "role": msg.role.value if msg.role != Role.TOOL_RESULT else "user",
-                "content": msg.content,
-            })
+        def __init__(self, config: dict):
+            self.base_url = config.get("base_url", "http://localhost:11434")
+            self.http_client = httpx.AsyncClient(timeout=300.0)  # longer timeout for local
 
-        return {
-            "model": model,
-            "messages": messages,
-            "options": {
-                "temperature": request.temperature,
-                "num_predict": request.max_tokens,
-            },
-            "stream": request.stream,
-        }
+        def translate_request(self, request: LLMRequest, model: str) -> dict:
+            messages = []
+            for msg in request.messages:
+                messages.append({
+                    "role": msg.role.value if msg.role != Role.TOOL_RESULT else "user",
+                    "content": msg.content,
+                })
 
-    async def generate(
-        self, request: LLMRequest, model: str, api_key: "APIKey"
-    ) -> LLMResponse:
-        body = self.translate_request(request, model)
-        resp = await self.http_client.post(
-            f"{self.base_url}/api/chat", json=body
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        return LLMResponse(
-            content=data["message"]["content"],
-            usage=TokenUsage(
-                input_tokens=data.get("prompt_eval_count", 0),
-                output_tokens=data.get("eval_count", 0),
-            ),
-            model=model,
-            cost_usd=0.0,  # local models: no API cost
-        )
-```
+            return {
+                "model": model,
+                "messages": messages,
+                "options": {
+                    "temperature": request.temperature,
+                    "num_predict": request.max_tokens,
+                },
+                "stream": request.stream,
+            }
+
+        async def generate(
+            self, request: LLMRequest, model: str, api_key: "APIKey"
+        ) -> LLMResponse:
+            body = self.translate_request(request, model)
+            resp = await self.http_client.post(
+                f"{self.base_url}/api/chat", json=body
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return LLMResponse(
+                content=data["message"]["content"],
+                usage=TokenUsage(
+                    input_tokens=data.get("prompt_eval_count", 0),
+                    output_tokens=data.get("eval_count", 0),
+                ),
+                model=model,
+                cost_usd=0.0,  # local models: no API cost
+            )
+    ```
 
 ### 4.5 Adapter Registration
 
 Adapters are registered with the `ProviderRegistry` at startup. The factory pattern allows new adapters to be added without modifying existing code:
 
-```python
-# --- Adapter Factory ---
+??? example "View Python pseudocode"
 
-ADAPTER_CLASSES = {
-    "AnthropicAdapter": AnthropicAdapter,
-    "OpenAIAdapter": OpenAIAdapter,
-    "GoogleAdapter": GoogleAdapter,
-    "OllamaAdapter": OllamaAdapter,
-    "VLLMAdapter": VLLMAdapter,
-    "OpenRouterAdapter": OpenRouterAdapter,
-}
+    ```python
+    # --- Adapter Factory ---
+
+    ADAPTER_CLASSES = {
+        "AnthropicAdapter": AnthropicAdapter,
+        "OpenAIAdapter": OpenAIAdapter,
+        "GoogleAdapter": GoogleAdapter,
+        "OllamaAdapter": OllamaAdapter,
+        "VLLMAdapter": VLLMAdapter,
+        "OpenRouterAdapter": OpenRouterAdapter,
+    }
 
 
-def build_registry(provider_configs: list[dict]) -> ProviderRegistry:
-    """Build the provider registry from a list of provider configurations.
-    Called once at platform startup."""
-    registry = ProviderRegistry()
-    for config in provider_configs:
-        adapter_cls = ADAPTER_CLASSES[config["adapter_class"]]
-        adapter = adapter_cls(config)
-        registry.register_provider(config, adapter)
-    return registry
-```
+    def build_registry(provider_configs: list[dict]) -> ProviderRegistry:
+        """Build the provider registry from a list of provider configurations.
+        Called once at platform startup."""
+        registry = ProviderRegistry()
+        for config in provider_configs:
+            adapter_cls = ADAPTER_CLASSES[config["adapter_class"]]
+            adapter = adapter_cls(config)
+            registry.register_provider(config, adapter)
+        return registry
+    ```
 
 ---
 
@@ -1175,277 +1208,290 @@ The Routing & Selection Engine determines which provider and model should serve 
 
 ### 5.1 Routing Decision Factors
 
-```
-Request arrives with:
-  - model_tier: "tier_2"
-  - routing_hints: {"requires_tool_use": true, "latency_sensitive": true}
+```mermaid
+graph TD
+    REQ["Request<br/><small>model_tier: tier_2<br/>routing_hints: requires_tool_use, latency_sensitive</small>"]
 
-Routing Engine evaluates candidates:
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         Candidate Scoring                               │
-│                                                                         │
-│  Filter Phase (hard constraints):                                       │
-│  ├── Does model match requested tier?              → keep/discard       │
-│  ├── Does model support required capabilities?     → keep/discard       │
-│  ├── Is provider circuit breaker closed?           → keep/discard       │
-│  └── Does provider have available API keys?        → keep/discard       │
-│                                                                         │
-│  Scoring Phase (soft preferences):                                      │
-│  ├── Cost score:     lower $/M tokens → higher score   (weight: 0.30)  │
-│  ├── Latency score:  lower p95 latency → higher score  (weight: 0.25)  │
-│  ├── Quality score:  higher benchmark → higher score   (weight: 0.25)  │
-│  ├── Health score:   fewer recent errors → higher score (weight: 0.15) │
-│  └── Key headroom:   more rate limit headroom → higher (weight: 0.05)  │
-│                                                                         │
-│  Output: Ranked list of (provider, model) candidates                    │
-└─────────────────────────────────────────────────────────────────────────┘
+    subgraph CS["Candidate Scoring"]
+        direction TB
+        subgraph FP["Filter Phase (hard constraints)"]
+            direction TB
+            F1["Does model match requested tier? → keep/discard"]
+            F2["Does model support required capabilities? → keep/discard"]
+            F3["Is provider circuit breaker closed? → keep/discard"]
+            F4["Does provider have available API keys? → keep/discard"]
+        end
+        subgraph SP["Scoring Phase (soft preferences)"]
+            direction TB
+            S1["Cost score: lower $/M tokens → higher (weight: 0.30)"]
+            S2["Latency score: lower p95 → higher (weight: 0.25)"]
+            S3["Quality score: higher benchmark → higher (weight: 0.25)"]
+            S4["Health score: fewer errors → higher (weight: 0.15)"]
+            S5["Key headroom: more rate limit headroom → higher (weight: 0.05)"]
+        end
+        FP --> SP
+    end
+
+    OUT["Output: Ranked list of<br/>(provider, model) candidates"]
+
+    REQ --> CS --> OUT
+
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef guardrail fill:#E74C3C,stroke:#C0392B,color:#fff
+    class REQ core
+    class F1,F2,F3,F4 guardrail
+    class S1,S2,S3,S4,S5 infra
+    class OUT core
 ```
 
 ### 5.2 Routing Engine Implementation
 
-```python
-# --- Routing & Selection Engine (p. 25, p. 258) ---
+??? example "View Python pseudocode"
 
-from dataclasses import dataclass
-from typing import Optional
+    ```python
+    # --- Routing & Selection Engine (p. 25, p. 258) ---
+
+    from dataclasses import dataclass
+    from typing import Optional
 
 
-@dataclass
-class RoutingCandidate:
-    provider: str
-    model: str
-    score: float
-    cost_per_million_input: float
-    cost_per_million_output: float
-    estimated_latency_ms: float
-    quality_score: float
-    health_score: float
+    @dataclass
+    class RoutingCandidate:
+        provider: str
+        model: str
+        score: float
+        cost_per_million_input: float
+        cost_per_million_output: float
+        estimated_latency_ms: float
+        quality_score: float
+        health_score: float
 
-    def to_dict(self) -> dict:
-        return {
-            "provider": self.provider,
-            "model": self.model,
-            "score": round(self.score, 4),
-            "cost_input": self.cost_per_million_input,
-            "latency_est_ms": self.estimated_latency_ms,
+        def to_dict(self) -> dict:
+            return {
+                "provider": self.provider,
+                "model": self.model,
+                "score": round(self.score, 4),
+                "cost_input": self.cost_per_million_input,
+                "latency_est_ms": self.estimated_latency_ms,
+            }
+
+
+    class RoutingEngine:
+        """Selects the best provider/model for each request.
+
+        Applies the Routing pattern (p. 25) with a multi-factor scoring
+        algorithm. The engine does NOT use an LLM for routing -- it uses
+        deterministic scoring. The LLM-based complexity classification
+        (which tier to use) is handled by subsystem 09's ComplexityRouter.
+
+        This engine answers: "Given that we need a Tier 2 model with tool use,
+        which specific provider and model should we use right now?"
+
+        Fallback chain (p. 27): Candidates are returned in ranked order.
+        The UnifiedLLMClient iterates through them on failure.
+        """
+
+        # Scoring weights -- configurable per deployment
+        DEFAULT_WEIGHTS = {
+            "cost": 0.30,
+            "latency": 0.25,
+            "quality": 0.25,
+            "health": 0.15,
+            "key_headroom": 0.05,
         }
 
+        def __init__(
+            self,
+            registry: ProviderRegistry,
+            circuit_breakers: "CircuitBreakerManager",
+            key_pool: "APIKeyPoolManager",
+            metrics_store: "ProviderMetricsStore",
+            config: dict,
+        ):
+            self.registry = registry
+            self.breakers = circuit_breakers
+            self.keys = key_pool
+            self.metrics = metrics_store
+            self.weights = config.get("routing_weights", self.DEFAULT_WEIGHTS)
+            self.preference_overrides = config.get("provider_preferences", {})
 
-class RoutingEngine:
-    """Selects the best provider/model for each request.
+        async def select_candidates(
+            self, request: LLMRequest
+        ) -> list[RoutingCandidate]:
+            """Return a ranked list of (provider, model) candidates for the request.
 
-    Applies the Routing pattern (p. 25) with a multi-factor scoring
-    algorithm. The engine does NOT use an LLM for routing -- it uses
-    deterministic scoring. The LLM-based complexity classification
-    (which tier to use) is handled by subsystem 09's ComplexityRouter.
+            The list is ordered by composite score (highest first). The caller
+            iterates through candidates for failover (p. 27).
+            """
+            # Handle explicit provider/model override
+            if request.provider and request.model:
+                return [RoutingCandidate(
+                    provider=request.provider,
+                    model=request.model,
+                    score=1.0,
+                    cost_per_million_input=0,
+                    cost_per_million_output=0,
+                    estimated_latency_ms=0,
+                    quality_score=0,
+                    health_score=1.0,
+                )]
 
-    This engine answers: "Given that we need a Tier 2 model with tool use,
-    which specific provider and model should we use right now?"
+            # Step 1: Gather all models for the requested tier
+            tier = request.model_tier or "tier_2"
+            all_models = self.registry.get_models_for_tier(tier)
 
-    Fallback chain (p. 27): Candidates are returned in ranked order.
-    The UnifiedLLMClient iterates through them on failure.
-    """
+            # Step 2: Filter by required capabilities (hard constraints)
+            required_caps = self._extract_required_capabilities(request)
+            candidates_raw = [
+                (pid, model)
+                for pid, model in all_models
+                if self._meets_capabilities(model, required_caps)
+            ]
 
-    # Scoring weights -- configurable per deployment
-    DEFAULT_WEIGHTS = {
-        "cost": 0.30,
-        "latency": 0.25,
-        "quality": 0.25,
-        "health": 0.15,
-        "key_headroom": 0.05,
-    }
+            # Step 3: Filter by circuit breaker and key availability
+            candidates_filtered = []
+            for pid, model in candidates_raw:
+                breaker = self.breakers.get_breaker(pid)
+                if not breaker.allow_request():
+                    continue
+                if not self.keys.has_available_keys(pid):
+                    continue
+                candidates_filtered.append((pid, model))
 
-    def __init__(
-        self,
-        registry: ProviderRegistry,
-        circuit_breakers: "CircuitBreakerManager",
-        key_pool: "APIKeyPoolManager",
-        metrics_store: "ProviderMetricsStore",
-        config: dict,
-    ):
-        self.registry = registry
-        self.breakers = circuit_breakers
-        self.keys = key_pool
-        self.metrics = metrics_store
-        self.weights = config.get("routing_weights", self.DEFAULT_WEIGHTS)
-        self.preference_overrides = config.get("provider_preferences", {})
+            if not candidates_filtered:
+                # No candidates at requested tier -- try adjacent tiers (p. 259)
+                return await self._escalate_tier(request, tier)
 
-    async def select_candidates(
-        self, request: LLMRequest
-    ) -> list[RoutingCandidate]:
-        """Return a ranked list of (provider, model) candidates for the request.
+            # Step 4: Score each candidate
+            scored = []
+            for pid, model in candidates_filtered:
+                score = self._compute_score(pid, model, request)
+                scored.append(score)
 
-        The list is ordered by composite score (highest first). The caller
-        iterates through candidates for failover (p. 27).
-        """
-        # Handle explicit provider/model override
-        if request.provider and request.model:
-            return [RoutingCandidate(
-                provider=request.provider,
-                model=request.model,
-                score=1.0,
-                cost_per_million_input=0,
-                cost_per_million_output=0,
-                estimated_latency_ms=0,
-                quality_score=0,
-                health_score=1.0,
-            )]
+            # Step 5: Sort by composite score (highest first)
+            scored.sort(key=lambda c: c.score, reverse=True)
+            return scored
 
-        # Step 1: Gather all models for the requested tier
-        tier = request.model_tier or "tier_2"
-        all_models = self.registry.get_models_for_tier(tier)
+        def _extract_required_capabilities(self, request: LLMRequest) -> set[str]:
+            """Determine which capabilities the request requires."""
+            caps = set()
+            hints = request.routing_hints
 
-        # Step 2: Filter by required capabilities (hard constraints)
-        required_caps = self._extract_required_capabilities(request)
-        candidates_raw = [
-            (pid, model)
-            for pid, model in all_models
-            if self._meets_capabilities(model, required_caps)
-        ]
+            if request.tools:
+                caps.add("tool_use")
+            if request.extended_thinking:
+                caps.add("extended_thinking")
+            if request.stream:
+                caps.add("streaming")
+            if hints.get("requires_vision"):
+                caps.add("vision")
+            if request.response_format and request.response_format.get("type") == "json_object":
+                caps.add("json_mode")
 
-        # Step 3: Filter by circuit breaker and key availability
-        candidates_filtered = []
-        for pid, model in candidates_raw:
-            breaker = self.breakers.get_breaker(pid)
-            if not breaker.allow_request():
-                continue
-            if not self.keys.has_available_keys(pid):
-                continue
-            candidates_filtered.append((pid, model))
+            return caps
 
-        if not candidates_filtered:
-            # No candidates at requested tier -- try adjacent tiers (p. 259)
-            return await self._escalate_tier(request, tier)
+        def _meets_capabilities(
+            self, model: ModelInfo, required: set[str]
+        ) -> bool:
+            """Check if a model supports all required capabilities."""
+            for cap in required:
+                if not model.capabilities.get(cap, False):
+                    return False
+            return True
 
-        # Step 4: Score each candidate
-        scored = []
-        for pid, model in candidates_filtered:
-            score = self._compute_score(pid, model, request)
-            scored.append(score)
+        def _compute_score(
+            self,
+            provider_id: str,
+            model: ModelInfo,
+            request: LLMRequest,
+        ) -> RoutingCandidate:
+            """Compute a weighted composite score for a candidate."""
+            w = self.weights
 
-        # Step 5: Sort by composite score (highest first)
-        scored.sort(key=lambda c: c.score, reverse=True)
-        return scored
+            # Cost score: normalized inverse of input cost (cheaper = higher score)
+            max_cost = 20.0  # normalization ceiling ($/M tokens)
+            input_cost = model.pricing.get("input_per_million", max_cost)
+            output_cost = model.pricing.get("output_per_million", max_cost)
+            cost_score = 1.0 - min(input_cost / max_cost, 1.0)
 
-    def _extract_required_capabilities(self, request: LLMRequest) -> set[str]:
-        """Determine which capabilities the request requires."""
-        caps = set()
-        hints = request.routing_hints
+            # Latency score: from recent metrics
+            recent = self.metrics.get_recent(provider_id, model.model_id)
+            avg_latency = recent.get("avg_latency_ms", 2000)
+            max_latency = 10000.0
+            latency_score = 1.0 - min(avg_latency / max_latency, 1.0)
 
-        if request.tools:
-            caps.add("tool_use")
-        if request.extended_thinking:
-            caps.add("extended_thinking")
-        if request.stream:
-            caps.add("streaming")
-        if hints.get("requires_vision"):
-            caps.add("vision")
-        if request.response_format and request.response_format.get("type") == "json_object":
-            caps.add("json_mode")
+            # Boost latency score if request is latency-sensitive
+            if request.routing_hints.get("latency_sensitive"):
+                w = {**w, "latency": w["latency"] * 1.5, "cost": w["cost"] * 0.7}
 
-        return caps
+            # Quality score: task-specific if available, else average
+            task_type = request.routing_hints.get("task_type", "general")
+            quality_score = model.quality_scores.get(
+                task_type,
+                sum(model.quality_scores.values()) / max(len(model.quality_scores), 1),
+            )
 
-    def _meets_capabilities(
-        self, model: ModelInfo, required: set[str]
-    ) -> bool:
-        """Check if a model supports all required capabilities."""
-        for cap in required:
-            if not model.capabilities.get(cap, False):
-                return False
-        return True
+            # Health score: from circuit breaker and recent error rate
+            breaker = self.breakers.get_breaker(provider_id)
+            error_rate = recent.get("error_rate_5m", 0.0)
+            health_score = (1.0 - error_rate) * (
+                1.0 if breaker.state == CircuitState.CLOSED else 0.5
+            )
 
-    def _compute_score(
-        self,
-        provider_id: str,
-        model: ModelInfo,
-        request: LLMRequest,
-    ) -> RoutingCandidate:
-        """Compute a weighted composite score for a candidate."""
-        w = self.weights
+            # Key headroom: fraction of rate limit remaining
+            key_headroom = self.keys.get_headroom_fraction(provider_id)
 
-        # Cost score: normalized inverse of input cost (cheaper = higher score)
-        max_cost = 20.0  # normalization ceiling ($/M tokens)
-        input_cost = model.pricing.get("input_per_million", max_cost)
-        output_cost = model.pricing.get("output_per_million", max_cost)
-        cost_score = 1.0 - min(input_cost / max_cost, 1.0)
+            # Weighted composite
+            composite = (
+                w["cost"] * cost_score
+                + w["latency"] * latency_score
+                + w["quality"] * quality_score
+                + w["health"] * health_score
+                + w["key_headroom"] * key_headroom
+            )
 
-        # Latency score: from recent metrics
-        recent = self.metrics.get_recent(provider_id, model.model_id)
-        avg_latency = recent.get("avg_latency_ms", 2000)
-        max_latency = 10000.0
-        latency_score = 1.0 - min(avg_latency / max_latency, 1.0)
+            # Apply provider preference override (e.g., org prefers Anthropic)
+            pref = self.preference_overrides.get(provider_id, 1.0)
+            composite *= pref
 
-        # Boost latency score if request is latency-sensitive
-        if request.routing_hints.get("latency_sensitive"):
-            w = {**w, "latency": w["latency"] * 1.5, "cost": w["cost"] * 0.7}
+            return RoutingCandidate(
+                provider=provider_id,
+                model=model.model_id,
+                score=composite,
+                cost_per_million_input=input_cost,
+                cost_per_million_output=output_cost,
+                estimated_latency_ms=avg_latency,
+                quality_score=quality_score,
+                health_score=health_score,
+            )
 
-        # Quality score: task-specific if available, else average
-        task_type = request.routing_hints.get("task_type", "general")
-        quality_score = model.quality_scores.get(
-            task_type,
-            sum(model.quality_scores.values()) / max(len(model.quality_scores), 1),
-        )
+        async def _escalate_tier(
+            self, request: LLMRequest, current_tier: str
+        ) -> list[RoutingCandidate]:
+            """When no candidates exist at the requested tier, try adjacent tiers.
+            Implements the upclass-on-unavailability principle (p. 259)."""
+            tier_order = ["tier_1", "tier_2", "tier_3"]
+            current_idx = tier_order.index(current_tier)
 
-        # Health score: from circuit breaker and recent error rate
-        breaker = self.breakers.get_breaker(provider_id)
-        error_rate = recent.get("error_rate_5m", 0.0)
-        health_score = (1.0 - error_rate) * (
-            1.0 if breaker.state == CircuitState.CLOSED else 0.5
-        )
+            # Try higher tiers first (prefer quality over cost when forced)
+            for idx in range(current_idx + 1, len(tier_order)):
+                request_copy = LLMRequest(**vars(request))
+                request_copy.model_tier = tier_order[idx]
+                candidates = await self.select_candidates(request_copy)
+                if candidates:
+                    return candidates
 
-        # Key headroom: fraction of rate limit remaining
-        key_headroom = self.keys.get_headroom_fraction(provider_id)
+            # Then try lower tiers as last resort
+            for idx in range(current_idx - 1, -1, -1):
+                request_copy = LLMRequest(**vars(request))
+                request_copy.model_tier = tier_order[idx]
+                candidates = await self.select_candidates(request_copy)
+                if candidates:
+                    return candidates
 
-        # Weighted composite
-        composite = (
-            w["cost"] * cost_score
-            + w["latency"] * latency_score
-            + w["quality"] * quality_score
-            + w["health"] * health_score
-            + w["key_headroom"] * key_headroom
-        )
-
-        # Apply provider preference override (e.g., org prefers Anthropic)
-        pref = self.preference_overrides.get(provider_id, 1.0)
-        composite *= pref
-
-        return RoutingCandidate(
-            provider=provider_id,
-            model=model.model_id,
-            score=composite,
-            cost_per_million_input=input_cost,
-            cost_per_million_output=output_cost,
-            estimated_latency_ms=avg_latency,
-            quality_score=quality_score,
-            health_score=health_score,
-        )
-
-    async def _escalate_tier(
-        self, request: LLMRequest, current_tier: str
-    ) -> list[RoutingCandidate]:
-        """When no candidates exist at the requested tier, try adjacent tiers.
-        Implements the upclass-on-unavailability principle (p. 259)."""
-        tier_order = ["tier_1", "tier_2", "tier_3"]
-        current_idx = tier_order.index(current_tier)
-
-        # Try higher tiers first (prefer quality over cost when forced)
-        for idx in range(current_idx + 1, len(tier_order)):
-            request_copy = LLMRequest(**vars(request))
-            request_copy.model_tier = tier_order[idx]
-            candidates = await self.select_candidates(request_copy)
-            if candidates:
-                return candidates
-
-        # Then try lower tiers as last resort
-        for idx in range(current_idx - 1, -1, -1):
-            request_copy = LLMRequest(**vars(request))
-            request_copy.model_tier = tier_order[idx]
-            candidates = await self.select_candidates(request_copy)
-            if candidates:
-                return candidates
-
-        return []  # truly no candidates anywhere
-```
+            return []  # truly no candidates anywhere
+    ```
 
 ### 5.3 Routing Strategy Profiles
 
@@ -1461,16 +1507,18 @@ The routing engine supports pre-configured profiles that adjust weights for comm
 
 Agents can request a profile via `routing_hints`:
 
-```python
-request = LLMRequest(
-    messages=[...],
-    model_tier="tier_2",
-    routing_hints={
-        "routing_profile": "quality_first",
-        "task_type": "coding",
-    },
-)
-```
+??? example "View Python pseudocode"
+
+    ```python
+    request = LLMRequest(
+        messages=[...],
+        model_tier="tier_2",
+        routing_hints={
+            "routing_profile": "quality_first",
+            "task_type": "coding",
+        },
+    )
+    ```
 
 ---
 
@@ -1480,180 +1528,164 @@ The failover system ensures that provider failures are detected rapidly and traf
 
 ### 6.1 Circuit Breaker States
 
-```
-                        ┌─────────────────────────┐
-                        │                         │
-            success     │       CLOSED            │  Normal operation.
-          ┌─────────────│   (requests flow)       │  All requests go through.
-          │             │                         │
-          │             └────────────┬────────────┘
-          │                          │
-          │               failure_count ≥ threshold
-          │                          │
-          │             ┌────────────▼────────────┐
-          │             │                         │
-          │             │        OPEN             │  Provider considered down.
-          │             │   (requests blocked)    │  All requests fail-fast.
-          │             │                         │  Failover to next candidate.
-          │             └────────────┬────────────┘
-          │                          │
-          │               cooldown_period elapsed
-          │                          │
-          │             ┌────────────▼────────────┐
-          │             │                         │
-          └─────────────│     HALF-OPEN           │  Probe mode.
-                        │  (limited requests)     │  Single request allowed.
-              failure   │                         │  Success → CLOSED.
-             ┌──────────│                         │  Failure → OPEN.
-             │          └─────────────────────────┘
-             │                    ▲
-             └────────────────────┘
+```mermaid
+stateDiagram-v2
+    CLOSED : CLOSED\nNormal operation\nAll requests flow through
+    OPEN : OPEN\nProvider considered down\nAll requests fail-fast\nFailover to next candidate
+    HALF_OPEN : HALF-OPEN\nProbe mode\nSingle request allowed
+
+    CLOSED --> OPEN : failure_count >= threshold
+    OPEN --> HALF_OPEN : cooldown_period elapsed
+    HALF_OPEN --> CLOSED : success
+    HALF_OPEN --> OPEN : failure
 ```
 
 ### 6.2 Circuit Breaker Implementation
 
-```python
-# --- Circuit Breaker (p. 208) ---
+??? example "View Python pseudocode"
 
-import time
-import threading
-from enum import Enum
-from dataclasses import dataclass, field
-from collections import deque
+    ```python
+    # --- Circuit Breaker (p. 208) ---
 
-
-class CircuitState(Enum):
-    CLOSED = "closed"
-    OPEN = "open"
-    HALF_OPEN = "half_open"
+    import time
+    import threading
+    from enum import Enum
+    from dataclasses import dataclass, field
+    from collections import deque
 
 
-@dataclass
-class CircuitBreakerConfig:
-    failure_threshold: int = 5       # failures before opening
-    success_threshold: int = 3       # successes in half-open before closing
-    cooldown_seconds: float = 30.0   # time in OPEN before transitioning to HALF_OPEN
-    window_seconds: float = 60.0     # sliding window for failure counting
-    half_open_max_requests: int = 1  # concurrent requests allowed in HALF_OPEN
+    class CircuitState(Enum):
+        CLOSED = "closed"
+        OPEN = "open"
+        HALF_OPEN = "half_open"
 
 
-class CircuitBreaker:
-    """Per-provider circuit breaker implementing the Exception Handling
-    pattern (p. 208).
+    @dataclass
+    class CircuitBreakerConfig:
+        failure_threshold: int = 5       # failures before opening
+        success_threshold: int = 3       # successes in half-open before closing
+        cooldown_seconds: float = 30.0   # time in OPEN before transitioning to HALF_OPEN
+        window_seconds: float = 60.0     # sliding window for failure counting
+        half_open_max_requests: int = 1  # concurrent requests allowed in HALF_OPEN
 
-    Error classification (p. 205):
-    - Transient errors (500, 503, timeout) → count toward circuit opening
-    - Rate limit errors (429) → count toward circuit opening
-    - Permanent errors (401, 400) → do NOT count (these are caller errors)
 
-    When the circuit opens, all requests to this provider are rejected
-    immediately (fail-fast), causing the UnifiedLLMClient to failover to
-    the next candidate in the fallback chain (p. 27).
-    """
+    class CircuitBreaker:
+        """Per-provider circuit breaker implementing the Exception Handling
+        pattern (p. 208).
 
-    def __init__(self, provider_id: str, config: CircuitBreakerConfig = None):
-        self.provider_id = provider_id
-        self.config = config or CircuitBreakerConfig()
-        self.state = CircuitState.CLOSED
-        self._failure_timestamps: deque[float] = deque()
-        self._half_open_successes = 0
-        self._half_open_in_flight = 0
-        self._opened_at: float = 0.0
-        self._lock = threading.Lock()
+        Error classification (p. 205):
+        - Transient errors (500, 503, timeout) → count toward circuit opening
+        - Rate limit errors (429) → count toward circuit opening
+        - Permanent errors (401, 400) → do NOT count (these are caller errors)
 
-    def allow_request(self) -> bool:
-        """Check if a request should be allowed through.
-
-        CLOSED: always allow.
-        OPEN: block unless cooldown has elapsed (transition to HALF_OPEN).
-        HALF_OPEN: allow limited probes.
+        When the circuit opens, all requests to this provider are rejected
+        immediately (fail-fast), causing the UnifiedLLMClient to failover to
+        the next candidate in the fallback chain (p. 27).
         """
-        with self._lock:
-            if self.state == CircuitState.CLOSED:
-                return True
 
-            if self.state == CircuitState.OPEN:
-                elapsed = time.monotonic() - self._opened_at
-                if elapsed >= self.config.cooldown_seconds:
-                    self.state = CircuitState.HALF_OPEN
-                    self._half_open_successes = 0
-                    self._half_open_in_flight = 0
-                    # Fall through to HALF_OPEN logic
-                else:
-                    return False  # still in cooldown
+        def __init__(self, provider_id: str, config: CircuitBreakerConfig = None):
+            self.provider_id = provider_id
+            self.config = config or CircuitBreakerConfig()
+            self.state = CircuitState.CLOSED
+            self._failure_timestamps: deque[float] = deque()
+            self._half_open_successes = 0
+            self._half_open_in_flight = 0
+            self._opened_at: float = 0.0
+            self._lock = threading.Lock()
 
-            if self.state == CircuitState.HALF_OPEN:
-                if self._half_open_in_flight < self.config.half_open_max_requests:
-                    self._half_open_in_flight += 1
+        def allow_request(self) -> bool:
+            """Check if a request should be allowed through.
+
+            CLOSED: always allow.
+            OPEN: block unless cooldown has elapsed (transition to HALF_OPEN).
+            HALF_OPEN: allow limited probes.
+            """
+            with self._lock:
+                if self.state == CircuitState.CLOSED:
                     return True
-                return False  # probe slot occupied
 
-        return False
+                if self.state == CircuitState.OPEN:
+                    elapsed = time.monotonic() - self._opened_at
+                    if elapsed >= self.config.cooldown_seconds:
+                        self.state = CircuitState.HALF_OPEN
+                        self._half_open_successes = 0
+                        self._half_open_in_flight = 0
+                        # Fall through to HALF_OPEN logic
+                    else:
+                        return False  # still in cooldown
 
-    def record_success(self):
-        """Record a successful request. In HALF_OPEN, may close the circuit."""
-        with self._lock:
-            if self.state == CircuitState.HALF_OPEN:
-                self._half_open_successes += 1
-                self._half_open_in_flight = max(0, self._half_open_in_flight - 1)
-                if self._half_open_successes >= self.config.success_threshold:
-                    self.state = CircuitState.CLOSED
-                    self._failure_timestamps.clear()
-            # In CLOSED state, success is a no-op
+                if self.state == CircuitState.HALF_OPEN:
+                    if self._half_open_in_flight < self.config.half_open_max_requests:
+                        self._half_open_in_flight += 1
+                        return True
+                    return False  # probe slot occupied
 
-    def record_failure(self):
-        """Record a failed request. May open the circuit."""
-        now = time.monotonic()
-        with self._lock:
-            if self.state == CircuitState.HALF_OPEN:
-                # Single failure in HALF_OPEN → back to OPEN (p. 208)
-                self.state = CircuitState.OPEN
-                self._opened_at = now
-                self._half_open_in_flight = 0
-                return
+            return False
 
-            # CLOSED state: add to sliding window
-            self._failure_timestamps.append(now)
+        def record_success(self):
+            """Record a successful request. In HALF_OPEN, may close the circuit."""
+            with self._lock:
+                if self.state == CircuitState.HALF_OPEN:
+                    self._half_open_successes += 1
+                    self._half_open_in_flight = max(0, self._half_open_in_flight - 1)
+                    if self._half_open_successes >= self.config.success_threshold:
+                        self.state = CircuitState.CLOSED
+                        self._failure_timestamps.clear()
+                # In CLOSED state, success is a no-op
 
-            # Trim timestamps outside the window
-            cutoff = now - self.config.window_seconds
-            while self._failure_timestamps and self._failure_timestamps[0] < cutoff:
-                self._failure_timestamps.popleft()
+        def record_failure(self):
+            """Record a failed request. May open the circuit."""
+            now = time.monotonic()
+            with self._lock:
+                if self.state == CircuitState.HALF_OPEN:
+                    # Single failure in HALF_OPEN → back to OPEN (p. 208)
+                    self.state = CircuitState.OPEN
+                    self._opened_at = now
+                    self._half_open_in_flight = 0
+                    return
 
-            # Check threshold
-            if len(self._failure_timestamps) >= self.config.failure_threshold:
-                self.state = CircuitState.OPEN
-                self._opened_at = now
+                # CLOSED state: add to sliding window
+                self._failure_timestamps.append(now)
+
+                # Trim timestamps outside the window
+                cutoff = now - self.config.window_seconds
+                while self._failure_timestamps and self._failure_timestamps[0] < cutoff:
+                    self._failure_timestamps.popleft()
+
+                # Check threshold
+                if len(self._failure_timestamps) >= self.config.failure_threshold:
+                    self.state = CircuitState.OPEN
+                    self._opened_at = now
 
 
-class CircuitBreakerManager:
-    """Manages per-provider circuit breakers."""
+    class CircuitBreakerManager:
+        """Manages per-provider circuit breakers."""
 
-    def __init__(self, config: dict):
-        self._breakers: dict[str, CircuitBreaker] = {}
-        self._default_config = CircuitBreakerConfig(
-            **config.get("circuit_breaker_defaults", {})
-        )
-        # Provider-specific overrides (e.g., local models get longer cooldown)
-        self._provider_configs = config.get("circuit_breaker_overrides", {})
-
-    def get_breaker(self, provider_id: str) -> CircuitBreaker:
-        if provider_id not in self._breakers:
-            cb_config = self._provider_configs.get(
-                provider_id, self._default_config
+        def __init__(self, config: dict):
+            self._breakers: dict[str, CircuitBreaker] = {}
+            self._default_config = CircuitBreakerConfig(
+                **config.get("circuit_breaker_defaults", {})
             )
-            if isinstance(cb_config, dict):
-                cb_config = CircuitBreakerConfig(**cb_config)
-            self._breakers[provider_id] = CircuitBreaker(provider_id, cb_config)
-        return self._breakers[provider_id]
+            # Provider-specific overrides (e.g., local models get longer cooldown)
+            self._provider_configs = config.get("circuit_breaker_overrides", {})
 
-    def get_all_states(self) -> dict[str, str]:
-        """Return the state of all circuit breakers. Used for health dashboards."""
-        return {
-            pid: breaker.state.value
-            for pid, breaker in self._breakers.items()
-        }
-```
+        def get_breaker(self, provider_id: str) -> CircuitBreaker:
+            if provider_id not in self._breakers:
+                cb_config = self._provider_configs.get(
+                    provider_id, self._default_config
+                )
+                if isinstance(cb_config, dict):
+                    cb_config = CircuitBreakerConfig(**cb_config)
+                self._breakers[provider_id] = CircuitBreaker(provider_id, cb_config)
+            return self._breakers[provider_id]
+
+        def get_all_states(self) -> dict[str, str]:
+            """Return the state of all circuit breakers. Used for health dashboards."""
+            return {
+                pid: breaker.state.value
+                for pid, breaker in self._breakers.items()
+            }
+    ```
 
 ### 6.3 Failover Sequence
 
@@ -1707,228 +1739,221 @@ Production deployments typically use multiple API keys per provider to distribut
 
 ### 7.1 Key Pool Architecture
 
-```
-Provider: Anthropic
-┌─────────────────────────────────────────────────────────────────────┐
-│                          API Key Pool                               │
-│                                                                     │
-│  Key A (ak-****abc)           Key B (ak-****def)                    │
-│  ┌───────────────────┐        ┌───────────────────┐                 │
-│  │ Status: active    │        │ Status: active    │                 │
-│  │ RPM used: 2,100   │        │ RPM used: 800     │  ◄── preferred  │
-│  │ RPM limit: 4,000  │        │ RPM limit: 4,000  │                 │
-│  │ TPM used: 280K    │        │ TPM used: 95K     │                 │
-│  │ TPM limit: 400K   │        │ TPM limit: 400K   │                 │
-│  │ Errors (5m): 2    │        │ Errors (5m): 0    │                 │
-│  │ Cooldown: no      │        │ Cooldown: no      │                 │
-│  └───────────────────┘        └───────────────────┘                 │
-│                                                                     │
-│  Key C (ak-****ghi)                                                 │
-│  ┌───────────────────┐                                              │
-│  │ Status: cooldown  │  ◄── hit rate limit, cooling down            │
-│  │ RPM used: 4,000   │                                              │
-│  │ RPM limit: 4,000  │                                              │
-│  │ Cooldown until:   │                                              │
-│  │   +45 seconds     │                                              │
-│  └───────────────────┘                                              │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph AKP["API Key Pool — Provider: Anthropic"]
+        direction TB
+        KA["Key A (ak-****abc)<br/><small>Status: active<br/>RPM used: 2,100 / 4,000<br/>TPM used: 280K / 400K<br/>Errors (5m): 2<br/>Cooldown: no</small>"]
+        KB["Key B (ak-****def) — preferred<br/><small>Status: active<br/>RPM used: 800 / 4,000<br/>TPM used: 95K / 400K<br/>Errors (5m): 0<br/>Cooldown: no</small>"]
+        KC["Key C (ak-****ghi)<br/><small>Status: cooldown<br/>RPM used: 4,000 / 4,000<br/>Hit rate limit, cooling down<br/>Cooldown until: +45 seconds</small>"]
+    end
+
+    classDef active fill:#2ECC71,stroke:#1FA855,color:#fff
+    classDef cooldown fill:#E74C3C,stroke:#C0392B,color:#fff
+    class KA,KB active
+    class KC cooldown
 ```
 
 ### 7.2 Key Pool Implementation
 
-```python
-# --- API Key Pool Manager ---
+??? example "View Python pseudocode"
 
-import time
-import hashlib
-import asyncio
-from dataclasses import dataclass, field
-from typing import Optional
-from collections import deque
+    ```python
+    # --- API Key Pool Manager ---
 
-
-@dataclass
-class APIKey:
-    """Represents a single API key with usage tracking."""
-    key_id: str                           # internal identifier
-    provider_id: str
-    value: str                            # the actual API key (secret)
-    hashed_id: str = ""                   # SHA-256 hash for logging (no secrets in logs)
-
-    # Rate limit tracking
-    rpm_limit: int = 4000                 # requests per minute limit
-    tpm_limit: int = 400000               # tokens per minute limit
-    tpd_limit: int = 10000000             # tokens per day limit
-
-    # Current usage (reset periodically)
-    rpm_used: int = 0
-    tpm_used: int = 0
-    tpd_used: int = 0
-
-    # Timestamps for window tracking
-    _request_timestamps: deque = field(default_factory=deque)
-
-    # State
-    status: str = "active"               # "active", "cooldown", "revoked", "rotating"
-    cooldown_until: float = 0.0
-    error_count_5m: int = 0
-    last_used: float = 0.0
-
-    def __post_init__(self):
-        if not self.hashed_id:
-            self.hashed_id = hashlib.sha256(self.value.encode()).hexdigest()[:12]
-
-    @property
-    def headroom_fraction(self) -> float:
-        """Fraction of rate limit remaining (0.0 = exhausted, 1.0 = full)."""
-        rpm_frac = 1.0 - (self.rpm_used / max(self.rpm_limit, 1))
-        tpm_frac = 1.0 - (self.tpm_used / max(self.tpm_limit, 1))
-        return min(rpm_frac, tpm_frac)
-
-    @property
-    def is_available(self) -> bool:
-        if self.status == "revoked":
-            return False
-        if self.status == "cooldown":
-            if time.monotonic() >= self.cooldown_until:
-                self.status = "active"
-                return True
-            return False
-        return self.rpm_used < self.rpm_limit and self.tpm_used < self.tpm_limit
+    import time
+    import hashlib
+    import asyncio
+    from dataclasses import dataclass, field
+    from typing import Optional
+    from collections import deque
 
 
-class APIKeyPoolManager:
-    """Manages pools of API keys across all providers.
+    @dataclass
+    class APIKey:
+        """Represents a single API key with usage tracking."""
+        key_id: str                           # internal identifier
+        provider_id: str
+        value: str                            # the actual API key (secret)
+        hashed_id: str = ""                   # SHA-256 hash for logging (no secrets in logs)
 
-    Key selection strategy:
-    - Least-loaded: prefer the key with the most rate limit headroom
-    - Sticky sessions: optionally keep a session on the same key for
-      prompt caching benefits
-    - Automatic cooldown: when a key hits a rate limit, put it in cooldown
-      and use another key
-    - Rotation: support zero-downtime key rotation by adding the new key
-      before revoking the old one
+        # Rate limit tracking
+        rpm_limit: int = 4000                 # requests per minute limit
+        tpm_limit: int = 400000               # tokens per minute limit
+        tpd_limit: int = 10000000             # tokens per day limit
 
-    This implements load balancing across API keys as part of the
-    Resource-Aware Optimization pattern (p. 261).
-    """
+        # Current usage (reset periodically)
+        rpm_used: int = 0
+        tpm_used: int = 0
+        tpd_used: int = 0
 
-    def __init__(self, config: dict):
-        self._pools: dict[str, list[APIKey]] = {}  # provider_id → [APIKey]
-        self._lock = asyncio.Lock()
-        self._usage_reset_interval = config.get("usage_reset_interval_s", 60)
+        # Timestamps for window tracking
+        _request_timestamps: deque = field(default_factory=deque)
 
-    def register_keys(self, provider_id: str, keys: list[dict]):
-        """Register a pool of API keys for a provider."""
-        self._pools[provider_id] = [
-            APIKey(
-                key_id=k["key_id"],
-                provider_id=provider_id,
-                value=k["value"],
-                rpm_limit=k.get("rpm_limit", 4000),
-                tpm_limit=k.get("tpm_limit", 400000),
-                tpd_limit=k.get("tpd_limit", 10000000),
-            )
-            for k in keys
-        ]
+        # State
+        status: str = "active"               # "active", "cooldown", "revoked", "rotating"
+        cooldown_until: float = 0.0
+        error_count_5m: int = 0
+        last_used: float = 0.0
 
-    async def acquire_key(self, provider_id: str) -> Optional[APIKey]:
-        """Acquire the best available key for a provider.
+        def __post_init__(self):
+            if not self.hashed_id:
+                self.hashed_id = hashlib.sha256(self.value.encode()).hexdigest()[:12]
 
-        Selection: least-loaded key (most headroom) among available keys.
-        Returns None if all keys are exhausted or in cooldown.
+        @property
+        def headroom_fraction(self) -> float:
+            """Fraction of rate limit remaining (0.0 = exhausted, 1.0 = full)."""
+            rpm_frac = 1.0 - (self.rpm_used / max(self.rpm_limit, 1))
+            tpm_frac = 1.0 - (self.tpm_used / max(self.tpm_limit, 1))
+            return min(rpm_frac, tpm_frac)
+
+        @property
+        def is_available(self) -> bool:
+            if self.status == "revoked":
+                return False
+            if self.status == "cooldown":
+                if time.monotonic() >= self.cooldown_until:
+                    self.status = "active"
+                    return True
+                return False
+            return self.rpm_used < self.rpm_limit and self.tpm_used < self.tpm_limit
+
+
+    class APIKeyPoolManager:
+        """Manages pools of API keys across all providers.
+
+        Key selection strategy:
+        - Least-loaded: prefer the key with the most rate limit headroom
+        - Sticky sessions: optionally keep a session on the same key for
+          prompt caching benefits
+        - Automatic cooldown: when a key hits a rate limit, put it in cooldown
+          and use another key
+        - Rotation: support zero-downtime key rotation by adding the new key
+          before revoking the old one
+
+        This implements load balancing across API keys as part of the
+        Resource-Aware Optimization pattern (p. 261).
         """
-        async with self._lock:
+
+        def __init__(self, config: dict):
+            self._pools: dict[str, list[APIKey]] = {}  # provider_id → [APIKey]
+            self._lock = asyncio.Lock()
+            self._usage_reset_interval = config.get("usage_reset_interval_s", 60)
+
+        def register_keys(self, provider_id: str, keys: list[dict]):
+            """Register a pool of API keys for a provider."""
+            self._pools[provider_id] = [
+                APIKey(
+                    key_id=k["key_id"],
+                    provider_id=provider_id,
+                    value=k["value"],
+                    rpm_limit=k.get("rpm_limit", 4000),
+                    tpm_limit=k.get("tpm_limit", 400000),
+                    tpd_limit=k.get("tpd_limit", 10000000),
+                )
+                for k in keys
+            ]
+
+        async def acquire_key(self, provider_id: str) -> Optional[APIKey]:
+            """Acquire the best available key for a provider.
+
+            Selection: least-loaded key (most headroom) among available keys.
+            Returns None if all keys are exhausted or in cooldown.
+            """
+            async with self._lock:
+                pool = self._pools.get(provider_id, [])
+                available = [k for k in pool if k.is_available]
+
+                if not available:
+                    return None
+
+                # Select key with the most headroom
+                best = max(available, key=lambda k: k.headroom_fraction)
+                best.rpm_used += 1
+                best.last_used = time.monotonic()
+                return best
+
+        def release_key(self, key: APIKey, success: bool, tokens_used: int = 0):
+            """Release a key after use. Update usage counters."""
+            if success:
+                key.tpm_used += tokens_used
+                key.tpd_used += tokens_used
+            else:
+                key.error_count_5m += 1
+
+        def mark_rate_limited(self, key: APIKey, retry_after: float = 60.0):
+            """Put a key into cooldown after hitting a rate limit."""
+            key.status = "cooldown"
+            key.cooldown_until = time.monotonic() + retry_after
+
+        def has_available_keys(self, provider_id: str) -> bool:
+            """Check if any keys are available (used by routing engine)."""
+            pool = self._pools.get(provider_id, [])
+            return any(k.is_available for k in pool)
+
+        def get_headroom_fraction(self, provider_id: str) -> float:
+            """Return the maximum headroom across all keys for a provider.
+            Used as a routing signal (more headroom = preferred)."""
             pool = self._pools.get(provider_id, [])
             available = [k for k in pool if k.is_available]
-
             if not available:
-                return None
+                return 0.0
+            return max(k.headroom_fraction for k in available)
 
-            # Select key with the most headroom
-            best = max(available, key=lambda k: k.headroom_fraction)
-            best.rpm_used += 1
-            best.last_used = time.monotonic()
-            return best
+        async def rotate_key(
+            self, provider_id: str, old_key_id: str, new_key_config: dict
+        ):
+            """Zero-downtime key rotation.
 
-    def release_key(self, key: APIKey, success: bool, tokens_used: int = 0):
-        """Release a key after use. Update usage counters."""
-        if success:
-            key.tpm_used += tokens_used
-            key.tpd_used += tokens_used
-        else:
-            key.error_count_5m += 1
+            1. Add the new key to the pool.
+            2. Mark the old key as 'rotating' (no new requests).
+            3. Wait for in-flight requests to complete.
+            4. Remove the old key.
+            """
+            async with self._lock:
+                pool = self._pools.get(provider_id, [])
 
-    def mark_rate_limited(self, key: APIKey, retry_after: float = 60.0):
-        """Put a key into cooldown after hitting a rate limit."""
-        key.status = "cooldown"
-        key.cooldown_until = time.monotonic() + retry_after
+                # Add new key
+                new_key = APIKey(
+                    key_id=new_key_config["key_id"],
+                    provider_id=provider_id,
+                    value=new_key_config["value"],
+                    rpm_limit=new_key_config.get("rpm_limit", 4000),
+                    tpm_limit=new_key_config.get("tpm_limit", 400000),
+                )
+                pool.append(new_key)
 
-    def has_available_keys(self, provider_id: str) -> bool:
-        """Check if any keys are available (used by routing engine)."""
-        pool = self._pools.get(provider_id, [])
-        return any(k.is_available for k in pool)
+                # Mark old key as rotating
+                for k in pool:
+                    if k.key_id == old_key_id:
+                        k.status = "rotating"
+                        break
 
-    def get_headroom_fraction(self, provider_id: str) -> float:
-        """Return the maximum headroom across all keys for a provider.
-        Used as a routing signal (more headroom = preferred)."""
-        pool = self._pools.get(provider_id, [])
-        available = [k for k in pool if k.is_available]
-        if not available:
-            return 0.0
-        return max(k.headroom_fraction for k in available)
-
-    async def rotate_key(
-        self, provider_id: str, old_key_id: str, new_key_config: dict
-    ):
-        """Zero-downtime key rotation.
-
-        1. Add the new key to the pool.
-        2. Mark the old key as 'rotating' (no new requests).
-        3. Wait for in-flight requests to complete.
-        4. Remove the old key.
-        """
-        async with self._lock:
-            pool = self._pools.get(provider_id, [])
-
-            # Add new key
-            new_key = APIKey(
-                key_id=new_key_config["key_id"],
-                provider_id=provider_id,
-                value=new_key_config["value"],
-                rpm_limit=new_key_config.get("rpm_limit", 4000),
-                tpm_limit=new_key_config.get("tpm_limit", 400000),
-            )
-            pool.append(new_key)
-
-            # Mark old key as rotating
-            for k in pool:
-                if k.key_id == old_key_id:
-                    k.status = "rotating"
-                    break
-
-    async def reset_usage_counters(self):
-        """Periodically reset per-minute counters. Called by a background task."""
-        for pool in self._pools.values():
-            for key in pool:
-                key.rpm_used = 0
-                key.tpm_used = 0
-                key.error_count_5m = 0
-```
+        async def reset_usage_counters(self):
+            """Periodically reset per-minute counters. Called by a background task."""
+            for pool in self._pools.values():
+                for key in pool:
+                    key.rpm_used = 0
+                    key.tpm_used = 0
+                    key.error_count_5m = 0
+    ```
 
 ### 7.3 Key Security
 
 API keys are stored in a dedicated secrets vault (integrated with the External Integrations Hub, subsystem 12). The key pool manager holds keys in memory at runtime but never logs, serializes, or transmits them in plaintext. The `hashed_id` is used in all observability data. Key values are loaded from the vault at startup and on rotation events.
 
-```
-┌──────────────┐      startup       ┌──────────────────┐
-│ Secret Vault │ ─────────────────► │ API Key Pool     │
-│ (encrypted)  │                    │ Manager (in-mem) │
-│              │ ◄───── rotate ──── │                  │
-│ - ak-****abc │      event         │ Keys held only   │
-│ - ak-****def │                    │ in memory        │
-│ - ak-****ghi │                    │ hashed_id in logs│
-└──────────────┘                    └──────────────────┘
+```mermaid
+graph LR
+    SV["Secret Vault (encrypted)<br/><small>ak-****abc<br/>ak-****def<br/>ak-****ghi</small>"]
+    AKP["API Key Pool Manager (in-mem)<br/><small>Keys held only in memory<br/>hashed_id in logs</small>"]
+
+    SV -->|"startup"| AKP
+    AKP -->|"rotate event"| SV
+
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef external fill:#95A5A6,stroke:#7F8C8D,color:#fff
+    class SV external
+    class AKP infra
 ```
 
 ---
@@ -1939,122 +1964,124 @@ Every LLM call produces a cost event that is recorded, attributed, and aggregate
 
 ### 8.1 Cost Computation
 
-```python
-# --- Cost Tracker ---
+??? example "View Python pseudocode"
 
-from dataclasses import dataclass
-from typing import Optional
-import time
+    ```python
+    # --- Cost Tracker ---
 
-
-@dataclass
-class CostEvent:
-    """Emitted for every LLM call. Consumed by subsystem 09 for budget tracking."""
-    timestamp: float
-    provider: str
-    model: str
-    input_tokens: int
-    output_tokens: int
-    cache_read_tokens: int
-    cache_write_tokens: int
-    thinking_tokens: int
-    cost_usd: float
-    latency_ms: float
-    agent_id: Optional[str] = None
-    team_id: Optional[str] = None
-    task_id: Optional[str] = None
+    from dataclasses import dataclass
+    from typing import Optional
+    import time
 
 
-class CostTracker:
-    """Computes and records the cost of every LLM call.
+    @dataclass
+    class CostEvent:
+        """Emitted for every LLM call. Consumed by subsystem 09 for budget tracking."""
+        timestamp: float
+        provider: str
+        model: str
+        input_tokens: int
+        output_tokens: int
+        cache_read_tokens: int
+        cache_write_tokens: int
+        thinking_tokens: int
+        cost_usd: float
+        latency_ms: float
+        agent_id: Optional[str] = None
+        team_id: Optional[str] = None
+        task_id: Optional[str] = None
 
-    Pricing tables are loaded from the ProviderRegistry and can be
-    hot-reloaded when provider pricing changes. Cost computation uses
-    the actual token counts from the provider response.
 
-    Integrates with Cost & Resource Manager (subsystem 09) to:
-    - Check budget before allowing a call (pre-flight)
-    - Debit the budget after a successful call (post-flight)
-    - Alert when spending approaches budget limits (p. 304)
-    """
+    class CostTracker:
+        """Computes and records the cost of every LLM call.
 
-    def __init__(self, registry: ProviderRegistry, event_bus: "EventBus"):
-        self.registry = registry
-        self.event_bus = event_bus
-        self._cumulative: dict[str, float] = {}  # provider → total cost
+        Pricing tables are loaded from the ProviderRegistry and can be
+        hot-reloaded when provider pricing changes. Cost computation uses
+        the actual token counts from the provider response.
 
-    def compute_cost(
-        self, provider: str, model: str, usage: Optional[TokenUsage]
-    ) -> float:
-        """Compute the USD cost of a single LLM call from usage and pricing."""
-        if usage is None:
-            return 0.0
-
-        try:
-            pricing = self.registry.get_pricing(provider, model)
-        except ModelNotFoundError:
-            return 0.0  # unknown model, cannot price
-
-        cost = 0.0
-        cost += (usage.input_tokens / 1_000_000) * pricing.get("input_per_million", 0)
-        cost += (usage.output_tokens / 1_000_000) * pricing.get("output_per_million", 0)
-        cost += (usage.cache_read_tokens / 1_000_000) * pricing.get("cache_read_per_million", 0)
-        cost += (usage.cache_write_tokens / 1_000_000) * pricing.get("cache_write_per_million", 0)
-
-        # Thinking tokens are billed as output tokens for Anthropic
-        if usage.thinking_tokens > 0:
-            cost += (usage.thinking_tokens / 1_000_000) * pricing.get("output_per_million", 0)
-
-        return round(cost, 8)
-
-    async def record(self, response: LLMResponse):
-        """Record a completed LLM call's cost. Emits a CostEvent to the
-        event bus for consumption by subsystem 09 and observability."""
-        event = CostEvent(
-            timestamp=time.time(),
-            provider=response.provider,
-            model=response.model,
-            input_tokens=response.usage.input_tokens if response.usage else 0,
-            output_tokens=response.usage.output_tokens if response.usage else 0,
-            cache_read_tokens=response.usage.cache_read_tokens if response.usage else 0,
-            cache_write_tokens=response.usage.cache_write_tokens if response.usage else 0,
-            thinking_tokens=response.usage.thinking_tokens if response.usage else 0,
-            cost_usd=response.cost_usd,
-            latency_ms=response.latency_ms,
-        )
-
-        # Update cumulative tracker
-        self._cumulative[response.provider] = (
-            self._cumulative.get(response.provider, 0.0) + response.cost_usd
-        )
-
-        # Emit to event bus (async, non-blocking)
-        await self.event_bus.emit("llm.cost.recorded", event)
-
-    def get_cost_comparison(self, tier: str) -> list[dict]:
-        """Return real-time cost comparison across providers for a given tier.
-        Used by dashboards and the routing engine for cost-optimized routing.
-
-        Example output:
-        [
-            {"provider": "anthropic", "model": "claude-sonnet-4", "input_per_M": 3.00, "output_per_M": 15.00},
-            {"provider": "openai", "model": "gpt-4o", "input_per_M": 2.50, "output_per_M": 10.00},
-            {"provider": "google", "model": "gemini-2.5-pro", "input_per_M": 1.25, "output_per_M": 10.00},
-        ]
+        Integrates with Cost & Resource Manager (subsystem 09) to:
+        - Check budget before allowing a call (pre-flight)
+        - Debit the budget after a successful call (post-flight)
+        - Alert when spending approaches budget limits (p. 304)
         """
-        models = self.registry.get_models_for_tier(tier)
-        comparison = []
-        for pid, model in models:
-            comparison.append({
-                "provider": pid,
-                "model": model.model_id,
-                "input_per_M": model.pricing.get("input_per_million", 0),
-                "output_per_M": model.pricing.get("output_per_million", 0),
-                "tier": tier,
-            })
-        comparison.sort(key=lambda x: x["input_per_M"])
-        return comparison
-```
+
+        def __init__(self, registry: ProviderRegistry, event_bus: "EventBus"):
+            self.registry = registry
+            self.event_bus = event_bus
+            self._cumulative: dict[str, float] = {}  # provider → total cost
+
+        def compute_cost(
+            self, provider: str, model: str, usage: Optional[TokenUsage]
+        ) -> float:
+            """Compute the USD cost of a single LLM call from usage and pricing."""
+            if usage is None:
+                return 0.0
+
+            try:
+                pricing = self.registry.get_pricing(provider, model)
+            except ModelNotFoundError:
+                return 0.0  # unknown model, cannot price
+
+            cost = 0.0
+            cost += (usage.input_tokens / 1_000_000) * pricing.get("input_per_million", 0)
+            cost += (usage.output_tokens / 1_000_000) * pricing.get("output_per_million", 0)
+            cost += (usage.cache_read_tokens / 1_000_000) * pricing.get("cache_read_per_million", 0)
+            cost += (usage.cache_write_tokens / 1_000_000) * pricing.get("cache_write_per_million", 0)
+
+            # Thinking tokens are billed as output tokens for Anthropic
+            if usage.thinking_tokens > 0:
+                cost += (usage.thinking_tokens / 1_000_000) * pricing.get("output_per_million", 0)
+
+            return round(cost, 8)
+
+        async def record(self, response: LLMResponse):
+            """Record a completed LLM call's cost. Emits a CostEvent to the
+            event bus for consumption by subsystem 09 and observability."""
+            event = CostEvent(
+                timestamp=time.time(),
+                provider=response.provider,
+                model=response.model,
+                input_tokens=response.usage.input_tokens if response.usage else 0,
+                output_tokens=response.usage.output_tokens if response.usage else 0,
+                cache_read_tokens=response.usage.cache_read_tokens if response.usage else 0,
+                cache_write_tokens=response.usage.cache_write_tokens if response.usage else 0,
+                thinking_tokens=response.usage.thinking_tokens if response.usage else 0,
+                cost_usd=response.cost_usd,
+                latency_ms=response.latency_ms,
+            )
+
+            # Update cumulative tracker
+            self._cumulative[response.provider] = (
+                self._cumulative.get(response.provider, 0.0) + response.cost_usd
+            )
+
+            # Emit to event bus (async, non-blocking)
+            await self.event_bus.emit("llm.cost.recorded", event)
+
+        def get_cost_comparison(self, tier: str) -> list[dict]:
+            """Return real-time cost comparison across providers for a given tier.
+            Used by dashboards and the routing engine for cost-optimized routing.
+
+            Example output:
+            [
+                {"provider": "anthropic", "model": "claude-sonnet-4", "input_per_M": 3.00, "output_per_M": 15.00},
+                {"provider": "openai", "model": "gpt-4o", "input_per_M": 2.50, "output_per_M": 10.00},
+                {"provider": "google", "model": "gemini-2.5-pro", "input_per_M": 1.25, "output_per_M": 10.00},
+            ]
+            """
+            models = self.registry.get_models_for_tier(tier)
+            comparison = []
+            for pid, model in models:
+                comparison.append({
+                    "provider": pid,
+                    "model": model.model_id,
+                    "input_per_M": model.pricing.get("input_per_million", 0),
+                    "output_per_M": model.pricing.get("output_per_million", 0),
+                    "tier": tier,
+                })
+            comparison.sort(key=lambda x: x["input_per_M"])
+            return comparison
+    ```
 
 ### 8.2 Cost-Optimized Routing
 
@@ -2123,31 +2150,19 @@ OpenRouter              │       │      │      │        │      │     
 
 Tool calling is the most complex feature to translate across providers because each provider uses a fundamentally different format (p. 90). The adapter layer handles this translation transparently:
 
-```
-Unified ToolDefinition                    Anthropic Format
-┌──────────────────────┐                  ┌───────────────────────────┐
-│ name: "web_search"   │                  │ name: "web_search"        │
-│ description: "..."   │ ──────────────►  │ description: "..."        │
-│ parameters: {        │                  │ input_schema: {           │
-│   properties: {...}  │                  │   type: "object",         │
-│   required: [...]    │                  │   properties: {...},      │
-│ }                    │                  │   required: [...]         │
-└──────────────────────┘                  │ }                         │
-                                          └───────────────────────────┘
-          │
-          │                               OpenAI Format
-          │                               ┌───────────────────────────┐
-          └────────────────────────────►   │ type: "function"          │
-                                          │ function: {               │
-                                          │   name: "web_search",     │
-                                          │   description: "...",     │
-                                          │   parameters: {           │
-                                          │     type: "object",       │
-                                          │     properties: {...},    │
-                                          │     required: [...]       │
-                                          │   }                       │
-                                          │ }                         │
-                                          └───────────────────────────┘
+```mermaid
+graph LR
+    UTD["Unified ToolDefinition<br/><small>name: web_search<br/>description: ...<br/>parameters: properties, required</small>"]
+    ANT["Anthropic Format<br/><small>name: web_search<br/>description: ...<br/>input_schema: type, properties, required</small>"]
+    OAI["OpenAI Format<br/><small>type: function<br/>function: name, description,<br/>parameters: type, properties, required</small>"]
+
+    UTD -->|"translate"| ANT
+    UTD -->|"translate"| OAI
+
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    class UTD core
+    class ANT,OAI infra
 ```
 
 ### 9.3 Extended Thinking Mapping
@@ -2171,131 +2186,139 @@ The Multi-Provider LLM Management subsystem exposes its functionality through a 
 
 ### 10.1 REST API Endpoints
 
-```
-Multi-Provider LLM Management API
-═══════════════════════════════════════════════════════════════════════════
+??? example "View API example"
 
-POST   /api/v1/llm/generate                    Non-streaming LLM generation
-POST   /api/v1/llm/generate/stream             Streaming LLM generation (SSE)
+    ```
+    Multi-Provider LLM Management API
+    ═══════════════════════════════════════════════════════════════════════════
 
-GET    /api/v1/llm/providers                   List all registered providers
-GET    /api/v1/llm/providers/{id}              Get provider details
-GET    /api/v1/llm/providers/{id}/health       Get provider health status
+    POST   /api/v1/llm/generate                    Non-streaming LLM generation
+    POST   /api/v1/llm/generate/stream             Streaming LLM generation (SSE)
 
-GET    /api/v1/llm/models                      List all available models
-GET    /api/v1/llm/models?tier=tier_2          Filter models by tier
-GET    /api/v1/llm/models?capability=vision    Filter by capability
-GET    /api/v1/llm/models/{provider}/{model}   Get specific model details
+    GET    /api/v1/llm/providers                   List all registered providers
+    GET    /api/v1/llm/providers/{id}              Get provider details
+    GET    /api/v1/llm/providers/{id}/health       Get provider health status
 
-GET    /api/v1/llm/pricing                     Real-time pricing comparison
-GET    /api/v1/llm/pricing?tier=tier_2         Pricing for a specific tier
-GET    /api/v1/llm/cost/comparison             Side-by-side cost comparison
+    GET    /api/v1/llm/models                      List all available models
+    GET    /api/v1/llm/models?tier=tier_2          Filter models by tier
+    GET    /api/v1/llm/models?capability=vision    Filter by capability
+    GET    /api/v1/llm/models/{provider}/{model}   Get specific model details
 
-GET    /api/v1/llm/circuit-breakers            All circuit breaker states
-GET    /api/v1/llm/circuit-breakers/{provider} Circuit breaker for a provider
-POST   /api/v1/llm/circuit-breakers/{provider}/reset   Force-reset a breaker
+    GET    /api/v1/llm/pricing                     Real-time pricing comparison
+    GET    /api/v1/llm/pricing?tier=tier_2         Pricing for a specific tier
+    GET    /api/v1/llm/cost/comparison             Side-by-side cost comparison
 
-GET    /api/v1/llm/keys/{provider}/status      Key pool status (no secrets)
-POST   /api/v1/llm/keys/{provider}/rotate      Trigger key rotation
-POST   /api/v1/llm/keys/{provider}/add         Add a key to the pool
+    GET    /api/v1/llm/circuit-breakers            All circuit breaker states
+    GET    /api/v1/llm/circuit-breakers/{provider} Circuit breaker for a provider
+    POST   /api/v1/llm/circuit-breakers/{provider}/reset   Force-reset a breaker
 
-GET    /api/v1/llm/metrics                     Aggregated provider metrics
-GET    /api/v1/llm/metrics/{provider}          Per-provider metrics
-GET    /api/v1/llm/metrics/{provider}/{model}  Per-model metrics
+    GET    /api/v1/llm/keys/{provider}/status      Key pool status (no secrets)
+    POST   /api/v1/llm/keys/{provider}/rotate      Trigger key rotation
+    POST   /api/v1/llm/keys/{provider}/add         Add a key to the pool
 
-POST   /api/v1/llm/providers/register          Register a new provider
-PUT    /api/v1/llm/providers/{id}/config       Update provider configuration
-POST   /api/v1/llm/catalog/reload              Hot-reload model catalog
-```
+    GET    /api/v1/llm/metrics                     Aggregated provider metrics
+    GET    /api/v1/llm/metrics/{provider}          Per-provider metrics
+    GET    /api/v1/llm/metrics/{provider}/{model}  Per-model metrics
+
+    POST   /api/v1/llm/providers/register          Register a new provider
+    PUT    /api/v1/llm/providers/{id}/config       Update provider configuration
+    POST   /api/v1/llm/catalog/reload              Hot-reload model catalog
+    ```
 
 ### 10.2 Generation Request Example
 
-```json
-// POST /api/v1/llm/generate
-{
-  "messages": [
-    {"role": "system", "content": "You are a helpful coding assistant."},
-    {"role": "user", "content": "Write a Python function to merge two sorted lists."}
-  ],
-  "model_tier": "tier_2",
-  "max_tokens": 2048,
-  "temperature": 0.3,
-  "tools": [
+??? example "View JSON example"
+
+    ```json
+    // POST /api/v1/llm/generate
     {
-      "name": "run_code",
-      "description": "Execute Python code in a sandbox",
-      "parameters": {
-        "properties": {
-          "code": {"type": "string", "description": "Python code to execute"}
+      "messages": [
+        {"role": "system", "content": "You are a helpful coding assistant."},
+        {"role": "user", "content": "Write a Python function to merge two sorted lists."}
+      ],
+      "model_tier": "tier_2",
+      "max_tokens": 2048,
+      "temperature": 0.3,
+      "tools": [
+        {
+          "name": "run_code",
+          "description": "Execute Python code in a sandbox",
+          "parameters": {
+            "properties": {
+              "code": {"type": "string", "description": "Python code to execute"}
+            }
+          },
+          "required": ["code"]
         }
-      },
-      "required": ["code"]
+      ],
+      "routing_hints": {
+        "task_type": "coding",
+        "routing_profile": "quality_first"
+      }
     }
-  ],
-  "routing_hints": {
-    "task_type": "coding",
-    "routing_profile": "quality_first"
-  }
-}
-```
+    ```
 
 ### 10.3 Generation Response Example
 
-```json
-// 200 OK
-{
-  "content": "Here's an efficient function to merge two sorted lists:\n\n```python\ndef merge_sorted(a, b):\n    ...\n```",
-  "tool_calls": [],
-  "thinking": null,
-  "usage": {
-    "input_tokens": 342,
-    "output_tokens": 485,
-    "cache_read_tokens": 0,
-    "cache_write_tokens": 0,
-    "thinking_tokens": 0,
-    "total_tokens": 827
-  },
-  "model": "claude-sonnet-4-20250514",
-  "provider": "anthropic",
-  "finish_reason": "stop",
-  "latency_ms": 1847.3,
-  "cost_usd": 0.000829,
-  "request_id": "msg_01ABC...",
-  "key_id": "a3f2b1c9d4e5",
-  "circuit_state": "closed",
-  "routing_decision": {
-    "provider": "anthropic",
-    "model": "claude-sonnet-4-20250514",
-    "score": 0.8732,
-    "cost_input": 3.0,
-    "latency_est_ms": 1900
-  }
-}
-```
+??? example "View JSON example"
+
+    ```json
+    // 200 OK
+    {
+      "content": "Here's an efficient function to merge two sorted lists:\n\n```python\ndef merge_sorted(a, b):\n    ...\n```",
+      "tool_calls": [],
+      "thinking": null,
+      "usage": {
+        "input_tokens": 342,
+        "output_tokens": 485,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "thinking_tokens": 0,
+        "total_tokens": 827
+      },
+      "model": "claude-sonnet-4-20250514",
+      "provider": "anthropic",
+      "finish_reason": "stop",
+      "latency_ms": 1847.3,
+      "cost_usd": 0.000829,
+      "request_id": "msg_01ABC...",
+      "key_id": "a3f2b1c9d4e5",
+      "circuit_state": "closed",
+      "routing_decision": {
+        "provider": "anthropic",
+        "model": "claude-sonnet-4-20250514",
+        "score": 0.8732,
+        "cost_input": 3.0,
+        "latency_est_ms": 1900
+      }
+    }
+    ```
 
 ### 10.4 Internal Python Client
 
 For platform-internal use, subsystems interact directly with the `UnifiedLLMClient` without going through HTTP:
 
-```python
-# Internal usage by an agent or subsystem
-client: UnifiedLLMClient = platform.get_llm_client()
+??? example "View Python pseudocode"
 
-response = await client.generate(LLMRequest(
-    messages=[
-        Message(role=Role.SYSTEM, content="You are a task classifier."),
-        Message(role=Role.USER, content="Classify this task: ..."),
-    ],
-    model_tier="tier_1",       # cheap model for classification (p. 258)
-    max_tokens=100,
-    temperature=0.0,
-    response_format={"type": "json_object"},
-    routing_hints={"routing_profile": "cost_optimized"},
-))
+    ```python
+    # Internal usage by an agent or subsystem
+    client: UnifiedLLMClient = platform.get_llm_client()
 
-# response.provider == "google" (cheapest Tier 1 at time of call)
-# response.cost_usd == 0.000003 (negligible)
-```
+    response = await client.generate(LLMRequest(
+        messages=[
+            Message(role=Role.SYSTEM, content="You are a task classifier."),
+            Message(role=Role.USER, content="Classify this task: ..."),
+        ],
+        model_tier="tier_1",       # cheap model for classification (p. 258)
+        max_tokens=100,
+        temperature=0.0,
+        response_format={"type": "json_object"},
+        routing_hints={"routing_profile": "cost_optimized"},
+    ))
+
+    # response.provider == "google" (cheapest Tier 1 at time of call)
+    # response.cost_usd == 0.000003 (negligible)
+    ```
 
 ---
 
@@ -2426,17 +2449,19 @@ Span: llm.generate (with failover)
 
 Structured log events emitted by this subsystem:
 
-```json
-{"level": "INFO",  "event": "llm.request.completed",     "provider": "anthropic", "model": "claude-sonnet-4", "latency_ms": 1847, "cost_usd": 0.000829, "tokens": 827}
-{"level": "WARN",  "event": "llm.failover.triggered",    "from_provider": "anthropic", "to_provider": "openai", "reason": "http_529", "attempt": 2}
-{"level": "WARN",  "event": "llm.circuit_breaker.opened", "provider": "anthropic", "failures_in_window": 5, "cooldown_s": 30}
-{"level": "INFO",  "event": "llm.circuit_breaker.closed", "provider": "anthropic", "half_open_successes": 3}
-{"level": "WARN",  "event": "llm.key.rate_limited",       "provider": "anthropic", "key_id": "a3f2b1c9d4e5", "cooldown_s": 45}
-{"level": "INFO",  "event": "llm.key.rotated",            "provider": "anthropic", "old_key_id": "a3f2b1c9d4e5", "new_key_id": "f7g8h9i0j1k2"}
-{"level": "ERROR", "event": "llm.all_providers_exhausted", "tier": "tier_2", "attempts": 3, "last_error": "rate_limited"}
-{"level": "INFO",  "event": "llm.catalog.reloaded",       "providers_updated": 2, "models_added": 1, "pricing_changes": 3}
-{"level": "WARN",  "event": "llm.content_filter.triggered","provider": "openai", "model": "gpt-4o", "finish_reason": "content_filter"}
-```
+??? example "View JSON example"
+
+    ```json
+    {"level": "INFO",  "event": "llm.request.completed",     "provider": "anthropic", "model": "claude-sonnet-4", "latency_ms": 1847, "cost_usd": 0.000829, "tokens": 827}
+    {"level": "WARN",  "event": "llm.failover.triggered",    "from_provider": "anthropic", "to_provider": "openai", "reason": "http_529", "attempt": 2}
+    {"level": "WARN",  "event": "llm.circuit_breaker.opened", "provider": "anthropic", "failures_in_window": 5, "cooldown_s": 30}
+    {"level": "INFO",  "event": "llm.circuit_breaker.closed", "provider": "anthropic", "half_open_successes": 3}
+    {"level": "WARN",  "event": "llm.key.rate_limited",       "provider": "anthropic", "key_id": "a3f2b1c9d4e5", "cooldown_s": 45}
+    {"level": "INFO",  "event": "llm.key.rotated",            "provider": "anthropic", "old_key_id": "a3f2b1c9d4e5", "new_key_id": "f7g8h9i0j1k2"}
+    {"level": "ERROR", "event": "llm.all_providers_exhausted", "tier": "tier_2", "attempts": 3, "last_error": "rate_limited"}
+    {"level": "INFO",  "event": "llm.catalog.reloaded",       "providers_updated": 2, "models_added": 1, "pricing_changes": 3}
+    {"level": "WARN",  "event": "llm.content_filter.triggered","provider": "openai", "model": "gpt-4o", "finish_reason": "content_filter"}
+    ```
 
 ### 12.4 Dashboard Panels
 

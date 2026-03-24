@@ -31,18 +31,27 @@ The Observability Platform is the foundational telemetry backbone of the AgentFo
 
 The subsystem implements the **Five-Level Evaluation Pyramid** (p. 303):
 
-```
-         ┌───────────┐
-         │   Coach   │   Level 5: Feed insights back to agents
-         ├───────────┤            for self-improvement
-         │  Reward   │   Level 4: Score trajectories to reinforce
-         ├───────────┤            or discourage behaviors
-         │ Evaluate  │   Level 3: Run automated + LLM-as-Judge
-         ├───────────┤            evaluations against rubrics
-         │  Collect  │   Level 2: Capture traces, metrics, logs,
-         ├───────────┤            and decision audit records
-         │  Define   │   Level 1: Establish SMART goals, metrics
-         └───────────┘            definitions, and alert thresholds
+```mermaid
+graph TD
+    L5["Level 5: Coach<br/><small>Feed insights back to agents<br/>for self-improvement</small>"]
+    L4["Level 4: Reward<br/><small>Score trajectories to reinforce<br/>or discourage behaviors</small>"]
+    L3["Level 3: Evaluate<br/><small>Run automated + LLM-as-Judge<br/>evaluations against rubrics</small>"]
+    L2["Level 2: Collect<br/><small>Capture traces, metrics, logs,<br/>and decision audit records</small>"]
+    L1["Level 1: Define<br/><small>Establish SMART goals, metrics<br/>definitions, and alert thresholds</small>"]
+
+    L5 --- L4 --- L3 --- L2 --- L1
+
+    classDef top fill:#E74C3C,stroke:#C0392B,color:#fff
+    classDef mid fill:#E67E22,stroke:#CA6F1E,color:#fff
+    classDef eval fill:#F39C12,stroke:#D68910,color:#fff
+    classDef collect fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef base fill:#2ECC71,stroke:#1FA855,color:#fff
+
+    class L5 top
+    class L4 mid
+    class L3 eval
+    class L2 collect
+    class L1 base
 ```
 
 Levels 1 and 2 are owned entirely by this subsystem. Levels 3-5 are shared with the Evaluation Framework (subsystem #8), which consumes the data this subsystem collects.
@@ -154,164 +163,166 @@ Trace context propagates across all communication boundaries using the W3C Trace
 
 ### 2.4 Trace Creation Pseudocode
 
-```python
-from opentelemetry import trace
-from opentelemetry.trace import StatusCode
-from dataclasses import dataclass, field
-from typing import Any, Optional
-import time
-import uuid
+??? example "View Python pseudocode"
+
+    ```python
+    from opentelemetry import trace
+    from opentelemetry.trace import StatusCode
+    from dataclasses import dataclass, field
+    from typing import Any, Optional
+    import time
+    import uuid
 
 
-tracer = trace.get_tracer("agentforge.observability", "1.0.0")
+    tracer = trace.get_tracer("agentforge.observability", "1.0.0")
 
 
-@dataclass
-class AgentSpanAttributes:
-    """Mandatory attributes for every agent execution span."""
-    agent_id: str
-    agent_version: str
-    team_id: str
-    model: str
-    trace_id: str
-    parent_span_id: Optional[str] = None
+    @dataclass
+    class AgentSpanAttributes:
+        """Mandatory attributes for every agent execution span."""
+        agent_id: str
+        agent_version: str
+        team_id: str
+        model: str
+        trace_id: str
+        parent_span_id: Optional[str] = None
 
 
-class AgentTracer:
-    """
-    Creates and manages OpenTelemetry spans for agent interactions.
-    Wraps OTel primitives with AgentForge-specific span types and
-    mandatory attribute enforcement.
-    """
-
-    def __init__(self, service_name: str = "agentforge"):
-        self.tracer = trace.get_tracer(f"{service_name}.observability")
-
-    def start_agent_span(
-        self,
-        agent_id: str,
-        agent_version: str,
-        team_id: str,
-        model: str,
-        parent_context: Optional[trace.Context] = None,
-    ) -> trace.Span:
+    class AgentTracer:
         """
-        Start a new span for an agent execution. Every agent.execute span
-        carries mandatory attributes per the Trace Model schema.
+        Creates and manages OpenTelemetry spans for agent interactions.
+        Wraps OTel primitives with AgentForge-specific span types and
+        mandatory attribute enforcement.
         """
-        ctx = parent_context or trace.get_current_span().get_span_context()
-        span = self.tracer.start_span(
-            name=f"agent.execute:{agent_id}",
-            context=trace.set_span_in_context(ctx) if parent_context else None,
-            attributes={
-                "agentforge.span_type": "agent.execute",
-                "agentforge.agent_id": agent_id,
-                "agentforge.agent_version": agent_version,
-                "agentforge.team_id": team_id,
-                "agentforge.model": model,
-                "agentforge.iteration_count": 0,
-            },
-        )
-        return span
 
-    def record_llm_call(
-        self,
-        parent_span: trace.Span,
-        model: str,
-        tokens_in: int,
-        tokens_out: int,
-        latency_ms: float,
-        temperature: float = 0.0,
-    ) -> trace.Span:
-        """
-        Record an LLM call as a child span. Captures token counts,
-        latency, and model parameters required for cost attribution
-        and performance analysis (p. 304).
-        """
-        with self.tracer.start_as_current_span(
-            "agent.llm_call",
-            attributes={
-                "agentforge.span_type": "agent.llm_call",
-                "agentforge.model": model,
-                "agentforge.tokens_in": tokens_in,
-                "agentforge.tokens_out": tokens_out,
-                "agentforge.latency_ms": latency_ms,
-                "agentforge.temperature": temperature,
-                "agentforge.cost_usd": self._compute_cost(
-                    model, tokens_in, tokens_out
-                ),
-            },
-        ) as span:
+        def __init__(self, service_name: str = "agentforge"):
+            self.tracer = trace.get_tracer(f"{service_name}.observability")
+
+        def start_agent_span(
+            self,
+            agent_id: str,
+            agent_version: str,
+            team_id: str,
+            model: str,
+            parent_context: Optional[trace.Context] = None,
+        ) -> trace.Span:
+            """
+            Start a new span for an agent execution. Every agent.execute span
+            carries mandatory attributes per the Trace Model schema.
+            """
+            ctx = parent_context or trace.get_current_span().get_span_context()
+            span = self.tracer.start_span(
+                name=f"agent.execute:{agent_id}",
+                context=trace.set_span_in_context(ctx) if parent_context else None,
+                attributes={
+                    "agentforge.span_type": "agent.execute",
+                    "agentforge.agent_id": agent_id,
+                    "agentforge.agent_version": agent_version,
+                    "agentforge.team_id": team_id,
+                    "agentforge.model": model,
+                    "agentforge.iteration_count": 0,
+                },
+            )
             return span
 
-    def record_tool_call(
-        self,
-        parent_span: trace.Span,
-        tool_server: str,
-        tool_name: str,
-        tool_input: dict,
-        tool_output_size: int,
-        status: str,
-        latency_ms: float,
-    ) -> trace.Span:
-        """
-        Record a tool invocation as a child span. Tool call accuracy
-        is a core metric (p. 304): did the agent pick the right tool
-        with the right arguments?
-        """
-        with self.tracer.start_as_current_span(
-            f"agent.tool_call:{tool_name}",
-            attributes={
-                "agentforge.span_type": "agent.tool_call",
-                "agentforge.tool_server": tool_server,
-                "agentforge.tool_name": tool_name,
-                "agentforge.tool_input_keys": list(tool_input.keys()),
-                "agentforge.tool_output_bytes": tool_output_size,
-                "agentforge.tool_status": status,
-                "agentforge.latency_ms": latency_ms,
-            },
-        ) as span:
-            if status == "error":
-                span.set_status(StatusCode.ERROR, "Tool call failed")
-            return span
+        def record_llm_call(
+            self,
+            parent_span: trace.Span,
+            model: str,
+            tokens_in: int,
+            tokens_out: int,
+            latency_ms: float,
+            temperature: float = 0.0,
+        ) -> trace.Span:
+            """
+            Record an LLM call as a child span. Captures token counts,
+            latency, and model parameters required for cost attribution
+            and performance analysis (p. 304).
+            """
+            with self.tracer.start_as_current_span(
+                "agent.llm_call",
+                attributes={
+                    "agentforge.span_type": "agent.llm_call",
+                    "agentforge.model": model,
+                    "agentforge.tokens_in": tokens_in,
+                    "agentforge.tokens_out": tokens_out,
+                    "agentforge.latency_ms": latency_ms,
+                    "agentforge.temperature": temperature,
+                    "agentforge.cost_usd": self._compute_cost(
+                        model, tokens_in, tokens_out
+                    ),
+                },
+            ) as span:
+                return span
 
-    def record_guardrail_check(
-        self,
-        policy_id: str,
-        result: str,
-        intervention_type: Optional[str] = None,
-        severity: Optional[str] = None,
-        latency_ms: float = 0.0,
-    ) -> trace.Span:
-        """
-        Record a guardrail evaluation. Safety intervention logs are
-        critical for audit (p. 297) and spike alerting (p. 106).
-        """
-        with self.tracer.start_as_current_span(
-            f"guardrail.check:{policy_id}",
-            attributes={
-                "agentforge.span_type": "guardrail.check",
-                "agentforge.policy_id": policy_id,
-                "agentforge.guardrail_result": result,
-                "agentforge.intervention_type": intervention_type or "none",
-                "agentforge.severity": severity or "info",
-                "agentforge.latency_ms": latency_ms,
-            },
-        ) as span:
-            return span
+        def record_tool_call(
+            self,
+            parent_span: trace.Span,
+            tool_server: str,
+            tool_name: str,
+            tool_input: dict,
+            tool_output_size: int,
+            status: str,
+            latency_ms: float,
+        ) -> trace.Span:
+            """
+            Record a tool invocation as a child span. Tool call accuracy
+            is a core metric (p. 304): did the agent pick the right tool
+            with the right arguments?
+            """
+            with self.tracer.start_as_current_span(
+                f"agent.tool_call:{tool_name}",
+                attributes={
+                    "agentforge.span_type": "agent.tool_call",
+                    "agentforge.tool_server": tool_server,
+                    "agentforge.tool_name": tool_name,
+                    "agentforge.tool_input_keys": list(tool_input.keys()),
+                    "agentforge.tool_output_bytes": tool_output_size,
+                    "agentforge.tool_status": status,
+                    "agentforge.latency_ms": latency_ms,
+                },
+            ) as span:
+                if status == "error":
+                    span.set_status(StatusCode.ERROR, "Tool call failed")
+                return span
 
-    def _compute_cost(
-        self, model: str, tokens_in: int, tokens_out: int
-    ) -> float:
-        """Look up model pricing and compute cost in USD."""
-        pricing = {
-            "opus": {"input": 15.0 / 1_000_000, "output": 75.0 / 1_000_000},
-            "sonnet": {"input": 3.0 / 1_000_000, "output": 15.0 / 1_000_000},
-            "haiku": {"input": 0.25 / 1_000_000, "output": 1.25 / 1_000_000},
-        }
-        rates = pricing.get(model, pricing["sonnet"])
-        return (tokens_in * rates["input"]) + (tokens_out * rates["output"])
-```
+        def record_guardrail_check(
+            self,
+            policy_id: str,
+            result: str,
+            intervention_type: Optional[str] = None,
+            severity: Optional[str] = None,
+            latency_ms: float = 0.0,
+        ) -> trace.Span:
+            """
+            Record a guardrail evaluation. Safety intervention logs are
+            critical for audit (p. 297) and spike alerting (p. 106).
+            """
+            with self.tracer.start_as_current_span(
+                f"guardrail.check:{policy_id}",
+                attributes={
+                    "agentforge.span_type": "guardrail.check",
+                    "agentforge.policy_id": policy_id,
+                    "agentforge.guardrail_result": result,
+                    "agentforge.intervention_type": intervention_type or "none",
+                    "agentforge.severity": severity or "info",
+                    "agentforge.latency_ms": latency_ms,
+                },
+            ) as span:
+                return span
+
+        def _compute_cost(
+            self, model: str, tokens_in: int, tokens_out: int
+        ) -> float:
+            """Look up model pricing and compute cost in USD."""
+            pricing = {
+                "opus": {"input": 15.0 / 1_000_000, "output": 75.0 / 1_000_000},
+                "sonnet": {"input": 3.0 / 1_000_000, "output": 15.0 / 1_000_000},
+                "haiku": {"input": 0.25 / 1_000_000, "output": 1.25 / 1_000_000},
+            }
+            rates = pricing.get(model, pricing["sonnet"])
+            return (tokens_in * rates["input"]) + (tokens_out * rates["output"])
+    ```
 
 ---
 
@@ -353,52 +364,51 @@ Metrics are pre-aggregated at multiple temporal resolutions to balance query spe
 
 ### 3.3 Aggregation Pipeline
 
-```
-Agent Runtime
-    │
-    ▼
-┌──────────────────────┐
-│ In-Process Buffer    │  Ring buffer, 1000 events, flush every 100ms
-│ (per-agent thread)   │  Non-blocking: drop-on-full with counter
-└──────────┬───────────┘
-           │  gRPC / async batch export
-           ▼
-┌──────────────────────┐
-│ OTel Collector       │  Receives spans + metrics from all agents
-│ (sidecar or daemon)  │  Applies sampling, enrichment, routing
-└──────────┬───────────┘
-           │
-     ┌─────┴──────────┐
-     │                │
-     ▼                ▼
-┌─────────┐    ┌───────────┐
-│ Tempo   │    │ClickHouse │  Traces go to Tempo (or Jaeger).
-│ (traces)│    │ (metrics) │  Pre-aggregated metrics go to ClickHouse.
-└─────────┘    └───────────┘
-     │                │
-     └───────┬────────┘
-             ▼
-      ┌─────────────┐
-      │   Grafana    │  Unified query across traces, metrics, logs
-      └─────────────┘
+```mermaid
+graph TD
+    AR["Agent Runtime"]
+    BUF["In-Process Buffer<br/><small>Ring buffer, 1000 events, flush every 100ms<br/>Non-blocking: drop-on-full with counter</small>"]
+    OTEL["OTel Collector<br/><small>sidecar or daemon<br/>Applies sampling, enrichment, routing</small>"]
+    TEMPO["Tempo<br/><small>traces</small>"]
+    CH["ClickHouse<br/><small>metrics</small>"]
+    GRAF["Grafana<br/><small>Unified query across traces, metrics, logs</small>"]
+
+    AR --> BUF
+    BUF -->|"gRPC / async batch export"| OTEL
+    OTEL --> TEMPO
+    OTEL --> CH
+    TEMPO --> GRAF
+    CH --> GRAF
+
+    classDef runtime fill:#E67E22,stroke:#CA6F1E,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef foundational fill:#F39C12,stroke:#D68910,color:#fff
+    classDef userFacing fill:#2ECC71,stroke:#1FA855,color:#fff
+
+    class AR runtime
+    class BUF,OTEL infra
+    class TEMPO,CH foundational
+    class GRAF userFacing
 ```
 
 ### 3.4 Metric Dimensions
 
 Every metric is tagged with a standard set of dimensions enabling fine-grained slicing:
 
-```python
-STANDARD_DIMENSIONS = {
-    "team_id":        str,   # Which team processed the request
-    "agent_id":       str,   # Which agent emitted the metric
-    "agent_version":  str,   # Semver of the agent prompt/config
-    "model":          str,   # LLM model used (haiku, sonnet, opus)
-    "tool_name":      str,   # For tool-related metrics
-    "policy_id":      str,   # For guardrail metrics
-    "error_class":    str,   # transient | logic | unrecoverable (p. 205)
-    "environment":    str,   # staging | production | canary
-}
-```
+??? example "View Python pseudocode"
+
+    ```python
+    STANDARD_DIMENSIONS = {
+        "team_id":        str,   # Which team processed the request
+        "agent_id":       str,   # Which agent emitted the metric
+        "agent_version":  str,   # Semver of the agent prompt/config
+        "model":          str,   # LLM model used (haiku, sonnet, opus)
+        "tool_name":      str,   # For tool-related metrics
+        "policy_id":      str,   # For guardrail metrics
+        "error_class":    str,   # transient | logic | unrecoverable (p. 205)
+        "environment":    str,   # staging | production | canary
+    }
+    ```
 
 ---
 
@@ -415,38 +425,40 @@ The Decision Audit Log answers the question: "Why did the agent do X?" Every non
 
 ### 4.2 Decision Record Schema
 
-```json
-{
-  "decision_id": "dec-uuid-v4",
-  "trace_id": "tr-8f3a2b",
-  "span_id": "sp-002",
-  "timestamp": "2026-02-27T14:32:18.442Z",
-  "decision_type": "routing | planning | tool_selection | delegation | guardrail | escalation | goal_evaluation | error_recovery",
-  "actor": {
-    "component": "team_supervisor | worker_agent | platform_orchestrator | guardrail_agent",
-    "agent_id": "analytics-supervisor-v2",
-    "agent_version": "2.1.0"
-  },
-  "context": {
-    "input_summary": "User asked to analyze Q3 revenue trends",
-    "available_options": ["team-analytics", "team-research", "team-general"],
-    "constraints": ["max_latency_ms: 10000", "budget_usd: 0.50"]
-  },
-  "decision": {
-    "chosen_option": "team-analytics",
-    "confidence": 0.94,
-    "reasoning": "Query contains financial analysis keywords; team-analytics has sql_query and python_exec tools required for data analysis tasks"
-  },
-  "outcome": {
-    "status": "success | failure | pending",
-    "goal_met": true,
-    "latency_ms": 5200,
-    "tokens_consumed": 3550
-  },
-  "linked_decisions": ["dec-previous-uuid"],
-  "tags": ["routing", "high-confidence"]
-}
-```
+??? example "View JSON example"
+
+    ```json
+    {
+      "decision_id": "dec-uuid-v4",
+      "trace_id": "tr-8f3a2b",
+      "span_id": "sp-002",
+      "timestamp": "2026-02-27T14:32:18.442Z",
+      "decision_type": "routing | planning | tool_selection | delegation | guardrail | escalation | goal_evaluation | error_recovery",
+      "actor": {
+        "component": "team_supervisor | worker_agent | platform_orchestrator | guardrail_agent",
+        "agent_id": "analytics-supervisor-v2",
+        "agent_version": "2.1.0"
+      },
+      "context": {
+        "input_summary": "User asked to analyze Q3 revenue trends",
+        "available_options": ["team-analytics", "team-research", "team-general"],
+        "constraints": ["max_latency_ms: 10000", "budget_usd: 0.50"]
+      },
+      "decision": {
+        "chosen_option": "team-analytics",
+        "confidence": 0.94,
+        "reasoning": "Query contains financial analysis keywords; team-analytics has sql_query and python_exec tools required for data analysis tasks"
+      },
+      "outcome": {
+        "status": "success | failure | pending",
+        "goal_met": true,
+        "latency_ms": 5200,
+        "tokens_consumed": 3550
+      },
+      "linked_decisions": ["dec-previous-uuid"],
+      "tags": ["routing", "high-confidence"]
+    }
+    ```
 
 ### 4.3 Decision Types Captured
 
@@ -465,33 +477,35 @@ The Decision Audit Log answers the question: "Why did the agent do X?" Every non
 
 All exceptions are logged with full step context per the Exception Handling pattern:
 
-```python
-@dataclass
-class ExceptionAuditRecord:
-    """
-    Structured exception log following the Exception Handling pattern (p. 204).
-    Every exception captures the step context, classification, recovery
-    strategy, and final outcome.
-    """
-    exception_id: str               # Unique ID for this exception event
-    trace_id: str                   # Parent trace
-    span_id: str                    # Span where the exception occurred
-    timestamp: str                  # ISO 8601
-    agent_id: str                   # Agent that encountered the error
-    step_context: dict              # What the agent was doing when it failed
-    # Example: {"step": "tool_call", "tool": "sql_query",
-    #           "iteration": 3, "plan_step": "fetch_data"}
+??? example "View Python pseudocode"
 
-    error_type: str                 # Python exception class name
-    error_message: str              # Exception message (sanitized of secrets)
-    error_class: str                # "transient" | "logic" | "unrecoverable" (p. 205)
-    recovery_strategy: str          # "retry" | "reprompt" | "fallback" |
-                                    # "escalate" | "abort" (p. 206-209)
-    recovery_outcome: str           # "recovered" | "degraded" | "failed"
-    retry_count: int                # Number of retries attempted
-    escalated_to_human: bool        # Whether HITL was triggered
-    linked_decision_id: str         # Decision audit record for recovery choice
-```
+    ```python
+    @dataclass
+    class ExceptionAuditRecord:
+        """
+        Structured exception log following the Exception Handling pattern (p. 204).
+        Every exception captures the step context, classification, recovery
+        strategy, and final outcome.
+        """
+        exception_id: str               # Unique ID for this exception event
+        trace_id: str                   # Parent trace
+        span_id: str                    # Span where the exception occurred
+        timestamp: str                  # ISO 8601
+        agent_id: str                   # Agent that encountered the error
+        step_context: dict              # What the agent was doing when it failed
+        # Example: {"step": "tool_call", "tool": "sql_query",
+        #           "iteration": 3, "plan_step": "fetch_data"}
+
+        error_type: str                 # Python exception class name
+        error_message: str              # Exception message (sanitized of secrets)
+        error_class: str                # "transient" | "logic" | "unrecoverable" (p. 205)
+        recovery_strategy: str          # "retry" | "reprompt" | "fallback" |
+                                        # "escalate" | "abort" (p. 206-209)
+        recovery_outcome: str           # "recovered" | "degraded" | "failed"
+        retry_count: int                # Number of retries attempted
+        escalated_to_human: bool        # Whether HITL was triggered
+        linked_decision_id: str         # Decision audit record for recovery choice
+    ```
 
 ---
 
@@ -621,203 +635,205 @@ Alerts follow the principle of **actionable-only alerting**: every alert must co
 
 ### 6.2 Alert Rules
 
-```python
-from dataclasses import dataclass
-from enum import Enum
-from typing import Callable, Optional
+??? example "View Python pseudocode"
+
+    ```python
+    from dataclasses import dataclass
+    from enum import Enum
+    from typing import Callable, Optional
 
 
-class Severity(Enum):
-    INFO = "info"
-    WARNING = "warning"
-    CRITICAL = "critical"
-    PAGE = "page"  # Wakes someone up
+    class Severity(Enum):
+        INFO = "info"
+        WARNING = "warning"
+        CRITICAL = "critical"
+        PAGE = "page"  # Wakes someone up
 
 
-class ComparisonOp(Enum):
-    GT = ">"
-    LT = "<"
-    GTE = ">="
-    LTE = "<="
-    DELTA_PCT_GT = "delta_pct_>"  # % change from baseline
+    class ComparisonOp(Enum):
+        GT = ">"
+        LT = "<"
+        GTE = ">="
+        LTE = "<="
+        DELTA_PCT_GT = "delta_pct_>"  # % change from baseline
 
 
-@dataclass
-class AlertRule:
-    """
-    Defines a single alert rule. Rules are evaluated against the
-    real-time metrics stream at the cadence specified by eval_window.
-    """
-    rule_id: str
-    name: str
-    description: str
-    metric: str                       # Metric name from Section 3.1
-    comparison: ComparisonOp
-    threshold: float
-    eval_window: str                  # e.g., "5m", "15m", "1h"
-    severity: Severity
-    channels: list[str]               # e.g., ["slack:#ops", "pagerduty"]
-    runbook_url: str
-    suppress_after: Optional[str]     # Suppress re-fire for this duration
-    dimensions_filter: dict = None    # Optional: only fire for specific dims
+    @dataclass
+    class AlertRule:
+        """
+        Defines a single alert rule. Rules are evaluated against the
+        real-time metrics stream at the cadence specified by eval_window.
+        """
+        rule_id: str
+        name: str
+        description: str
+        metric: str                       # Metric name from Section 3.1
+        comparison: ComparisonOp
+        threshold: float
+        eval_window: str                  # e.g., "5m", "15m", "1h"
+        severity: Severity
+        channels: list[str]               # e.g., ["slack:#ops", "pagerduty"]
+        runbook_url: str
+        suppress_after: Optional[str]     # Suppress re-fire for this duration
+        dimensions_filter: dict = None    # Optional: only fire for specific dims
 
 
-# ─── Core Alert Rules ────────────────────────────────────────────────
+    # ─── Core Alert Rules ────────────────────────────────────────────────
 
-ALERT_RULES: list[AlertRule] = [
+    ALERT_RULES: list[AlertRule] = [
 
-    # --- Accuracy Degradation (p. 305) ---
-    AlertRule(
-        rule_id="acc-001",
-        name="Task Success Rate Degradation",
-        description=(
-            "Task success rate has dropped >10% relative to the trailing "
-            "24-hour baseline. Indicates systemic quality regression."
+        # --- Accuracy Degradation (p. 305) ---
+        AlertRule(
+            rule_id="acc-001",
+            name="Task Success Rate Degradation",
+            description=(
+                "Task success rate has dropped >10% relative to the trailing "
+                "24-hour baseline. Indicates systemic quality regression."
+            ),
+            metric="task_success_rate",
+            comparison=ComparisonOp.DELTA_PCT_GT,
+            threshold=10.0,  # >10% degradation from baseline (p. 305)
+            eval_window="15m",
+            severity=Severity.CRITICAL,
+            channels=["slack:#agent-ops", "pagerduty:agent-oncall"],
+            runbook_url="https://runbooks.agentforge.dev/acc-001",
+            suppress_after="30m",
         ),
-        metric="task_success_rate",
-        comparison=ComparisonOp.DELTA_PCT_GT,
-        threshold=10.0,  # >10% degradation from baseline (p. 305)
-        eval_window="15m",
-        severity=Severity.CRITICAL,
-        channels=["slack:#agent-ops", "pagerduty:agent-oncall"],
-        runbook_url="https://runbooks.agentforge.dev/acc-001",
-        suppress_after="30m",
-    ),
 
-    AlertRule(
-        rule_id="acc-002",
-        name="Tool Call Accuracy Drop",
-        description=(
-            "Agent tool call accuracy has degraded >10% from baseline. "
-            "May indicate prompt regression or tool schema change (p. 304)."
+        AlertRule(
+            rule_id="acc-002",
+            name="Tool Call Accuracy Drop",
+            description=(
+                "Agent tool call accuracy has degraded >10% from baseline. "
+                "May indicate prompt regression or tool schema change (p. 304)."
+            ),
+            metric="tool_call_accuracy",
+            comparison=ComparisonOp.DELTA_PCT_GT,
+            threshold=10.0,
+            eval_window="15m",
+            severity=Severity.WARNING,
+            channels=["slack:#agent-ops"],
+            runbook_url="https://runbooks.agentforge.dev/acc-002",
+            suppress_after="30m",
         ),
-        metric="tool_call_accuracy",
-        comparison=ComparisonOp.DELTA_PCT_GT,
-        threshold=10.0,
-        eval_window="15m",
-        severity=Severity.WARNING,
-        channels=["slack:#agent-ops"],
-        runbook_url="https://runbooks.agentforge.dev/acc-002",
-        suppress_after="30m",
-    ),
 
-    # --- Latency ---
-    AlertRule(
-        rule_id="lat-001",
-        name="P99 Latency Spike",
-        description=(
-            "End-to-end P99 latency has exceeded 15 seconds. User "
-            "experience is materially degraded."
+        # --- Latency ---
+        AlertRule(
+            rule_id="lat-001",
+            name="P99 Latency Spike",
+            description=(
+                "End-to-end P99 latency has exceeded 15 seconds. User "
+                "experience is materially degraded."
+            ),
+            metric="e2e_latency_ms",
+            comparison=ComparisonOp.GTE,
+            threshold=15000.0,  # 15 seconds
+            eval_window="5m",
+            severity=Severity.WARNING,
+            channels=["slack:#agent-ops"],
+            runbook_url="https://runbooks.agentforge.dev/lat-001",
+            suppress_after="15m",
         ),
-        metric="e2e_latency_ms",
-        comparison=ComparisonOp.GTE,
-        threshold=15000.0,  # 15 seconds
-        eval_window="5m",
-        severity=Severity.WARNING,
-        channels=["slack:#agent-ops"],
-        runbook_url="https://runbooks.agentforge.dev/lat-001",
-        suppress_after="15m",
-    ),
 
-    AlertRule(
-        rule_id="lat-002",
-        name="P99 Latency Critical",
-        description="P99 latency exceeding 30 seconds. Likely upstream failure.",
-        metric="e2e_latency_ms",
-        comparison=ComparisonOp.GTE,
-        threshold=30000.0,
-        eval_window="5m",
-        severity=Severity.PAGE,
-        channels=["slack:#agent-ops", "pagerduty:agent-oncall"],
-        runbook_url="https://runbooks.agentforge.dev/lat-002",
-        suppress_after="15m",
-    ),
-
-    # --- Error Rate ---
-    AlertRule(
-        rule_id="err-001",
-        name="Error Rate Elevated",
-        description="Unrecoverable error rate above 5%.",
-        metric="error_rate",
-        comparison=ComparisonOp.GTE,
-        threshold=0.05,
-        eval_window="10m",
-        severity=Severity.CRITICAL,
-        channels=["slack:#agent-ops", "pagerduty:agent-oncall"],
-        runbook_url="https://runbooks.agentforge.dev/err-001",
-        suppress_after="30m",
-    ),
-
-    # --- Cost ---
-    AlertRule(
-        rule_id="cost-001",
-        name="Hourly Cost Spike",
-        description=(
-            "Hourly token spend has exceeded 150% of the trailing "
-            "7-day hourly average. Possible runaway loop."
+        AlertRule(
+            rule_id="lat-002",
+            name="P99 Latency Critical",
+            description="P99 latency exceeding 30 seconds. Likely upstream failure.",
+            metric="e2e_latency_ms",
+            comparison=ComparisonOp.GTE,
+            threshold=30000.0,
+            eval_window="5m",
+            severity=Severity.PAGE,
+            channels=["slack:#agent-ops", "pagerduty:agent-oncall"],
+            runbook_url="https://runbooks.agentforge.dev/lat-002",
+            suppress_after="15m",
         ),
-        metric="cost_usd",
-        comparison=ComparisonOp.DELTA_PCT_GT,
-        threshold=50.0,  # 50% above baseline = 150% of baseline
-        eval_window="1h",
-        severity=Severity.WARNING,
-        channels=["slack:#agent-ops", "slack:#finance"],
-        runbook_url="https://runbooks.agentforge.dev/cost-001",
-        suppress_after="1h",
-    ),
 
-    # --- Guardrail / Safety (p. 106, p. 297) ---
-    AlertRule(
-        rule_id="safety-001",
-        name="Guardrail Intervention Spike",
-        description=(
-            "Guardrail intervention rate has spiked >10% above baseline. "
-            "May indicate adversarial input pattern or prompt regression "
-            "causing agents to attempt unsafe actions (p. 106)."
+        # --- Error Rate ---
+        AlertRule(
+            rule_id="err-001",
+            name="Error Rate Elevated",
+            description="Unrecoverable error rate above 5%.",
+            metric="error_rate",
+            comparison=ComparisonOp.GTE,
+            threshold=0.05,
+            eval_window="10m",
+            severity=Severity.CRITICAL,
+            channels=["slack:#agent-ops", "pagerduty:agent-oncall"],
+            runbook_url="https://runbooks.agentforge.dev/err-001",
+            suppress_after="30m",
         ),
-        metric="guardrail_intervention_rate",
-        comparison=ComparisonOp.DELTA_PCT_GT,
-        threshold=10.0,
-        eval_window="15m",
-        severity=Severity.CRITICAL,
-        channels=["slack:#safety-team", "pagerduty:safety-oncall"],
-        runbook_url="https://runbooks.agentforge.dev/safety-001",
-        suppress_after="30m",
-    ),
 
-    AlertRule(
-        rule_id="safety-002",
-        name="HITL Escalation Rate High",
-        description="More than 10 HITL escalations in 1 hour.",
-        metric="hitl_escalation_count",
-        comparison=ComparisonOp.GTE,
-        threshold=10.0,
-        eval_window="1h",
-        severity=Severity.WARNING,
-        channels=["slack:#safety-team"],
-        runbook_url="https://runbooks.agentforge.dev/safety-002",
-        suppress_after="1h",
-    ),
-
-    # --- Goal Tracking (p. 192) ---
-    AlertRule(
-        rule_id="goal-001",
-        name="Goal Completion Rate Drop",
-        description=(
-            "SMART goal completion rate below 80%. Agents are failing to "
-            "achieve their defined objectives within iteration budgets (p. 188)."
+        # --- Cost ---
+        AlertRule(
+            rule_id="cost-001",
+            name="Hourly Cost Spike",
+            description=(
+                "Hourly token spend has exceeded 150% of the trailing "
+                "7-day hourly average. Possible runaway loop."
+            ),
+            metric="cost_usd",
+            comparison=ComparisonOp.DELTA_PCT_GT,
+            threshold=50.0,  # 50% above baseline = 150% of baseline
+            eval_window="1h",
+            severity=Severity.WARNING,
+            channels=["slack:#agent-ops", "slack:#finance"],
+            runbook_url="https://runbooks.agentforge.dev/cost-001",
+            suppress_after="1h",
         ),
-        metric="goal_completion_rate",
-        comparison=ComparisonOp.LTE,
-        threshold=0.80,
-        eval_window="1h",
-        severity=Severity.WARNING,
-        channels=["slack:#agent-ops"],
-        runbook_url="https://runbooks.agentforge.dev/goal-001",
-        suppress_after="2h",
-    ),
-]
-```
+
+        # --- Guardrail / Safety (p. 106, p. 297) ---
+        AlertRule(
+            rule_id="safety-001",
+            name="Guardrail Intervention Spike",
+            description=(
+                "Guardrail intervention rate has spiked >10% above baseline. "
+                "May indicate adversarial input pattern or prompt regression "
+                "causing agents to attempt unsafe actions (p. 106)."
+            ),
+            metric="guardrail_intervention_rate",
+            comparison=ComparisonOp.DELTA_PCT_GT,
+            threshold=10.0,
+            eval_window="15m",
+            severity=Severity.CRITICAL,
+            channels=["slack:#safety-team", "pagerduty:safety-oncall"],
+            runbook_url="https://runbooks.agentforge.dev/safety-001",
+            suppress_after="30m",
+        ),
+
+        AlertRule(
+            rule_id="safety-002",
+            name="HITL Escalation Rate High",
+            description="More than 10 HITL escalations in 1 hour.",
+            metric="hitl_escalation_count",
+            comparison=ComparisonOp.GTE,
+            threshold=10.0,
+            eval_window="1h",
+            severity=Severity.WARNING,
+            channels=["slack:#safety-team"],
+            runbook_url="https://runbooks.agentforge.dev/safety-002",
+            suppress_after="1h",
+        ),
+
+        # --- Goal Tracking (p. 192) ---
+        AlertRule(
+            rule_id="goal-001",
+            name="Goal Completion Rate Drop",
+            description=(
+                "SMART goal completion rate below 80%. Agents are failing to "
+                "achieve their defined objectives within iteration budgets (p. 188)."
+            ),
+            metric="goal_completion_rate",
+            comparison=ComparisonOp.LTE,
+            threshold=0.80,
+            eval_window="1h",
+            severity=Severity.WARNING,
+            channels=["slack:#agent-ops"],
+            runbook_url="https://runbooks.agentforge.dev/goal-001",
+            suppress_after="2h",
+        ),
+    ]
+    ```
 
 ### 6.3 Alert Channels
 
@@ -832,14 +848,13 @@ ALERT_RULES: list[AlertRule] = [
 
 ### 6.4 Alert Lifecycle
 
-```
-┌──────────┐     ┌───────────┐     ┌──────────────┐     ┌──────────┐
-│ Pending  │────>│  Firing   │────>│ Acknowledged │────>│ Resolved │
-└──────────┘     └───────────┘     └──────────────┘     └──────────┘
-                      │                                       │
-                      │            ┌──────────┐               │
-                      └───────────>│Suppressed│───────────────┘
-                   (suppress_after)└──────────┘  (condition clears)
+```mermaid
+stateDiagram-v2
+    Pending --> Firing
+    Firing --> Acknowledged
+    Acknowledged --> Resolved
+    Firing --> Suppressed : suppress_after
+    Suppressed --> Resolved : condition clears
 ```
 
 Every alert state transition is itself logged to the Decision Audit Log with the alert rule ID, current metric value, threshold, and responder assignment.
@@ -865,48 +880,38 @@ Trajectory visualization renders the full execution graph of an agent interactio
 
 The execution graph is derived directly from the trace span tree. Each span becomes a node; parent-child relationships become directed edges.
 
-```
-Example: Execution graph for trace tr-8f3a2b
+```mermaid
+graph TD
+    ROUTER["Platform Router<br/><small>model: haiku | latency: 180ms</small>"]
+    SUPER["Team Supervisor<br/><small>plan: 3 steps | model: sonnet</small>"]
+    DF["DataFetch Agent A1<br/><small>model: haiku</small>"]
+    AN["Analysis-A2<br/><small>model: sonnet</small>"]
+    SQL["sql_query<br/><small>340ms | OK</small>"]
+    PY["py_exec<br/><small>1200ms | OK</small>"]
+    LLM["LLM:interp<br/><small>2100ms | tokens: 2750</small>"]
+    AGG["Aggregation<br/><small>450ms</small>"]
+    GR["Guardrail Check<br/><small>no-pii: compliant | 65ms</small>"]
 
-    ┌────────────────────┐
-    │ Platform Router    │
-    │ model: haiku       │
-    │ latency: 180ms     │
-    └────────┬───────────┘
-             │
-             ▼
-    ┌────────────────────┐
-    │ Team Supervisor    │
-    │ plan: 3 steps      │
-    │ model: sonnet      │
-    └───┬─────────┬──────┘
-        │         │
-        ▼         ▼
-  ┌───────────┐ ┌──────────────┐
-  │DataFetch  │ │ Analysis-A2  │
-  │Agent A1   │ │              │
-  │model:haiku│ │ model:sonnet │
-  └─────┬─────┘ └──┬───────┬───┘
-        │          │       │
-        ▼          ▼       ▼
-  ┌──────────┐ ┌────────┐ ┌────────────┐
-  │sql_query │ │py_exec │ │LLM:interp  │
-  │340ms     │ │1200ms  │ │2100ms      │
-  │OK        │ │OK      │ │tokens:2750 │
-  └──────────┘ └────────┘ └────────────┘
-                               │
-                               ▼
-                    ┌────────────────────┐
-                    │   Aggregation      │
-                    │   450ms            │
-                    └────────┬───────────┘
-                             │
-                             ▼
-                    ┌────────────────────┐
-                    │  Guardrail Check   │
-                    │  no-pii: compliant │
-                    │  65ms              │
-                    └────────────────────┘
+    ROUTER --> SUPER
+    SUPER --> DF
+    SUPER --> AN
+    DF --> SQL
+    AN --> PY
+    AN --> LLM
+    LLM --> AGG
+    AGG --> GR
+
+    classDef platform fill:#1ABC9C,stroke:#148F77,color:#fff
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef runtime fill:#E67E22,stroke:#CA6F1E,color:#fff
+    classDef guardrail fill:#E74C3C,stroke:#C0392B,color:#fff
+
+    class ROUTER platform
+    class SUPER core
+    class DF,AN core
+    class SQL,PY,LLM runtime
+    class AGG core
+    class GR guardrail
 ```
 
 ### 7.4 Graph Rendering
@@ -937,176 +942,176 @@ For multi-agent collaboration, the trajectory visualization must capture:
 
 Traces are stored in a columnar format optimized for range queries over time and trace ID lookups.
 
-```sql
--- Trace header table (one row per trace)
-CREATE TABLE traces (
-    trace_id          String,
-    start_time        DateTime64(3),    -- Millisecond precision
-    end_time          DateTime64(3),
-    duration_ms       UInt32,
-    root_span_id      String,
-    team_id           String,
-    environment       LowCardinality(String),  -- staging | production | canary
-    total_spans       UInt16,
-    total_tokens_in   UInt32,
-    total_tokens_out  UInt32,
-    total_cost_usd    Float64,
-    goal_met          Nullable(Bool),
-    error_occurred    Bool,
-    guardrail_interventions UInt16
-) ENGINE = MergeTree()
-  PARTITION BY toYYYYMMDD(start_time)
-  ORDER BY (start_time, trace_id)
-  TTL start_time + INTERVAL 90 DAY;
+??? example "View SQL schema"
 
--- Span table (multiple rows per trace)
-CREATE TABLE spans (
-    trace_id          String,
-    span_id           String,
-    parent_span_id    Nullable(String),
-    span_type         LowCardinality(String),  -- from Section 2.2 enum
-    name              String,
-    start_time        DateTime64(3),
-    end_time          DateTime64(3),
-    duration_ms       UInt32,
-    agent_id          Nullable(String),
-    agent_version     Nullable(String),
-    team_id           Nullable(String),
-    model             Nullable(LowCardinality(String)),
-    tokens_in         Nullable(UInt32),
-    tokens_out        Nullable(UInt32),
-    cost_usd          Nullable(Float64),
-    tool_name         Nullable(String),
-    tool_server       Nullable(String),
-    tool_status       Nullable(LowCardinality(String)),
-    guardrail_policy  Nullable(String),
-    guardrail_result  Nullable(LowCardinality(String)),
-    error_type        Nullable(String),
-    error_class       Nullable(LowCardinality(String)),
-    attributes        Map(String, String)       -- Overflow for non-standard attrs
-) ENGINE = MergeTree()
-  PARTITION BY toYYYYMMDD(start_time)
-  ORDER BY (trace_id, start_time, span_id)
-  TTL start_time + INTERVAL 90 DAY;
-```
+    ```sql
+    -- Trace header table (one row per trace)
+    CREATE TABLE traces (
+        trace_id          String,
+        start_time        DateTime64(3),    -- Millisecond precision
+        end_time          DateTime64(3),
+        duration_ms       UInt32,
+        root_span_id      String,
+        team_id           String,
+        environment       LowCardinality(String),  -- staging | production | canary
+        total_spans       UInt16,
+        total_tokens_in   UInt32,
+        total_tokens_out  UInt32,
+        total_cost_usd    Float64,
+        goal_met          Nullable(Bool),
+        error_occurred    Bool,
+        guardrail_interventions UInt16
+    ) ENGINE = MergeTree()
+      PARTITION BY toYYYYMMDD(start_time)
+      ORDER BY (start_time, trace_id)
+      TTL start_time + INTERVAL 90 DAY;
+
+    -- Span table (multiple rows per trace)
+    CREATE TABLE spans (
+        trace_id          String,
+        span_id           String,
+        parent_span_id    Nullable(String),
+        span_type         LowCardinality(String),  -- from Section 2.2 enum
+        name              String,
+        start_time        DateTime64(3),
+        end_time          DateTime64(3),
+        duration_ms       UInt32,
+        agent_id          Nullable(String),
+        agent_version     Nullable(String),
+        team_id           Nullable(String),
+        model             Nullable(LowCardinality(String)),
+        tokens_in         Nullable(UInt32),
+        tokens_out        Nullable(UInt32),
+        cost_usd          Nullable(Float64),
+        tool_name         Nullable(String),
+        tool_server       Nullable(String),
+        tool_status       Nullable(LowCardinality(String)),
+        guardrail_policy  Nullable(String),
+        guardrail_result  Nullable(LowCardinality(String)),
+        error_type        Nullable(String),
+        error_class       Nullable(LowCardinality(String)),
+        attributes        Map(String, String)       -- Overflow for non-standard attrs
+    ) ENGINE = MergeTree()
+      PARTITION BY toYYYYMMDD(start_time)
+      ORDER BY (trace_id, start_time, span_id)
+      TTL start_time + INTERVAL 90 DAY;
+    ```
 
 ### 8.2 Metrics Storage Schema
 
-```sql
--- Pre-aggregated metrics table
-CREATE TABLE metrics_agg (
-    metric_name       LowCardinality(String),
-    window_start      DateTime64(3),
-    window_seconds    UInt32,           -- 10, 60, 300, 3600, 86400
-    team_id           LowCardinality(String),
-    agent_id          String,
-    agent_version     String,
-    model             LowCardinality(String),
-    environment       LowCardinality(String),
-    -- Aggregated values
-    count             UInt64,
-    sum               Float64,
-    min               Float64,
-    max               Float64,
-    avg               Float64,
-    p50               Float64,
-    p95               Float64,
-    p99               Float64
-) ENGINE = SummingMergeTree()
-  PARTITION BY (toYYYYMMDD(window_start), window_seconds)
-  ORDER BY (metric_name, window_start, team_id, agent_id, model)
-  TTL window_start + INTERVAL 90 DAY;
-```
+??? example "View SQL schema"
+
+    ```sql
+    -- Pre-aggregated metrics table
+    CREATE TABLE metrics_agg (
+        metric_name       LowCardinality(String),
+        window_start      DateTime64(3),
+        window_seconds    UInt32,           -- 10, 60, 300, 3600, 86400
+        team_id           LowCardinality(String),
+        agent_id          String,
+        agent_version     String,
+        model             LowCardinality(String),
+        environment       LowCardinality(String),
+        -- Aggregated values
+        count             UInt64,
+        sum               Float64,
+        min               Float64,
+        max               Float64,
+        avg               Float64,
+        p50               Float64,
+        p95               Float64,
+        p99               Float64
+    ) ENGINE = SummingMergeTree()
+      PARTITION BY (toYYYYMMDD(window_start), window_seconds)
+      ORDER BY (metric_name, window_start, team_id, agent_id, model)
+      TTL window_start + INTERVAL 90 DAY;
+    ```
 
 ### 8.3 Decision Audit Log Storage Schema
 
-```sql
--- Decision audit log (append-only, immutable for compliance)
-CREATE TABLE decision_audit_log (
-    decision_id       String,
-    trace_id          String,
-    span_id           String,
-    timestamp         DateTime64(3),
-    decision_type     LowCardinality(String),
-    actor_component   LowCardinality(String),
-    actor_agent_id    String,
-    actor_agent_ver   String,
-    -- Context (stored as JSON strings for flexibility)
-    input_summary     String,
-    available_options String,           -- JSON array
-    constraints       String,           -- JSON array
-    -- Decision
-    chosen_option     String,
-    confidence        Nullable(Float32),
-    reasoning         String,
-    -- Outcome (may be backfilled asynchronously)
-    outcome_status    Nullable(LowCardinality(String)),
-    outcome_goal_met  Nullable(Bool),
-    outcome_latency   Nullable(UInt32),
-    outcome_tokens    Nullable(UInt32),
-    -- Linkage
-    linked_decisions  Array(String),
-    tags              Array(String)
-) ENGINE = MergeTree()
-  PARTITION BY toYYYYMMDD(timestamp)
-  ORDER BY (timestamp, trace_id, decision_id)
-  TTL timestamp + INTERVAL 365 DAY;   -- 1-year retention for audit
-```
+??? example "View SQL schema"
+
+    ```sql
+    -- Decision audit log (append-only, immutable for compliance)
+    CREATE TABLE decision_audit_log (
+        decision_id       String,
+        trace_id          String,
+        span_id           String,
+        timestamp         DateTime64(3),
+        decision_type     LowCardinality(String),
+        actor_component   LowCardinality(String),
+        actor_agent_id    String,
+        actor_agent_ver   String,
+        -- Context (stored as JSON strings for flexibility)
+        input_summary     String,
+        available_options String,           -- JSON array
+        constraints       String,           -- JSON array
+        -- Decision
+        chosen_option     String,
+        confidence        Nullable(Float32),
+        reasoning         String,
+        -- Outcome (may be backfilled asynchronously)
+        outcome_status    Nullable(LowCardinality(String)),
+        outcome_goal_met  Nullable(Bool),
+        outcome_latency   Nullable(UInt32),
+        outcome_tokens    Nullable(UInt32),
+        -- Linkage
+        linked_decisions  Array(String),
+        tags              Array(String)
+    ) ENGINE = MergeTree()
+      PARTITION BY toYYYYMMDD(timestamp)
+      ORDER BY (timestamp, trace_id, decision_id)
+      TTL timestamp + INTERVAL 365 DAY;   -- 1-year retention for audit
+    ```
 
 ### 8.4 Exception Log Storage Schema
 
-```sql
--- Exception records per the Exception Handling pattern (p. 204)
-CREATE TABLE exception_log (
-    exception_id      String,
-    trace_id          String,
-    span_id           String,
-    timestamp         DateTime64(3),
-    agent_id          String,
-    step_context      String,           -- JSON
-    error_type        String,
-    error_message     String,
-    error_class       LowCardinality(String),  -- transient | logic | unrecoverable
-    recovery_strategy LowCardinality(String),  -- retry | reprompt | fallback |
-                                               -- escalate | abort
-    recovery_outcome  LowCardinality(String),  -- recovered | degraded | failed
-    retry_count       UInt8,
-    escalated_to_human Bool,
-    linked_decision_id String
-) ENGINE = MergeTree()
-  PARTITION BY toYYYYMMDD(timestamp)
-  ORDER BY (timestamp, trace_id, exception_id)
-  TTL timestamp + INTERVAL 365 DAY;
-```
+??? example "View SQL schema"
+
+    ```sql
+    -- Exception records per the Exception Handling pattern (p. 204)
+    CREATE TABLE exception_log (
+        exception_id      String,
+        trace_id          String,
+        span_id           String,
+        timestamp         DateTime64(3),
+        agent_id          String,
+        step_context      String,           -- JSON
+        error_type        String,
+        error_message     String,
+        error_class       LowCardinality(String),  -- transient | logic | unrecoverable
+        recovery_strategy LowCardinality(String),  -- retry | reprompt | fallback |
+                                                   -- escalate | abort
+        recovery_outcome  LowCardinality(String),  -- recovered | degraded | failed
+        retry_count       UInt8,
+        escalated_to_human Bool,
+        linked_decision_id String
+    ) ENGINE = MergeTree()
+      PARTITION BY toYYYYMMDD(timestamp)
+      ORDER BY (timestamp, trace_id, exception_id)
+      TTL timestamp + INTERVAL 365 DAY;
+    ```
 
 ### 8.5 Storage Tier Architecture
 
-```
-┌──────────────────────────────────────────────────────────┐
-│                     HOT TIER                             │
-│  Storage: ClickHouse (NVMe SSD)                          │
-│  Data: Last 24 hours at full resolution                  │
-│  Access: Real-time dashboards, live alerting             │
-│  Query latency target: < 100ms for standard queries      │
-├──────────────────────────────────────────────────────────┤
-│                     WARM TIER                            │
-│  Storage: ClickHouse (SSD)                               │
-│  Data: 1 day - 90 days at pre-aggregated resolution      │
-│  Access: Historical dashboards, trend analysis           │
-│  Query latency target: < 1s                              │
-├──────────────────────────────────────────────────────────┤
-│                     COLD TIER                            │
-│  Storage: Object Store (S3 / MinIO) as Parquet files     │
-│  Data: 90 days - 3 years (audit log retained longer)     │
-│  Access: Compliance audits, forensic investigation       │
-│  Query latency target: < 30s (ad-hoc via Trino/DuckDB)   │
-├──────────────────────────────────────────────────────────┤
-│                    ARCHIVE TIER                          │
-│  Storage: Glacier / cold object store                    │
-│  Data: > 3 years (decision audit log only)               │
-│  Access: Legal holds, regulatory compliance              │
-│  Query latency: Minutes to hours                         │
-└──────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    HOT["HOT TIER<br/><small>ClickHouse (NVMe SSD)<br/>Last 24h at full resolution<br/>Real-time dashboards, live alerting<br/>Query latency: &lt; 100ms</small>"]
+    WARM["WARM TIER<br/><small>ClickHouse (SSD)<br/>1 day - 90 days, pre-aggregated<br/>Historical dashboards, trend analysis<br/>Query latency: &lt; 1s</small>"]
+    COLD["COLD TIER<br/><small>Object Store (S3 / MinIO) as Parquet<br/>90 days - 3 years<br/>Compliance audits, forensic investigation<br/>Query latency: &lt; 30s via Trino/DuckDB</small>"]
+    ARCHIVE["ARCHIVE TIER<br/><small>Glacier / cold object store<br/>&gt; 3 years (decision audit log only)<br/>Legal holds, regulatory compliance<br/>Query latency: minutes to hours</small>"]
+
+    HOT --> WARM --> COLD --> ARCHIVE
+
+    classDef hot fill:#E74C3C,stroke:#C0392B,color:#fff
+    classDef warm fill:#E67E22,stroke:#CA6F1E,color:#fff
+    classDef cold fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef archive fill:#95A5A6,stroke:#7F8C8D,color:#fff
+
+    class HOT hot
+    class WARM warm
+    class COLD cold
+    class ARCHIVE archive
 ```
 
 ---
@@ -1188,51 +1193,53 @@ All data entering the Observability Platform passes through a PII scrubbing pipe
 
 This is the API that every other AgentForge subsystem calls to emit telemetry. It is intentionally minimal to reduce coupling.
 
-```python
-class ObservabilityClient:
-    """
-    Lightweight client embedded in every AgentForge subsystem.
-    All methods are non-blocking (fire-and-forget with async buffer).
-    """
+??? example "View Python pseudocode"
 
-    async def emit_span(
-        self,
-        trace_id: str,
-        span_id: str,
-        parent_span_id: str | None,
-        span_type: str,
-        name: str,
-        start_time: float,
-        end_time: float,
-        attributes: dict[str, Any],
-    ) -> None:
-        """Emit a single span to the Observability Platform."""
-        ...
+    ```python
+    class ObservabilityClient:
+        """
+        Lightweight client embedded in every AgentForge subsystem.
+        All methods are non-blocking (fire-and-forget with async buffer).
+        """
 
-    async def emit_metric(
-        self,
-        metric_name: str,
-        value: float,
-        dimensions: dict[str, str],
-        timestamp: float | None = None,
-    ) -> None:
-        """Emit a single metric data point."""
-        ...
+        async def emit_span(
+            self,
+            trace_id: str,
+            span_id: str,
+            parent_span_id: str | None,
+            span_type: str,
+            name: str,
+            start_time: float,
+            end_time: float,
+            attributes: dict[str, Any],
+        ) -> None:
+            """Emit a single span to the Observability Platform."""
+            ...
 
-    async def emit_decision(
-        self,
-        decision: DecisionAuditRecord,
-    ) -> None:
-        """Emit a decision audit record."""
-        ...
+        async def emit_metric(
+            self,
+            metric_name: str,
+            value: float,
+            dimensions: dict[str, str],
+            timestamp: float | None = None,
+        ) -> None:
+            """Emit a single metric data point."""
+            ...
 
-    async def emit_exception(
-        self,
-        exception: ExceptionAuditRecord,
-    ) -> None:
-        """Emit an exception audit record (p. 204)."""
-        ...
-```
+        async def emit_decision(
+            self,
+            decision: DecisionAuditRecord,
+        ) -> None:
+            """Emit a decision audit record."""
+            ...
+
+        async def emit_exception(
+            self,
+            exception: ExceptionAuditRecord,
+        ) -> None:
+            """Emit an exception audit record (p. 204)."""
+            ...
+    ```
 
 ---
 
@@ -1272,336 +1279,338 @@ The Observability Platform must observe itself. This section defines the meta-te
 
 The `LLMInteractionMonitor` is the central instrumentation class that wraps every LLM call in the platform. It is responsible for capturing interaction data and feeding it into the Collect level of the evaluation pyramid (p. 303).
 
-```python
-import time
-import uuid
-import asyncio
-from dataclasses import dataclass, field
-from typing import Any, Optional, Callable
-from enum import Enum
+??? example "View Python pseudocode"
+
+    ```python
+    import time
+    import uuid
+    import asyncio
+    from dataclasses import dataclass, field
+    from typing import Any, Optional, Callable
+    from enum import Enum
 
 
-class InteractionStatus(Enum):
-    SUCCESS = "success"
-    ERROR = "error"
-    TIMEOUT = "timeout"
-    GUARDRAIL_BLOCKED = "guardrail_blocked"
+    class InteractionStatus(Enum):
+        SUCCESS = "success"
+        ERROR = "error"
+        TIMEOUT = "timeout"
+        GUARDRAIL_BLOCKED = "guardrail_blocked"
 
 
-@dataclass
-class LLMInteraction:
-    """
-    Complete record of a single LLM interaction.
-    This is the atomic unit of data in the Collect level
-    of the evaluation pyramid (p. 303).
-    """
-    interaction_id: str
-    trace_id: str
-    span_id: str
-    agent_id: str
-    agent_version: str
-    team_id: str
-    timestamp: float
-    model: str
-
-    # Input
-    system_prompt_ref: str          # Reference to Prompt Registry version
-    user_input: str                 # Sanitized (PII-scrubbed) user input
-    context_tokens: int             # Tokens in context window
-
-    # Output
-    raw_output: str                 # Sanitized LLM output
-    parsed_output: Optional[dict]   # Structured output if applicable
-
-    # Tool calls within this interaction
-    tool_calls: list[dict] = field(default_factory=list)
-    # Each: {"tool": str, "input": dict, "output_size": int,
-    #         "status": str, "latency_ms": float}
-
-    # Metrics
-    tokens_in: int = 0
-    tokens_out: int = 0
-    latency_ms: float = 0.0
-    time_to_first_token_ms: float = 0.0
-    cost_usd: float = 0.0
-
-    # Status
-    status: InteractionStatus = InteractionStatus.SUCCESS
-    error_type: Optional[str] = None
-    error_message: Optional[str] = None
-
-    # Goal tracking (p. 188)
-    goal_id: Optional[str] = None
-    goal_met: Optional[bool] = None
-    goal_criteria: Optional[dict] = None
-
-    # Guardrail outcomes (p. 297)
-    guardrail_checks: list[dict] = field(default_factory=list)
-    # Each: {"policy": str, "result": str, "latency_ms": float}
-
-
-class LLMInteractionMonitor:
-    """
-    Wraps LLM calls to capture full interaction telemetry.
-    Implements the LLMInteractionMonitor pattern (p. 310).
-
-    Usage:
-
-        monitor = LLMInteractionMonitor(
-            observability_client=obs_client,
-            agent_tracer=tracer,
-        )
-
-        # Wrap any LLM call:
-        result = await monitor.monitored_call(
-            agent_id="analysis-agent-v2",
-            agent_version="2.1.0",
-            team_id="team-analytics",
-            model="sonnet",
-            system_prompt_ref="prompt-registry://analysis@2.1.0",
-            user_input=sanitized_input,
-            llm_callable=my_llm_client.generate,
-            llm_kwargs={"messages": messages, "temperature": 0.0},
-        )
-    """
-
-    def __init__(
-        self,
-        observability_client: "ObservabilityClient",
-        agent_tracer: "AgentTracer",
-        pii_scrubber: Optional[Callable[[str], str]] = None,
-    ):
-        self._obs = observability_client
-        self._tracer = agent_tracer
-        self._scrub = pii_scrubber or (lambda x: x)
-        self._interaction_buffer: asyncio.Queue = asyncio.Queue(maxsize=10_000)
-        # Background flush task
-        self._flush_task: Optional[asyncio.Task] = None
-
-    async def start(self) -> None:
-        """Start the background interaction flush loop."""
-        self._flush_task = asyncio.create_task(self._flush_loop())
-
-    async def stop(self) -> None:
-        """Gracefully drain and stop the flush loop."""
-        if self._flush_task:
-            self._flush_task.cancel()
-            # Drain remaining
-            await self._flush_remaining()
-
-    async def monitored_call(
-        self,
-        agent_id: str,
-        agent_version: str,
-        team_id: str,
-        model: str,
-        system_prompt_ref: str,
-        user_input: str,
-        llm_callable: Callable,
-        llm_kwargs: dict[str, Any],
-        goal_id: Optional[str] = None,
-        goal_checker: Optional[Callable] = None,  # goals_met() (p. 188)
-    ) -> Any:
+    @dataclass
+    class LLMInteraction:
         """
-        Execute an LLM call with full monitoring instrumentation.
-
-        This method:
-        1. Creates a trace span for the LLM call
-        2. Times the execution
-        3. Captures token counts, cost, and status
-        4. Evaluates goal completion if a goal_checker is provided
-        5. Buffers the interaction record for async emission
-
-        Returns the raw LLM output.
+        Complete record of a single LLM interaction.
+        This is the atomic unit of data in the Collect level
+        of the evaluation pyramid (p. 303).
         """
-        interaction_id = str(uuid.uuid4())
-        trace_id = self._tracer.get_current_trace_id()
-        sanitized_input = self._scrub(user_input)
+        interaction_id: str
+        trace_id: str
+        span_id: str
+        agent_id: str
+        agent_version: str
+        team_id: str
+        timestamp: float
+        model: str
 
-        start_time = time.monotonic()
-        timestamp = time.time()
-        status = InteractionStatus.SUCCESS
-        error_type = None
-        error_message = None
-        raw_output = ""
-        tokens_in = 0
-        tokens_out = 0
-        ttft_ms = 0.0
+        # Input
+        system_prompt_ref: str          # Reference to Prompt Registry version
+        user_input: str                 # Sanitized (PII-scrubbed) user input
+        context_tokens: int             # Tokens in context window
 
-        try:
-            # Execute the LLM call
-            response = await llm_callable(**llm_kwargs)
+        # Output
+        raw_output: str                 # Sanitized LLM output
+        parsed_output: Optional[dict]   # Structured output if applicable
 
-            # Extract response metadata (adapter pattern for different LLM clients)
-            raw_output = self._scrub(self._extract_text(response))
-            tokens_in = self._extract_tokens_in(response)
-            tokens_out = self._extract_tokens_out(response)
-            ttft_ms = self._extract_ttft(response)
+        # Tool calls within this interaction
+        tool_calls: list[dict] = field(default_factory=list)
+        # Each: {"tool": str, "input": dict, "output_size": int,
+        #         "status": str, "latency_ms": float}
 
-            return response
+        # Metrics
+        tokens_in: int = 0
+        tokens_out: int = 0
+        latency_ms: float = 0.0
+        time_to_first_token_ms: float = 0.0
+        cost_usd: float = 0.0
 
-        except TimeoutError:
-            status = InteractionStatus.TIMEOUT
-            error_type = "TimeoutError"
-            error_message = "LLM call timed out"
-            raise
+        # Status
+        status: InteractionStatus = InteractionStatus.SUCCESS
+        error_type: Optional[str] = None
+        error_message: Optional[str] = None
 
-        except Exception as e:
-            status = InteractionStatus.ERROR
-            error_type = type(e).__name__
-            error_message = str(e)
-            raise
+        # Goal tracking (p. 188)
+        goal_id: Optional[str] = None
+        goal_met: Optional[bool] = None
+        goal_criteria: Optional[dict] = None
 
-        finally:
-            end_time = time.monotonic()
-            latency_ms = (end_time - start_time) * 1000
-            cost_usd = self._tracer._compute_cost(model, tokens_in, tokens_out)
+        # Guardrail outcomes (p. 297)
+        guardrail_checks: list[dict] = field(default_factory=list)
+        # Each: {"policy": str, "result": str, "latency_ms": float}
 
-            # Evaluate goal if checker provided (p. 188)
-            goal_met = None
-            goal_criteria = None
-            if goal_checker and status == InteractionStatus.SUCCESS:
-                goal_result = goal_checker(raw_output)
-                goal_met = goal_result.get("met", False)
-                goal_criteria = goal_result.get("criteria", {})
 
-            # Build the interaction record
-            interaction = LLMInteraction(
-                interaction_id=interaction_id,
-                trace_id=trace_id,
-                span_id=self._tracer.get_current_span_id(),
-                agent_id=agent_id,
-                agent_version=agent_version,
-                team_id=team_id,
-                timestamp=timestamp,
-                model=model,
-                system_prompt_ref=system_prompt_ref,
-                user_input=sanitized_input,
-                context_tokens=tokens_in,
-                raw_output=raw_output,
-                parsed_output=None,
-                tokens_in=tokens_in,
-                tokens_out=tokens_out,
-                latency_ms=latency_ms,
-                time_to_first_token_ms=ttft_ms,
-                cost_usd=cost_usd,
-                status=status,
-                error_type=error_type,
-                error_message=error_message,
-                goal_id=goal_id,
-                goal_met=goal_met,
-                goal_criteria=goal_criteria,
+    class LLMInteractionMonitor:
+        """
+        Wraps LLM calls to capture full interaction telemetry.
+        Implements the LLMInteractionMonitor pattern (p. 310).
+
+        Usage:
+
+            monitor = LLMInteractionMonitor(
+                observability_client=obs_client,
+                agent_tracer=tracer,
             )
 
-            # Non-blocking buffer (drop if full, increment drop counter)
+            # Wrap any LLM call:
+            result = await monitor.monitored_call(
+                agent_id="analysis-agent-v2",
+                agent_version="2.1.0",
+                team_id="team-analytics",
+                model="sonnet",
+                system_prompt_ref="prompt-registry://analysis@2.1.0",
+                user_input=sanitized_input,
+                llm_callable=my_llm_client.generate,
+                llm_kwargs={"messages": messages, "temperature": 0.0},
+            )
+        """
+
+        def __init__(
+            self,
+            observability_client: "ObservabilityClient",
+            agent_tracer: "AgentTracer",
+            pii_scrubber: Optional[Callable[[str], str]] = None,
+        ):
+            self._obs = observability_client
+            self._tracer = agent_tracer
+            self._scrub = pii_scrubber or (lambda x: x)
+            self._interaction_buffer: asyncio.Queue = asyncio.Queue(maxsize=10_000)
+            # Background flush task
+            self._flush_task: Optional[asyncio.Task] = None
+
+        async def start(self) -> None:
+            """Start the background interaction flush loop."""
+            self._flush_task = asyncio.create_task(self._flush_loop())
+
+        async def stop(self) -> None:
+            """Gracefully drain and stop the flush loop."""
+            if self._flush_task:
+                self._flush_task.cancel()
+                # Drain remaining
+                await self._flush_remaining()
+
+        async def monitored_call(
+            self,
+            agent_id: str,
+            agent_version: str,
+            team_id: str,
+            model: str,
+            system_prompt_ref: str,
+            user_input: str,
+            llm_callable: Callable,
+            llm_kwargs: dict[str, Any],
+            goal_id: Optional[str] = None,
+            goal_checker: Optional[Callable] = None,  # goals_met() (p. 188)
+        ) -> Any:
+            """
+            Execute an LLM call with full monitoring instrumentation.
+
+            This method:
+            1. Creates a trace span for the LLM call
+            2. Times the execution
+            3. Captures token counts, cost, and status
+            4. Evaluates goal completion if a goal_checker is provided
+            5. Buffers the interaction record for async emission
+
+            Returns the raw LLM output.
+            """
+            interaction_id = str(uuid.uuid4())
+            trace_id = self._tracer.get_current_trace_id()
+            sanitized_input = self._scrub(user_input)
+
+            start_time = time.monotonic()
+            timestamp = time.time()
+            status = InteractionStatus.SUCCESS
+            error_type = None
+            error_message = None
+            raw_output = ""
+            tokens_in = 0
+            tokens_out = 0
+            ttft_ms = 0.0
+
             try:
-                self._interaction_buffer.put_nowait(interaction)
-            except asyncio.QueueFull:
-                # Emit a drop metric - never block the agent
-                await self._obs.emit_metric(
-                    "observability.interaction_drops", 1.0,
-                    {"agent_id": agent_id},
+                # Execute the LLM call
+                response = await llm_callable(**llm_kwargs)
+
+                # Extract response metadata (adapter pattern for different LLM clients)
+                raw_output = self._scrub(self._extract_text(response))
+                tokens_in = self._extract_tokens_in(response)
+                tokens_out = self._extract_tokens_out(response)
+                ttft_ms = self._extract_ttft(response)
+
+                return response
+
+            except TimeoutError:
+                status = InteractionStatus.TIMEOUT
+                error_type = "TimeoutError"
+                error_message = "LLM call timed out"
+                raise
+
+            except Exception as e:
+                status = InteractionStatus.ERROR
+                error_type = type(e).__name__
+                error_message = str(e)
+                raise
+
+            finally:
+                end_time = time.monotonic()
+                latency_ms = (end_time - start_time) * 1000
+                cost_usd = self._tracer._compute_cost(model, tokens_in, tokens_out)
+
+                # Evaluate goal if checker provided (p. 188)
+                goal_met = None
+                goal_criteria = None
+                if goal_checker and status == InteractionStatus.SUCCESS:
+                    goal_result = goal_checker(raw_output)
+                    goal_met = goal_result.get("met", False)
+                    goal_criteria = goal_result.get("criteria", {})
+
+                # Build the interaction record
+                interaction = LLMInteraction(
+                    interaction_id=interaction_id,
+                    trace_id=trace_id,
+                    span_id=self._tracer.get_current_span_id(),
+                    agent_id=agent_id,
+                    agent_version=agent_version,
+                    team_id=team_id,
+                    timestamp=timestamp,
+                    model=model,
+                    system_prompt_ref=system_prompt_ref,
+                    user_input=sanitized_input,
+                    context_tokens=tokens_in,
+                    raw_output=raw_output,
+                    parsed_output=None,
+                    tokens_in=tokens_in,
+                    tokens_out=tokens_out,
+                    latency_ms=latency_ms,
+                    time_to_first_token_ms=ttft_ms,
+                    cost_usd=cost_usd,
+                    status=status,
+                    error_type=error_type,
+                    error_message=error_message,
+                    goal_id=goal_id,
+                    goal_met=goal_met,
+                    goal_criteria=goal_criteria,
                 )
 
-            # Log goal + evaluation outcome (p. 192)
-            if goal_id:
-                await self._obs.emit_decision(
-                    DecisionAuditRecord(
-                        decision_type="goal_evaluation",
-                        trace_id=trace_id,
-                        actor_agent_id=agent_id,
-                        chosen_option=f"goal_met={goal_met}",
-                        reasoning=str(goal_criteria),
+                # Non-blocking buffer (drop if full, increment drop counter)
+                try:
+                    self._interaction_buffer.put_nowait(interaction)
+                except asyncio.QueueFull:
+                    # Emit a drop metric - never block the agent
+                    await self._obs.emit_metric(
+                        "observability.interaction_drops", 1.0,
+                        {"agent_id": agent_id},
                     )
+
+                # Log goal + evaluation outcome (p. 192)
+                if goal_id:
+                    await self._obs.emit_decision(
+                        DecisionAuditRecord(
+                            decision_type="goal_evaluation",
+                            trace_id=trace_id,
+                            actor_agent_id=agent_id,
+                            chosen_option=f"goal_met={goal_met}",
+                            reasoning=str(goal_criteria),
+                        )
+                    )
+
+        async def _flush_loop(self) -> None:
+            """Background loop: batch-flush interactions every 100ms."""
+            while True:
+                batch = []
+                try:
+                    # Drain up to 100 interactions per flush
+                    for _ in range(100):
+                        interaction = self._interaction_buffer.get_nowait()
+                        batch.append(interaction)
+                except asyncio.QueueEmpty:
+                    pass
+
+                if batch:
+                    await self._flush_batch(batch)
+
+                await asyncio.sleep(0.1)  # 100ms flush interval
+
+        async def _flush_batch(self, batch: list[LLMInteraction]) -> None:
+            """Emit a batch of interactions to the Observability Platform."""
+            for interaction in batch:
+                # Emit span
+                await self._obs.emit_span(
+                    trace_id=interaction.trace_id,
+                    span_id=interaction.span_id,
+                    parent_span_id=None,
+                    span_type="agent.llm_call",
+                    name=f"llm_call:{interaction.model}",
+                    start_time=interaction.timestamp,
+                    end_time=interaction.timestamp + (interaction.latency_ms / 1000),
+                    attributes={
+                        "model": interaction.model,
+                        "tokens_in": str(interaction.tokens_in),
+                        "tokens_out": str(interaction.tokens_out),
+                        "cost_usd": str(interaction.cost_usd),
+                        "status": interaction.status.value,
+                    },
                 )
 
-    async def _flush_loop(self) -> None:
-        """Background loop: batch-flush interactions every 100ms."""
-        while True:
-            batch = []
-            try:
-                # Drain up to 100 interactions per flush
-                for _ in range(100):
-                    interaction = self._interaction_buffer.get_nowait()
-                    batch.append(interaction)
-            except asyncio.QueueEmpty:
-                pass
+                # Emit metrics
+                dims = {
+                    "agent_id": interaction.agent_id,
+                    "agent_version": interaction.agent_version,
+                    "team_id": interaction.team_id,
+                    "model": interaction.model,
+                }
+                await self._obs.emit_metric(
+                    "llm_call_latency_ms", interaction.latency_ms, dims,
+                    interaction.timestamp,
+                )
+                await self._obs.emit_metric(
+                    "tokens_total",
+                    float(interaction.tokens_in + interaction.tokens_out),
+                    dims, interaction.timestamp,
+                )
+                await self._obs.emit_metric(
+                    "cost_usd", interaction.cost_usd, dims,
+                    interaction.timestamp,
+                )
+                if interaction.status == InteractionStatus.ERROR:
+                    await self._obs.emit_metric(
+                        "error_count", 1.0, dims, interaction.timestamp,
+                    )
 
+        async def _flush_remaining(self) -> None:
+            """Drain any remaining buffered interactions on shutdown."""
+            batch = []
+            while not self._interaction_buffer.empty():
+                batch.append(self._interaction_buffer.get_nowait())
             if batch:
                 await self._flush_batch(batch)
 
-            await asyncio.sleep(0.1)  # 100ms flush interval
+        # --- Adapter methods (implement per LLM client) ---
 
-    async def _flush_batch(self, batch: list[LLMInteraction]) -> None:
-        """Emit a batch of interactions to the Observability Platform."""
-        for interaction in batch:
-            # Emit span
-            await self._obs.emit_span(
-                trace_id=interaction.trace_id,
-                span_id=interaction.span_id,
-                parent_span_id=None,
-                span_type="agent.llm_call",
-                name=f"llm_call:{interaction.model}",
-                start_time=interaction.timestamp,
-                end_time=interaction.timestamp + (interaction.latency_ms / 1000),
-                attributes={
-                    "model": interaction.model,
-                    "tokens_in": str(interaction.tokens_in),
-                    "tokens_out": str(interaction.tokens_out),
-                    "cost_usd": str(interaction.cost_usd),
-                    "status": interaction.status.value,
-                },
-            )
+        def _extract_text(self, response: Any) -> str:
+            return getattr(response, "text", str(response))
 
-            # Emit metrics
-            dims = {
-                "agent_id": interaction.agent_id,
-                "agent_version": interaction.agent_version,
-                "team_id": interaction.team_id,
-                "model": interaction.model,
-            }
-            await self._obs.emit_metric(
-                "llm_call_latency_ms", interaction.latency_ms, dims,
-                interaction.timestamp,
-            )
-            await self._obs.emit_metric(
-                "tokens_total",
-                float(interaction.tokens_in + interaction.tokens_out),
-                dims, interaction.timestamp,
-            )
-            await self._obs.emit_metric(
-                "cost_usd", interaction.cost_usd, dims,
-                interaction.timestamp,
-            )
-            if interaction.status == InteractionStatus.ERROR:
-                await self._obs.emit_metric(
-                    "error_count", 1.0, dims, interaction.timestamp,
-                )
+        def _extract_tokens_in(self, response: Any) -> int:
+            usage = getattr(response, "usage", None)
+            return getattr(usage, "input_tokens", 0) if usage else 0
 
-    async def _flush_remaining(self) -> None:
-        """Drain any remaining buffered interactions on shutdown."""
-        batch = []
-        while not self._interaction_buffer.empty():
-            batch.append(self._interaction_buffer.get_nowait())
-        if batch:
-            await self._flush_batch(batch)
+        def _extract_tokens_out(self, response: Any) -> int:
+            usage = getattr(response, "usage", None)
+            return getattr(usage, "output_tokens", 0) if usage else 0
 
-    # --- Adapter methods (implement per LLM client) ---
-
-    def _extract_text(self, response: Any) -> str:
-        return getattr(response, "text", str(response))
-
-    def _extract_tokens_in(self, response: Any) -> int:
-        usage = getattr(response, "usage", None)
-        return getattr(usage, "input_tokens", 0) if usage else 0
-
-    def _extract_tokens_out(self, response: Any) -> int:
-        usage = getattr(response, "usage", None)
-        return getattr(usage, "output_tokens", 0) if usage else 0
-
-    def _extract_ttft(self, response: Any) -> float:
-        return getattr(response, "time_to_first_token_ms", 0.0)
-```
+        def _extract_ttft(self, response: Any) -> float:
+            return getattr(response, "time_to_first_token_ms", 0.0)
+    ```
 
 ### 12.2 Meta-Observability Metrics
 
@@ -1623,77 +1632,65 @@ The Observability Platform emits its own health metrics:
 
 ### 12.3 Health Check Endpoint
 
-```
-GET /api/v1/health
+??? example "View API example"
 
-Response:
-{
-  "status": "healthy | degraded | unhealthy",
-  "components": {
-    "otel_collector": "healthy",
-    "clickhouse":     "healthy",
-    "tempo":          "healthy",
-    "alert_evaluator":"healthy",
-    "pii_scrubber":   "healthy"
-  },
-  "metrics": {
-    "ingest_throughput_spans_per_sec": 1240,
-    "ingest_latency_ms_p95": 82,
-    "buffer_utilization_pct": 12,
-    "storage_utilization_pct": 43
-  },
-  "uptime_seconds": 864000,
-  "version": "1.4.2"
-}
-```
+    ```
+    GET /api/v1/health
+
+    Response:
+    {
+      "status": "healthy | degraded | unhealthy",
+      "components": {
+        "otel_collector": "healthy",
+        "clickhouse":     "healthy",
+        "tempo":          "healthy",
+        "alert_evaluator":"healthy",
+        "pii_scrubber":   "healthy"
+      },
+      "metrics": {
+        "ingest_throughput_spans_per_sec": 1240,
+        "ingest_latency_ms_p95": 82,
+        "buffer_utilization_pct": 12,
+        "storage_utilization_pct": 43
+      },
+      "uptime_seconds": 864000,
+      "version": "1.4.2"
+    }
+    ```
 
 ### 12.4 Self-Monitoring Architecture
 
-```
-┌───────────────────────────────────────────────────────────────┐
-│                  AgentForge Subsystems                        │
-│  (Agent Builder, Team Orchestrator, Guardrails, etc.)         │
-│                                                               │
-│  Each subsystem embeds:                                       │
-│  ┌────────────────────────────┐                               │
-│  │  ObservabilityClient       │  Fire-and-forget emission     │
-│  │  ├── emit_span()           │  via async buffer             │
-│  │  ├── emit_metric()         │                               │
-│  │  ├── emit_decision()       │                               │
-│  │  └── emit_exception()      │                               │
-│  └────────────┬───────────────┘                               │
-└───────────────┼───────────────────────────────────────────────┘
-                │
-                ▼
-┌───────────────────────────────────────────────────────────────┐
-│              OTel Collector Cluster (3 replicas)              │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐                     │
-│  │ Receiver │  │ Processor│  │ Exporter │                     │
-│  │ (gRPC)   │──│ (batch,  │──│ (OTLP,   │                     │
-│  │          │  │  filter, │  │  Click-  │                     │
-│  │          │  │  sample) │  │  House)  │                     │
-│  └──────────┘  └──────────┘  └──────────┘                     │
-│                                    │                          │
-│  Meta-metrics emitter ─────────────┼── obs.* metrics          │
-└────────────────────────────────────┼──────────────────────────┘
-                                     │
-                    ┌────────────────┼───────────────┐
-                    ▼                ▼               ▼
-             ┌───────────┐     ┌───────────┐   ┌───────────┐
-             │ClickHouse │     │   Tempo   │   │  Grafana  │
-             │ (metrics, │     │  (traces) │   │(dashboards│
-             │  logs,    │     │           │   │  alerts)  │
-             │  decisions│     │           │   │           │
-             └───────────┘     └───────────┘   └───────────┘
-                    │                               │
-                    └──────────┬────────────────────┘
-                               ▼
-                    ┌───────────────────┐
-                    │ Alert Evaluator   │  Evaluates alert rules
-                    │ (redundant pair)  │  against metric streams.
-                    │                   │  Dead-man's-switch
-                    │                   │  monitored externally.
-                    └───────────────────┘
+```mermaid
+graph TD
+    subgraph SUBS["AgentForge Subsystems<br/><small>Agent Builder, Team Orchestrator, Guardrails, etc.</small>"]
+        direction TB
+        OC["ObservabilityClient<br/><small>emit_span(), emit_metric(),<br/>emit_decision(), emit_exception()<br/>Fire-and-forget via async buffer</small>"]
+    end
+
+    subgraph OTEL["OTel Collector Cluster<br/><small>3 replicas</small>"]
+        direction LR
+        RCV["Receiver<br/><small>gRPC</small>"] --> PROC["Processor<br/><small>batch, filter, sample</small>"] --> EXP["Exporter<br/><small>OTLP, ClickHouse</small>"]
+        META["Meta-metrics emitter<br/><small>obs.* metrics</small>"]
+    end
+
+    OC --> RCV
+    EXP --> CH["ClickHouse<br/><small>metrics, logs, decisions</small>"]
+    EXP --> TEMPO["Tempo<br/><small>traces</small>"]
+    EXP --> GRAF["Grafana<br/><small>dashboards, alerts</small>"]
+    CH --> ALERT["Alert Evaluator<br/><small>redundant pair<br/>Dead-man's-switch monitored externally</small>"]
+    GRAF --> ALERT
+
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef foundational fill:#F39C12,stroke:#D68910,color:#fff
+    classDef userFacing fill:#2ECC71,stroke:#1FA855,color:#fff
+    classDef guardrail fill:#E74C3C,stroke:#C0392B,color:#fff
+
+    class OC core
+    class RCV,PROC,EXP,META infra
+    class CH,TEMPO foundational
+    class GRAF userFacing
+    class ALERT guardrail
 ```
 
 ---

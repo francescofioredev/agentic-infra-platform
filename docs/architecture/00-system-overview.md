@@ -4,51 +4,60 @@
 
 AgentForge is an **Agentic Orchestration & Monitoring Platform** that provides a unified control plane for creating, composing, governing, and observing agentic AI systems. It is the infrastructure layer that sits between raw LLM APIs and production-grade agentic applications.
 
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                          AgentForge Platform                             │
-│                                                                          │
-│  ┌─────────────────────────────── Core ─────────────────────────────┐    │
-│  │                                                                  │    │
-│  │  ┌──────────┐ ┌──────────────┐ ┌──────────┐ ┌───────────────┐    │    │
-│  │  │  Agent   │ │    Team      │ │  Tool &  │ │  Guardrail    │    │    │
-│  │  │  Builder │ │ Orchestrator │ │   MCP    │ │   System      │    │    │
-│  │  └──────────┘ └──────────────┘ │  Manager │ └───────────────┘    │    │
-│  │                                └──────────┘                      │    │
-│  │  ┌──────────┐ ┌──────────────┐ ┌──────────┐ ┌───────────────┐    │    │
-│  │  │ Prompt   │ │ Evaluation   │ │  Code    │ │  Cost &       │    │    │
-│  │  │ Registry │ │ Framework    │ │  Gen     │ │  Resource Mgr │    │    │
-│  │  └──────────┘ └──────────────┘ └──────────┘ └───────────────┘    │    │
-│  └──────────────────────────────────────────────────────────────────┘    │
-│                                                                          │
-│  ┌───────────────────────── Infrastructure ─────────────────────────┐    │
-│  │                                                                  │    │
-│  │  ┌──────────────────┐ ┌──────────────────┐ ┌─────────────────┐   │    │
-│  │  │  Memory &        │ │  Multi-Provider  │ │  Event Bus      │   │    │
-│  │  │  Context Mgmt    │ │  LLM Management  │ │  (pub/sub)      │   │    │
-│  │  └──────────────────┘ └──────────────────┘ └─────────────────┘   │    │
-│  │                                                                  │    │
-│  │  ┌──────────────────┐ ┌──────────────────┐ ┌─────────────────┐   │    │
-│  │  │  IAM & Access    │ │  Scheduling &    │ │  Replay &       │   │    │
-│  │  │  Control         │ │  Background Jobs │ │  Debugging      │   │    │
-│  │  └──────────────────┘ └──────────────────┘ └─────────────────┘   │    │
-│  └──────────────────────────────────────────────────────────────────┘    │
-│                                                                          │
-│  ┌──────────────────────── User-Facing ─────────────────────────────┐    │
-│  │                                                                  │    │
-│  │  ┌──────────────────┐ ┌──────────────────┐ ┌─────────────────┐   │    │
-│  │  │  Conversation &  │ │  External        │ │  Testing &      │   │    │
-│  │  │  Session Mgmt    │ │  Integrations    │ │  Simulation     │   │    │
-│  │  └──────────────────┘ └──────────────────┘ └─────────────────┘   │    │
-│  └──────────────────────────────────────────────────────────────────┘    │
-│                                                                          │
-│  ┌──────────────────── Deployment & Observability ──────────────────┐    │
-│  │  ┌────────────────────────┐  ┌───────────────────────────────┐   │    │
-│  │  │  Agent Deployment      │  │  Observability Platform       │   │    │
-│  │  │  Pipeline (CI/CD)      │  │  (Tracing/Metrics/Dashboards) │   │    │
-│  │  └────────────────────────┘  └───────────────────────────────┘   │    │
-│  └──────────────────────────────────────────────────────────────────┘    │
-└──────────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef userFacing fill:#2ECC71,stroke:#1FA855,color:#fff
+    classDef platform fill:#1ABC9C,stroke:#148F77,color:#fff
+
+    subgraph PLATFORM["AgentForge Platform"]
+        direction TB
+
+        subgraph CORE["Core"]
+            direction LR
+            AB["Agent<br/>Builder"]
+            TO["Team<br/>Orchestrator"]
+            TM["Tool & MCP<br/>Manager"]
+            GS["Guardrail<br/>System"]
+            PR["Prompt<br/>Registry"]
+            EF["Evaluation<br/>Framework"]
+            CG["Code<br/>Gen"]
+            CR["Cost &<br/>Resource Mgr"]
+        end
+
+        subgraph INFRA["Infrastructure"]
+            direction LR
+            MC["Memory &<br/>Context Mgmt"]
+            ML["Multi-Provider<br/>LLM Management"]
+            EB["Event Bus<br/>(pub/sub)"]
+            IA["IAM & Access<br/>Control"]
+            SJ["Scheduling &<br/>Background Jobs"]
+            RD["Replay &<br/>Debugging"]
+        end
+
+        subgraph UF["User-Facing"]
+            direction LR
+            CS["Conversation &<br/>Session Mgmt"]
+            EI["External<br/>Integrations"]
+            TS["Testing &<br/>Simulation"]
+        end
+
+        subgraph DO["Deployment & Observability"]
+            direction LR
+            DP["Agent Deployment<br/>Pipeline (CI/CD)"]
+            OP["Observability Platform<br/>(Tracing/Metrics/Dashboards)"]
+        end
+    end
+
+    CORE --> INFRA
+    INFRA --> UF
+    UF --> DO
+
+    class AB,TO,TM,GS,PR,EF,CG,CR core
+    class MC,ML,EB,IA,SJ,RD infra
+    class CS,EI,TS userFacing
+    class DP,OP platform
 ```
 
 ## 2. Subsystem Map
@@ -82,24 +91,46 @@ AgentForge is an **Agentic Orchestration & Monitoring Platform** that provides a
 
 The platform uses a three-level hierarchy:
 
-```
-                    ┌──────────────────────┐
-                    │ Platform Orchestrator│  Level 0: Global routing
-                    │   (Supervisor)       │  & request dispatch
-                    └─────────┬────────────┘
-                              │
-              ┌───────────────┼───────────────┐
-              │               │               │
-     ┌────────┴──────┐ ┌──────┴─────┐ ┌───────┴───────┐
-     │ Team Alpha    │ │ Team Beta  │ │ Team Gamma    │  Level 1: Team
-     │ Supervisor    │ │ Supervisor │ │ Supervisor    │  coordination
-     └───┬───┬───┬───┘ └────┬───┬───┘ └──┬───┬───┬────┘
-         │   │   │          │   │        │   │   │
-        ┌┘   │   └┐        ┌┘   └┐      ┌┘   │   └┐
-        A1  A2   A3       B1    B2      C1  C2    C3     Level 2: Worker
-                                                        agents
+```mermaid
+graph TD
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef guardrail fill:#E74C3C,stroke:#C0392B,color:#fff
 
-    ──── Guardrail Agents observe ALL levels ────────────────────
+    subgraph L0["Level 0 — Global Routing"]
+        PO["Platform Orchestrator<br/><small>Supervisor</small>"]
+    end
+
+    subgraph L1["Level 1 — Team Coordination"]
+        direction LR
+        TA["Team Alpha<br/>Supervisor"]
+        TB["Team Beta<br/>Supervisor"]
+        TG["Team Gamma<br/>Supervisor"]
+    end
+
+    subgraph L2["Level 2 — Worker Agents"]
+        direction LR
+        A1["A1"] & A2["A2"] & A3["A3"]
+        B1["B1"] & B2["B2"]
+        C1["C1"] & C2["C2"] & C3["C3"]
+    end
+
+    PO --> TA
+    PO --> TB
+    PO --> TG
+    TA --> A1 & A2 & A3
+    TB --> B1 & B2
+    TG --> C1 & C2 & C3
+
+    GR["Guardrail Agents"]
+    GR -.->|"observe"| L0
+    GR -.->|"observe"| L1
+    GR -.->|"observe"| L2
+
+    class PO core
+    class TA,TB,TG infra
+    class A1,A2,A3,B1,B2,C1,C2,C3 core
+    class GR guardrail
 ```
 
 - **Level 0 — Platform Orchestrator**: Routes incoming requests to the appropriate team. Uses LLM-based routing (p. 25) with a cheap/fast model (p. 258).
@@ -111,22 +142,24 @@ The platform uses a three-level hierarchy:
 
 Every agent in the platform has a well-defined identity:
 
-```json
-{
-  "agent_id": "uuid-v4",
-  "name": "ResearchAgent",
-  "version": "2.3.1",
-  "system_prompt_ref": "prompt-registry://research-agent@2.3.1",
-  "capabilities": ["web_search", "summarization", "citation"],
-  "input_schema": { "type": "object", "properties": { "query": { "type": "string" } } },
-  "output_schema": { "type": "object", "properties": { "summary": { "type": "string" }, "sources": { "type": "array" } } },
-  "tools": ["mcp://search-server/web_search", "mcp://search-server/scholar_search"],
-  "guardrail_policies": ["no-pii-output", "citation-required"],
-  "model_tier": "auto",
-  "max_iterations": 10,
-  "team_id": "team-alpha"
-}
-```
+??? example "View JSON example"
+
+    ```json
+    {
+      "agent_id": "uuid-v4",
+      "name": "ResearchAgent",
+      "version": "2.3.1",
+      "system_prompt_ref": "prompt-registry://research-agent@2.3.1",
+      "capabilities": ["web_search", "summarization", "citation"],
+      "input_schema": { "type": "object", "properties": { "query": { "type": "string" } } },
+      "output_schema": { "type": "object", "properties": { "summary": { "type": "string" }, "sources": { "type": "array" } } },
+      "tools": ["mcp://search-server/web_search", "mcp://search-server/scholar_search"],
+      "guardrail_policies": ["no-pii-output", "citation-required"],
+      "model_tier": "auto",
+      "max_iterations": 10,
+      "team_id": "team-alpha"
+    }
+    ```
 
 Key design rules:
 - Each agent has **single responsibility** (p. 124)
@@ -155,46 +188,26 @@ Key design rules:
 
 The platform implements all six guardrail layers (p. 286):
 
-```
-User Input
-    │
-    ▼
-┌─────────────────────┐
-│ Layer 1: Input      │  Validation, sanitization, PII detection,
-│ Validation          │  prompt injection detection (p. 286)
-└─────────┬───────────┘
-          ▼
-┌─────────────────────┐
-│ Layer 2: Behavioral │  System prompt constraints, role boundaries,
-│ Constraints         │  forbidden action lists (p. 286)
-└─────────┬───────────┘
-          ▼
-┌─────────────────────┐
-│ Layer 3: Tool       │  Least Privilege tool assignment,
-│ Restrictions        │  before_tool_callback validation (p. 288, p. 295)
-└─────────┬───────────┘
-          ▼
-┌─────────────────────┐
-│ Layer 4: Guardrail  │  Dedicated guardrail agents evaluate
-│ Agents              │  actions against policy (p. 292)
-└─────────┬───────────┘
-          ▼
-┌─────────────────────┐
-│ Layer 5: External   │  Content safety APIs, moderation
-│ Moderation          │  classifiers (p. 286)
-└─────────┬───────────┘
-          ▼
-┌─────────────────────┐
-│ Layer 6: Output     │  PII redaction, format validation,
-│ Filtering           │  safety check before delivery (p. 286)
-└─────────┬───────────┘
-          ▼
-┌─────────────────────┐
-│ Layer 7: HITL       │  Human escalation for high-stakes
-│ Escalation          │  decisions (p. 207)
-└─────────────────────┘
-          ▼
-    User Output
+```mermaid
+graph TD
+    classDef security fill:#E74C3C,stroke:#C0392B,color:#fff
+    classDef external fill:#95A5A6,stroke:#7F8C8D,color:#fff
+
+    UI["User Input"]
+    L1["Layer 1: Input Validation<br/><small>Validation, sanitization, PII detection,<br/>prompt injection detection (p. 286)</small>"]
+    L2["Layer 2: Behavioral Constraints<br/><small>System prompt constraints, role boundaries,<br/>forbidden action lists (p. 286)</small>"]
+    L3["Layer 3: Tool Restrictions<br/><small>Least Privilege tool assignment,<br/>before_tool_callback validation (p. 288, p. 295)</small>"]
+    L4["Layer 4: Guardrail Agents<br/><small>Dedicated guardrail agents evaluate<br/>actions against policy (p. 292)</small>"]
+    L5["Layer 5: External Moderation<br/><small>Content safety APIs, moderation<br/>classifiers (p. 286)</small>"]
+    L6["Layer 6: Output Filtering<br/><small>PII redaction, format validation,<br/>safety check before delivery (p. 286)</small>"]
+    L7["Layer 7: HITL Escalation<br/><small>Human escalation for high-stakes<br/>decisions (p. 207)</small>"]
+    UO["User Output"]
+
+    UI --> L1 --> L2 --> L3 --> L4 --> L5 --> L6 --> L7 --> UO
+
+    class L1,L2,L3,L4,L6 security
+    class L5 external
+    class L7 security
 ```
 
 ### 3.5 Observability Architecture
@@ -238,15 +251,22 @@ Trace
 
 System prompts follow a managed lifecycle:
 
-```
-┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
-│  Draft   │───>│  Review  │───>│  Staged  │───>│Production│
-│          │    │  (HITL)  │    │  (Eval)  │    │          │
-└──────────┘    └──────────┘    └──────────┘    └──────────┘
-     ▲                                                │
-     │                                                │
-     └──── AI Optimization (Reflection, p. 61) ◄──────┘
-                 via Prompt Optimizer Agent
+```mermaid
+graph LR
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef guardrail fill:#E74C3C,stroke:#C0392B,color:#fff
+
+    D["Draft"]
+    R["Review<br/><small>(HITL)</small>"]
+    S["Staged<br/><small>(Eval)</small>"]
+    P["Production"]
+
+    D --> R --> S --> P
+    P -->|"AI Optimization<br/>(Reflection, p. 61)<br/>via Prompt Optimizer Agent"| D
+
+    class D,S core
+    class R guardrail
+    class P core
 ```
 
 1. **Draft**: New prompt version created (manually or by AI optimizer)
@@ -259,52 +279,58 @@ System prompts follow a managed lifecycle:
 
 ### 4.1 Request Processing Flow
 
-```
-1. User Request arrives
-2. Input Validation (Layer 1) — reject malicious inputs
-3. Platform Orchestrator routes to Team
-4. Team Supervisor decomposes into plan steps (Planning, p. 101)
-5. Worker Agents execute steps:
-   a. Load system prompt from Prompt Registry
-   b. Receive tools from MCP Manager (Least Privilege, p. 288)
-   c. Execute task with guardrail monitoring
-   d. Log all interactions to Observability Platform
-6. Team Supervisor aggregates results
-7. Output Filtering (Layer 6) — sanitize before delivery
-8. Response returned to user
-9. Async: Evaluation Framework scores the interaction
-```
+??? example "View details"
+
+    ```
+    1. User Request arrives
+    2. Input Validation (Layer 1) — reject malicious inputs
+    3. Platform Orchestrator routes to Team
+    4. Team Supervisor decomposes into plan steps (Planning, p. 101)
+    5. Worker Agents execute steps:
+       a. Load system prompt from Prompt Registry
+       b. Receive tools from MCP Manager (Least Privilege, p. 288)
+       c. Execute task with guardrail monitoring
+       d. Log all interactions to Observability Platform
+    6. Team Supervisor aggregates results
+    7. Output Filtering (Layer 6) — sanitize before delivery
+    8. Response returned to user
+    9. Async: Evaluation Framework scores the interaction
+    ```
 
 ### 4.2 Prompt Optimization Flow
 
-```
-1. Evaluation Framework identifies underperforming agent (metric below threshold)
-2. Prompt Optimizer Agent loads current prompt from Registry
-3. Generator produces N prompt variants (Reflection, p. 61)
-4. Critic evaluates variants against quality rubric:
-   - Task accuracy on evalset
-   - Prompt clarity and specificity
-   - Safety compliance
-   - Token efficiency
-5. Best variant promoted to Draft → Review → Staged → Production
-6. A/B evaluation confirms improvement (p. 306)
-```
+??? example "View details"
+
+    ```
+    1. Evaluation Framework identifies underperforming agent (metric below threshold)
+    2. Prompt Optimizer Agent loads current prompt from Registry
+    3. Generator produces N prompt variants (Reflection, p. 61)
+    4. Critic evaluates variants against quality rubric:
+       - Task accuracy on evalset
+       - Prompt clarity and specificity
+       - Safety compliance
+       - Token efficiency
+    5. Best variant promoted to Draft → Review → Staged → Production
+    6. A/B evaluation confirms improvement (p. 306)
+    ```
 
 ### 4.3 Guardrail Alert Flow
 
-```
-1. Guardrail Agent observes agent action (before_tool_callback, p. 295)
-2. Policy evaluation against registered policies (p. 292)
-3. Result: compliant | non_compliant | requires_review
-4. If non_compliant:
-   a. Block the action (checkpoint & rollback, p. 290)
-   b. Log the intervention with full context (p. 297)
-   c. Emit alert to Observability Platform
-   d. If critical: escalate to human (HITL, p. 213)
-5. If requires_review:
-   a. Queue for async human review
-   b. Agent proceeds with safe default (p. 214)
-```
+??? example "View details"
+
+    ```
+    1. Guardrail Agent observes agent action (before_tool_callback, p. 295)
+    2. Policy evaluation against registered policies (p. 292)
+    3. Result: compliant | non_compliant | requires_review
+    4. If non_compliant:
+       a. Block the action (checkpoint & rollback, p. 290)
+       b. Log the intervention with full context (p. 297)
+       c. Emit alert to Observability Platform
+       d. If critical: escalate to human (HITL, p. 213)
+    5. If requires_review:
+       a. Queue for async human review
+       b. Agent proceeds with safe default (p. 214)
+    ```
 
 ## 5. Technology Recommendations
 
@@ -339,44 +365,62 @@ System prompts follow a managed lifecycle:
 
 ## 6. Subsystem Dependencies
 
-```
-                    ┌───────────────────────────────────────┐
-                    │     Foundational Services             │
-                    │                                       │
-                    │  Event Bus ◄──── ALL subsystems       │
-                    │  Observability ◄── ALL subsystems     │
-                    │  IAM & Access Control ◄── ALL APIs    │
-                    │  Multi-Provider LLM ◄── ALL LLM calls │
-                    └───────────────────────────────────────┘
-                                    ▲
-                                    │
-    ┌───────────────────────────────┼───────────────────────────────┐
-    │                               │                               │
-    │   Core Agent Lifecycle        │   Runtime Services            │
-    │                               │                               │
-    │   Agent Builder               │   Team Orchestrator           │
-    │       │                       │       │                       │
-    │       ▼                       │       ▼                       │
-    │   Prompt Registry             │   Conversation & Session Mgmt │
-    │       │                       │       │                       │
-    │       ▼                       │       ▼                       │
-    │   Deployment Pipeline ────────┼──► Worker Agents              │
-    │       │                       │       │                       │
-    │       ▼                       │       ▼                       │
-    │   Testing & Simulation        │   Tool & MCP Manager          │
-    │                               │       │                       │
-    │                               │       ▼                       │
-    │                               │   External Integrations Hub   │
-    └───────────────────────────────┼───────────────────────────────┘
-                                    │
-    ┌───────────────────────────────┼───────────────────────────────┐
-    │   Cross-Cutting Services      │                               │
-    │                               │                               │
-    │   Guardrail System ──────────►│   Observability Platform      │
-    │   Memory & Context Mgmt       │                               │
-    │   Cost & Resource Manager     │   Replay & Debugging          │
-    │   Evaluation Framework        │   Scheduling & Background Jobs│
-    └───────────────────────────────┴───────────────────────────────┘
+```mermaid
+graph TD
+    classDef foundational fill:#F39C12,stroke:#D68910,color:#fff
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef guardrail fill:#E74C3C,stroke:#C0392B,color:#fff
+
+    subgraph FOUND["Foundational Services"]
+        direction LR
+        EVT["Event Bus<br/><small>ALL subsystems</small>"]
+        OBS["Observability<br/><small>ALL subsystems</small>"]
+        IAM["IAM & Access Control<br/><small>ALL APIs</small>"]
+        LLM["Multi-Provider LLM<br/><small>ALL LLM calls</small>"]
+    end
+
+    subgraph LIFECYCLE["Core Agent Lifecycle"]
+        direction TB
+        AB2["Agent Builder"]
+        PR2["Prompt Registry"]
+        DP2["Deployment Pipeline"]
+        TS2["Testing & Simulation"]
+        AB2 --> PR2 --> DP2 --> TS2
+    end
+
+    subgraph RUNTIME["Runtime Services"]
+        direction TB
+        TOR["Team Orchestrator"]
+        CSM["Conversation &<br/>Session Mgmt"]
+        WA["Worker Agents"]
+        TMM["Tool & MCP Manager"]
+        EIH["External Integrations Hub"]
+        TOR --> CSM --> WA --> TMM --> EIH
+    end
+
+    subgraph CROSS["Cross-Cutting Services"]
+        direction LR
+        GRS["Guardrail System"]
+        MEM["Memory & Context Mgmt"]
+        CRM["Cost & Resource Manager"]
+        EVL["Evaluation Framework"]
+        OBP["Observability Platform"]
+        RPD["Replay & Debugging"]
+        SCH["Scheduling &<br/>Background Jobs"]
+    end
+
+    DP2 -->|"deploy"| WA
+    GRS -->|"monitor"| OBP
+    LIFECYCLE --> FOUND
+    RUNTIME --> FOUND
+    CROSS --> FOUND
+
+    class EVT,OBS,IAM,LLM foundational
+    class AB2,PR2,DP2,TS2 core
+    class TOR,CSM,WA,TMM,EIH infra
+    class GRS guardrail
+    class MEM,CRM,EVL,OBP,RPD,SCH infra
 ```
 
 **Dependency rules**:

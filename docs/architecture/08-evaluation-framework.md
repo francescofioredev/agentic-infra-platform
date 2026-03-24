@@ -71,44 +71,46 @@ An **evalset** is a versioned collection of input-expected output pairs that def
 
 ### 2.1 Evalset Structure
 
-```json
-{
-  "evalset_id": "es-uuid-v4",
-  "name": "research-agent-core",
-  "version": "3.1.0",
-  "agent_ref": "agent://research-agent",
-  "created_at": "2026-02-15T10:00:00Z",
-  "tags": ["research", "summarization", "citation"],
-  "schema_version": "1.0",
-  "entries": [
+??? example "View JSON example"
+
+    ```json
     {
-      "entry_id": "entry-001",
-      "input": {
-        "query": "Summarize recent advances in quantum error correction"
-      },
-      "expected_output": {
-        "summary_contains": ["surface codes", "logical qubits"],
-        "sources_min_count": 3,
-        "format": "structured_summary"
-      },
-      "expected_trajectory": [
-        {"tool": "web_search", "args_contain": {"query": "quantum error correction"}},
-        {"tool": "scholar_search", "args_contain": {"query": "surface codes"}},
-        {"tool": "summarize", "args_contain": {}}
+      "evalset_id": "es-uuid-v4",
+      "name": "research-agent-core",
+      "version": "3.1.0",
+      "agent_ref": "agent://research-agent",
+      "created_at": "2026-02-15T10:00:00Z",
+      "tags": ["research", "summarization", "citation"],
+      "schema_version": "1.0",
+      "entries": [
+        {
+          "entry_id": "entry-001",
+          "input": {
+            "query": "Summarize recent advances in quantum error correction"
+          },
+          "expected_output": {
+            "summary_contains": ["surface codes", "logical qubits"],
+            "sources_min_count": 3,
+            "format": "structured_summary"
+          },
+          "expected_trajectory": [
+            {"tool": "web_search", "args_contain": {"query": "quantum error correction"}},
+            {"tool": "scholar_search", "args_contain": {"query": "surface codes"}},
+            {"tool": "summarize", "args_contain": {}}
+          ],
+          "tags": ["multi-tool", "research"],
+          "difficulty": "medium",
+          "weight": 1.0
+        }
       ],
-      "tags": ["multi-tool", "research"],
-      "difficulty": "medium",
-      "weight": 1.0
+      "passing_criteria": {
+        "min_accuracy": 0.85,
+        "min_tool_accuracy": 0.90,
+        "max_p95_latency_ms": 8000,
+        "max_avg_tokens": 5000
+      }
     }
-  ],
-  "passing_criteria": {
-    "min_accuracy": 0.85,
-    "min_tool_accuracy": 0.90,
-    "max_p95_latency_ms": 8000,
-    "max_avg_tokens": 5000
-  }
-}
-```
+    ```
 
 ### 2.2 Evalset Versioning
 
@@ -175,248 +177,250 @@ Custom rubrics can extend or replace the default. For example, a code-generation
 
 ### 3.2 Pseudocode: LLM-as-Judge Rubric Evaluator
 
-```python
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Optional
+??? example "View Python pseudocode"
+
+    ```python
+    from dataclasses import dataclass, field
+    from enum import Enum
+    from typing import Optional
 
 
-class RubricDimension(Enum):
-    """Default rubric dimensions from the Evaluation & Monitoring pattern (p. 306)."""
-    CLARITY = "clarity"
-    NEUTRALITY = "neutrality"
-    RELEVANCE = "relevance"
-    COMPLETENESS = "completeness"
-    AUDIENCE = "audience"
+    class RubricDimension(Enum):
+        """Default rubric dimensions from the Evaluation & Monitoring pattern (p. 306)."""
+        CLARITY = "clarity"
+        NEUTRALITY = "neutrality"
+        RELEVANCE = "relevance"
+        COMPLETENESS = "completeness"
+        AUDIENCE = "audience"
 
 
-@dataclass
-class DimensionSpec:
-    """Specification for a single rubric dimension."""
-    name: RubricDimension | str
-    description: str
-    weight: float  # 0.0 to 1.0, all weights must sum to 1.0
-    score_range: tuple[int, int] = (1, 5)  # min, max
-    examples: dict[int, str] = field(default_factory=dict)  # score -> example rationale
+    @dataclass
+    class DimensionSpec:
+        """Specification for a single rubric dimension."""
+        name: RubricDimension | str
+        description: str
+        weight: float  # 0.0 to 1.0, all weights must sum to 1.0
+        score_range: tuple[int, int] = (1, 5)  # min, max
+        examples: dict[int, str] = field(default_factory=dict)  # score -> example rationale
 
 
-@dataclass
-class DimensionResult:
-    """Result of evaluating one dimension."""
-    dimension: str
-    score: int
-    rationale: str
-    confidence: float  # 0.0 to 1.0, judge's self-assessed confidence
+    @dataclass
+    class DimensionResult:
+        """Result of evaluating one dimension."""
+        dimension: str
+        score: int
+        rationale: str
+        confidence: float  # 0.0 to 1.0, judge's self-assessed confidence
 
 
-@dataclass
-class JudgeVerdict:
-    """Complete judge verdict for one evaluation."""
-    eval_id: str
-    agent_id: str
-    entry_id: str
-    dimension_results: list[DimensionResult]
-    weighted_score: float  # computed from dimension scores and weights
-    overall_rationale: str
-    judge_model: str
-    judge_latency_ms: int
-    judge_tokens: int
+    @dataclass
+    class JudgeVerdict:
+        """Complete judge verdict for one evaluation."""
+        eval_id: str
+        agent_id: str
+        entry_id: str
+        dimension_results: list[DimensionResult]
+        weighted_score: float  # computed from dimension scores and weights
+        overall_rationale: str
+        judge_model: str
+        judge_latency_ms: int
+        judge_tokens: int
 
 
-class LLMJudge:
+    class LLMJudge:
+        """
+        LLM-as-Judge evaluator implementing rubric-based assessment (p. 306).
+
+        The judge model evaluates agent outputs against a structured rubric,
+        producing per-dimension scores with rationale. This is Level 3 of the
+        Five-Level Evaluation Pyramid (p. 303).
+        """
+
+        def __init__(
+            self,
+            judge_model: str = "claude-sonnet",  # default judge model
+            rubric: list[DimensionSpec] | None = None,
+            temperature: float = 0.0,  # deterministic judging
+            max_retries: int = 2,
+        ):
+            self.judge_model = judge_model
+            self.rubric = rubric or self._default_rubric()
+            self.temperature = temperature
+            self.max_retries = max_retries
+            self._validate_rubric()
+
+        def _default_rubric(self) -> list[DimensionSpec]:
+            """Build the default five-dimension rubric (p. 306)."""
+            return [
+                DimensionSpec(
+                    name=RubricDimension.CLARITY,
+                    description="Is the output clear, well-structured, and easy to understand?",
+                    weight=0.20,
+                    examples={
+                        1: "Incoherent, disorganized, impossible to follow.",
+                        3: "Mostly clear with some confusing sections.",
+                        5: "Exceptionally clear, logically structured, easy to follow.",
+                    },
+                ),
+                DimensionSpec(
+                    name=RubricDimension.NEUTRALITY,
+                    description="Is the output balanced and free from unjustified bias?",
+                    weight=0.15,
+                    examples={
+                        1: "Strongly biased, presents only one perspective.",
+                        3: "Generally balanced with minor bias.",
+                        5: "Fully neutral, acknowledges multiple perspectives where appropriate.",
+                    },
+                ),
+                DimensionSpec(
+                    name=RubricDimension.RELEVANCE,
+                    description="Does the output directly address the user's request?",
+                    weight=0.25,
+                    examples={
+                        1: "Completely off-topic or ignores the request.",
+                        3: "Partially relevant but includes significant tangents.",
+                        5: "Directly and precisely addresses every aspect of the request.",
+                    },
+                ),
+                DimensionSpec(
+                    name=RubricDimension.COMPLETENESS,
+                    description="Does the output cover all aspects of the request?",
+                    weight=0.25,
+                    examples={
+                        1: "Missing most requested information.",
+                        3: "Covers main points but misses important details.",
+                        5: "Comprehensive coverage of all requested aspects.",
+                    },
+                ),
+                DimensionSpec(
+                    name=RubricDimension.AUDIENCE,
+                    description="Is the output appropriately tailored to the target audience?",
+                    weight=0.15,
+                    examples={
+                        1: "Completely inappropriate tone/complexity for the audience.",
+                        3: "Mostly appropriate with occasional mismatches.",
+                        5: "Perfectly calibrated for the target audience.",
+                    },
+                ),
+            ]
+
+        def _validate_rubric(self):
+            total_weight = sum(d.weight for d in self.rubric)
+            assert abs(total_weight - 1.0) < 1e-6, f"Rubric weights must sum to 1.0, got {total_weight}"
+
+        def _build_judge_prompt(
+            self,
+            user_input: str,
+            agent_output: str,
+            context: Optional[str] = None,
+        ) -> str:
+            """
+            Construct the structured prompt sent to the judge model.
+
+            The prompt instructs the judge to evaluate each dimension independently,
+            provide a score and rationale, then synthesize an overall assessment.
+            """
+            dimensions_block = ""
+            for dim in self.rubric:
+                name = dim.name.value if isinstance(dim.name, RubricDimension) else dim.name
+                examples_text = "\n".join(
+                    f"        Score {score}: {text}" for score, text in sorted(dim.examples.items())
+                )
+                dimensions_block += f"""
+        - **{name}** (weight: {dim.weight}): {dim.description}
+          Score range: {dim.score_range[0]}-{dim.score_range[1]}
+          Anchor examples:
+    {examples_text}
     """
-    LLM-as-Judge evaluator implementing rubric-based assessment (p. 306).
 
-    The judge model evaluates agent outputs against a structured rubric,
-    producing per-dimension scores with rationale. This is Level 3 of the
-    Five-Level Evaluation Pyramid (p. 303).
-    """
+            return f"""You are an expert evaluation judge. Your task is to evaluate the quality
+    of an AI agent's output against a structured rubric.
 
-    def __init__(
-        self,
-        judge_model: str = "claude-sonnet",  # default judge model
-        rubric: list[DimensionSpec] | None = None,
-        temperature: float = 0.0,  # deterministic judging
-        max_retries: int = 2,
-    ):
-        self.judge_model = judge_model
-        self.rubric = rubric or self._default_rubric()
-        self.temperature = temperature
-        self.max_retries = max_retries
-        self._validate_rubric()
+    ## User Input
+    {user_input}
 
-    def _default_rubric(self) -> list[DimensionSpec]:
-        """Build the default five-dimension rubric (p. 306)."""
-        return [
-            DimensionSpec(
-                name=RubricDimension.CLARITY,
-                description="Is the output clear, well-structured, and easy to understand?",
-                weight=0.20,
-                examples={
-                    1: "Incoherent, disorganized, impossible to follow.",
-                    3: "Mostly clear with some confusing sections.",
-                    5: "Exceptionally clear, logically structured, easy to follow.",
-                },
-            ),
-            DimensionSpec(
-                name=RubricDimension.NEUTRALITY,
-                description="Is the output balanced and free from unjustified bias?",
-                weight=0.15,
-                examples={
-                    1: "Strongly biased, presents only one perspective.",
-                    3: "Generally balanced with minor bias.",
-                    5: "Fully neutral, acknowledges multiple perspectives where appropriate.",
-                },
-            ),
-            DimensionSpec(
-                name=RubricDimension.RELEVANCE,
-                description="Does the output directly address the user's request?",
-                weight=0.25,
-                examples={
-                    1: "Completely off-topic or ignores the request.",
-                    3: "Partially relevant but includes significant tangents.",
-                    5: "Directly and precisely addresses every aspect of the request.",
-                },
-            ),
-            DimensionSpec(
-                name=RubricDimension.COMPLETENESS,
-                description="Does the output cover all aspects of the request?",
-                weight=0.25,
-                examples={
-                    1: "Missing most requested information.",
-                    3: "Covers main points but misses important details.",
-                    5: "Comprehensive coverage of all requested aspects.",
-                },
-            ),
-            DimensionSpec(
-                name=RubricDimension.AUDIENCE,
-                description="Is the output appropriately tailored to the target audience?",
-                weight=0.15,
-                examples={
-                    1: "Completely inappropriate tone/complexity for the audience.",
-                    3: "Mostly appropriate with occasional mismatches.",
-                    5: "Perfectly calibrated for the target audience.",
-                },
-            ),
-        ]
+    {f"## Additional Context\n{context}" if context else ""}
 
-    def _validate_rubric(self):
-        total_weight = sum(d.weight for d in self.rubric)
-        assert abs(total_weight - 1.0) < 1e-6, f"Rubric weights must sum to 1.0, got {total_weight}"
+    ## Agent Output
+    {agent_output}
 
-    def _build_judge_prompt(
-        self,
-        user_input: str,
-        agent_output: str,
-        context: Optional[str] = None,
-    ) -> str:
-        """
-        Construct the structured prompt sent to the judge model.
+    ## Evaluation Rubric
+    Evaluate the agent output on each of the following dimensions:{dimensions_block}
 
-        The prompt instructs the judge to evaluate each dimension independently,
-        provide a score and rationale, then synthesize an overall assessment.
-        """
-        dimensions_block = ""
-        for dim in self.rubric:
-            name = dim.name.value if isinstance(dim.name, RubricDimension) else dim.name
-            examples_text = "\n".join(
-                f"        Score {score}: {text}" for score, text in sorted(dim.examples.items())
+    ## Instructions
+    1. Evaluate each dimension INDEPENDENTLY. Do not let one dimension influence another.
+    2. For each dimension, provide:
+       - A numeric score within the specified range
+       - A concise rationale (1-3 sentences) justifying the score
+       - A confidence level (0.0 to 1.0) for your assessment
+    3. After all dimensions, provide a brief overall summary.
+
+    Respond in the following JSON format:
+    {{
+      "dimensions": [
+        {{"dimension": "<name>", "score": <int>, "rationale": "<text>", "confidence": <float>}},
+        ...
+      ],
+      "overall_rationale": "<summary text>"
+    }}"""
+
+        async def evaluate(
+            self,
+            user_input: str,
+            agent_output: str,
+            agent_id: str,
+            entry_id: str,
+            context: Optional[str] = None,
+        ) -> JudgeVerdict:
+            """
+            Run the LLM-as-Judge evaluation for a single agent output.
+
+            Returns a JudgeVerdict with per-dimension scores and an overall
+            weighted score.
+            """
+            prompt = self._build_judge_prompt(user_input, agent_output, context)
+
+            # Call the judge model with structured output parsing
+            response = await llm_client.generate(
+                model=self.judge_model,
+                prompt=prompt,
+                temperature=self.temperature,
+                response_format="json",
             )
-            dimensions_block += f"""
-    - **{name}** (weight: {dim.weight}): {dim.description}
-      Score range: {dim.score_range[0]}-{dim.score_range[1]}
-      Anchor examples:
-{examples_text}
-"""
 
-        return f"""You are an expert evaluation judge. Your task is to evaluate the quality
-of an AI agent's output against a structured rubric.
+            parsed = json.loads(response.text)
 
-## User Input
-{user_input}
+            dimension_results = []
+            for dim_result in parsed["dimensions"]:
+                dimension_results.append(DimensionResult(
+                    dimension=dim_result["dimension"],
+                    score=dim_result["score"],
+                    rationale=dim_result["rationale"],
+                    confidence=dim_result["confidence"],
+                ))
 
-{f"## Additional Context\n{context}" if context else ""}
+            # Compute weighted score
+            weighted_score = 0.0
+            for dr in dimension_results:
+                spec = next(
+                    d for d in self.rubric
+                    if (d.name.value if isinstance(d.name, RubricDimension) else d.name) == dr.dimension
+                )
+                normalized = (dr.score - spec.score_range[0]) / (spec.score_range[1] - spec.score_range[0])
+                weighted_score += normalized * spec.weight
 
-## Agent Output
-{agent_output}
-
-## Evaluation Rubric
-Evaluate the agent output on each of the following dimensions:{dimensions_block}
-
-## Instructions
-1. Evaluate each dimension INDEPENDENTLY. Do not let one dimension influence another.
-2. For each dimension, provide:
-   - A numeric score within the specified range
-   - A concise rationale (1-3 sentences) justifying the score
-   - A confidence level (0.0 to 1.0) for your assessment
-3. After all dimensions, provide a brief overall summary.
-
-Respond in the following JSON format:
-{{
-  "dimensions": [
-    {{"dimension": "<name>", "score": <int>, "rationale": "<text>", "confidence": <float>}},
-    ...
-  ],
-  "overall_rationale": "<summary text>"
-}}"""
-
-    async def evaluate(
-        self,
-        user_input: str,
-        agent_output: str,
-        agent_id: str,
-        entry_id: str,
-        context: Optional[str] = None,
-    ) -> JudgeVerdict:
-        """
-        Run the LLM-as-Judge evaluation for a single agent output.
-
-        Returns a JudgeVerdict with per-dimension scores and an overall
-        weighted score.
-        """
-        prompt = self._build_judge_prompt(user_input, agent_output, context)
-
-        # Call the judge model with structured output parsing
-        response = await llm_client.generate(
-            model=self.judge_model,
-            prompt=prompt,
-            temperature=self.temperature,
-            response_format="json",
-        )
-
-        parsed = json.loads(response.text)
-
-        dimension_results = []
-        for dim_result in parsed["dimensions"]:
-            dimension_results.append(DimensionResult(
-                dimension=dim_result["dimension"],
-                score=dim_result["score"],
-                rationale=dim_result["rationale"],
-                confidence=dim_result["confidence"],
-            ))
-
-        # Compute weighted score
-        weighted_score = 0.0
-        for dr in dimension_results:
-            spec = next(
-                d for d in self.rubric
-                if (d.name.value if isinstance(d.name, RubricDimension) else d.name) == dr.dimension
+            return JudgeVerdict(
+                eval_id=generate_uuid(),
+                agent_id=agent_id,
+                entry_id=entry_id,
+                dimension_results=dimension_results,
+                weighted_score=weighted_score,
+                overall_rationale=parsed["overall_rationale"],
+                judge_model=self.judge_model,
+                judge_latency_ms=response.latency_ms,
+                judge_tokens=response.total_tokens,
             )
-            normalized = (dr.score - spec.score_range[0]) / (spec.score_range[1] - spec.score_range[0])
-            weighted_score += normalized * spec.weight
-
-        return JudgeVerdict(
-            eval_id=generate_uuid(),
-            agent_id=agent_id,
-            entry_id=entry_id,
-            dimension_results=dimension_results,
-            weighted_score=weighted_score,
-            overall_rationale=parsed["overall_rationale"],
-            judge_model=self.judge_model,
-            judge_latency_ms=response.latency_ms,
-            judge_tokens=response.total_tokens,
-        )
-```
+    ```
 
 ### 3.3 Judge Model Selection
 
@@ -465,327 +469,331 @@ The framework implements all four trajectory evaluation types from the reference
 
 A trajectory is the ordered list of actions (tool calls) an agent took during execution:
 
-```json
-{
-  "trajectory_id": "traj-uuid-v4",
-  "agent_id": "agent-research-v2.3",
-  "session_id": "session-uuid",
-  "steps": [
+??? example "View JSON example"
+
+    ```json
     {
-      "step_index": 0,
-      "tool_name": "web_search",
-      "tool_args": {"query": "quantum error correction 2026"},
-      "tool_result_summary": "5 results returned",
-      "latency_ms": 820,
-      "tokens": {"input": 150, "output": 480}
-    },
-    {
-      "step_index": 1,
-      "tool_name": "scholar_search",
-      "tool_args": {"query": "surface code logical qubit"},
-      "tool_result_summary": "3 papers found",
-      "latency_ms": 1100,
-      "tokens": {"input": 200, "output": 620}
-    },
-    {
-      "step_index": 2,
-      "tool_name": "summarize",
-      "tool_args": {"sources": ["..."], "format": "structured"},
-      "tool_result_summary": "Summary generated",
-      "latency_ms": 2200,
-      "tokens": {"input": 1800, "output": 950}
+      "trajectory_id": "traj-uuid-v4",
+      "agent_id": "agent-research-v2.3",
+      "session_id": "session-uuid",
+      "steps": [
+        {
+          "step_index": 0,
+          "tool_name": "web_search",
+          "tool_args": {"query": "quantum error correction 2026"},
+          "tool_result_summary": "5 results returned",
+          "latency_ms": 820,
+          "tokens": {"input": 150, "output": 480}
+        },
+        {
+          "step_index": 1,
+          "tool_name": "scholar_search",
+          "tool_args": {"query": "surface code logical qubit"},
+          "tool_result_summary": "3 papers found",
+          "latency_ms": 1100,
+          "tokens": {"input": 200, "output": 620}
+        },
+        {
+          "step_index": 2,
+          "tool_name": "summarize",
+          "tool_args": {"sources": ["..."], "format": "structured"},
+          "tool_result_summary": "Summary generated",
+          "latency_ms": 2200,
+          "tokens": {"input": 1800, "output": 950}
+        }
+      ]
     }
-  ]
-}
-```
+    ```
 
 ### 4.3 Pseudocode: Trajectory Evaluator
 
-```python
-from dataclasses import dataclass
-from enum import Enum
-from typing import Optional
+??? example "View Python pseudocode"
+
+    ```python
+    from dataclasses import dataclass
+    from enum import Enum
+    from typing import Optional
 
 
-class TrajectoryMatchType(Enum):
-    """
-    Four trajectory evaluation types from the reference architecture (p. 308).
-    """
-    EXACT_ORDER = "exact_order"  # Exact tools in exact sequence
-    IN_ORDER = "in_order"        # Expected tools in order, extras allowed between
-    ANY_ORDER = "any_order"      # All expected tools called, any sequence
-    SINGLE_TOOL = "single_tool"  # At least one specific tool called
-
-
-@dataclass
-class ExpectedStep:
-    """One expected step in a trajectory."""
-    tool_name: str
-    args_contain: Optional[dict] = None  # partial match on tool arguments
-    args_exact: Optional[dict] = None    # exact match on tool arguments
-
-
-@dataclass
-class ActualStep:
-    """One actual step taken by the agent."""
-    step_index: int
-    tool_name: str
-    tool_args: dict
-    tool_result_summary: str
-    latency_ms: int
-
-
-@dataclass
-class TrajectoryResult:
-    """Result of trajectory evaluation."""
-    match_type: TrajectoryMatchType
-    passed: bool
-    expected_steps: list[ExpectedStep]
-    actual_steps: list[ActualStep]
-    matched_indices: list[tuple[int, int]]  # (expected_idx, actual_idx) pairs
-    missing_steps: list[ExpectedStep]       # expected but not found
-    extra_steps: list[ActualStep]           # not in expected (informational)
-    tool_accuracy: float                    # fraction of expected steps matched
-    args_accuracy: float                    # fraction of matched steps with correct args
-    explanation: str
-
-
-class TrajectoryEvaluator:
-    """
-    Evaluates agent action sequences against expected trajectories (p. 308).
-
-    Supports four match types reflecting different levels of strictness,
-    from exact-order (most strict) to single-tool (most lenient).
-    Tool accuracy is a core metric at Level 1 of the evaluation pyramid (p. 304).
-    """
-
-    def evaluate(
-        self,
-        expected: list[ExpectedStep],
-        actual: list[ActualStep],
-        match_type: TrajectoryMatchType,
-    ) -> TrajectoryResult:
-        """Dispatch to the appropriate matching strategy."""
-        if match_type == TrajectoryMatchType.EXACT_ORDER:
-            return self._eval_exact_order(expected, actual)
-        elif match_type == TrajectoryMatchType.IN_ORDER:
-            return self._eval_in_order(expected, actual)
-        elif match_type == TrajectoryMatchType.ANY_ORDER:
-            return self._eval_any_order(expected, actual)
-        elif match_type == TrajectoryMatchType.SINGLE_TOOL:
-            return self._eval_single_tool(expected, actual)
-        else:
-            raise ValueError(f"Unknown match type: {match_type}")
-
-    def _step_matches(self, expected: ExpectedStep, actual: ActualStep) -> bool:
-        """Check if an actual step matches an expected step."""
-        if expected.tool_name != actual.tool_name:
-            return False
-        if expected.args_exact is not None:
-            if actual.tool_args != expected.args_exact:
-                return False
-        if expected.args_contain is not None:
-            for key, value in expected.args_contain.items():
-                if key not in actual.tool_args:
-                    return False
-                if isinstance(value, str) and isinstance(actual.tool_args[key], str):
-                    if value.lower() not in actual.tool_args[key].lower():
-                        return False
-                elif actual.tool_args[key] != value:
-                    return False
-        return True
-
-    def _eval_exact_order(
-        self, expected: list[ExpectedStep], actual: list[ActualStep]
-    ) -> TrajectoryResult:
+    class TrajectoryMatchType(Enum):
         """
-        Exact-order matching (p. 308): the agent must call exactly the
-        expected tools in exactly the expected sequence, with no extra steps.
+        Four trajectory evaluation types from the reference architecture (p. 308).
         """
-        matched = []
-        missing = []
+        EXACT_ORDER = "exact_order"  # Exact tools in exact sequence
+        IN_ORDER = "in_order"        # Expected tools in order, extras allowed between
+        ANY_ORDER = "any_order"      # All expected tools called, any sequence
+        SINGLE_TOOL = "single_tool"  # At least one specific tool called
 
-        if len(actual) != len(expected):
-            # Length mismatch is an automatic failure for exact-order
-            for i, exp in enumerate(expected):
-                if i < len(actual) and self._step_matches(exp, actual[i]):
-                    matched.append((i, i))
-                else:
-                    missing.append(exp)
-        else:
-            for i, (exp, act) in enumerate(zip(expected, actual)):
-                if self._step_matches(exp, act):
-                    matched.append((i, i))
-                else:
-                    missing.append(exp)
 
-        extra = [a for i, a in enumerate(actual) if i not in {m[1] for m in matched}]
-        tool_acc = len(matched) / len(expected) if expected else 1.0
-        args_acc = self._compute_args_accuracy(expected, actual, matched)
-        passed = len(matched) == len(expected) and len(extra) == 0
+    @dataclass
+    class ExpectedStep:
+        """One expected step in a trajectory."""
+        tool_name: str
+        args_contain: Optional[dict] = None  # partial match on tool arguments
+        args_exact: Optional[dict] = None    # exact match on tool arguments
 
-        return TrajectoryResult(
-            match_type=TrajectoryMatchType.EXACT_ORDER,
-            passed=passed,
-            expected_steps=expected,
-            actual_steps=actual,
-            matched_indices=matched,
-            missing_steps=missing,
-            extra_steps=extra,
-            tool_accuracy=tool_acc,
-            args_accuracy=args_acc,
-            explanation=self._build_explanation("exact_order", passed, matched, missing, extra),
-        )
 
-    def _eval_in_order(
-        self, expected: list[ExpectedStep], actual: list[ActualStep]
-    ) -> TrajectoryResult:
+    @dataclass
+    class ActualStep:
+        """One actual step taken by the agent."""
+        step_index: int
+        tool_name: str
+        tool_args: dict
+        tool_result_summary: str
+        latency_ms: int
+
+
+    @dataclass
+    class TrajectoryResult:
+        """Result of trajectory evaluation."""
+        match_type: TrajectoryMatchType
+        passed: bool
+        expected_steps: list[ExpectedStep]
+        actual_steps: list[ActualStep]
+        matched_indices: list[tuple[int, int]]  # (expected_idx, actual_idx) pairs
+        missing_steps: list[ExpectedStep]       # expected but not found
+        extra_steps: list[ActualStep]           # not in expected (informational)
+        tool_accuracy: float                    # fraction of expected steps matched
+        args_accuracy: float                    # fraction of matched steps with correct args
+        explanation: str
+
+
+    class TrajectoryEvaluator:
         """
-        In-order matching (p. 308): expected tools must appear in sequence
-        within the actual steps, but additional steps may appear between them.
-        Uses a two-pointer scan.
+        Evaluates agent action sequences against expected trajectories (p. 308).
+
+        Supports four match types reflecting different levels of strictness,
+        from exact-order (most strict) to single-tool (most lenient).
+        Tool accuracy is a core metric at Level 1 of the evaluation pyramid (p. 304).
         """
-        matched = []
-        exp_idx = 0
 
-        for act_idx, act in enumerate(actual):
-            if exp_idx < len(expected) and self._step_matches(expected[exp_idx], act):
-                matched.append((exp_idx, act_idx))
-                exp_idx += 1
-
-        missing = [expected[i] for i in range(len(expected)) if i not in {m[0] for m in matched}]
-        extra = [actual[i] for i in range(len(actual)) if i not in {m[1] for m in matched}]
-        tool_acc = len(matched) / len(expected) if expected else 1.0
-        args_acc = self._compute_args_accuracy(expected, actual, matched)
-        passed = len(matched) == len(expected)
-
-        return TrajectoryResult(
-            match_type=TrajectoryMatchType.IN_ORDER,
-            passed=passed,
-            expected_steps=expected,
-            actual_steps=actual,
-            matched_indices=matched,
-            missing_steps=missing,
-            extra_steps=extra,
-            tool_accuracy=tool_acc,
-            args_accuracy=args_acc,
-            explanation=self._build_explanation("in_order", passed, matched, missing, extra),
-        )
-
-    def _eval_any_order(
-        self, expected: list[ExpectedStep], actual: list[ActualStep]
-    ) -> TrajectoryResult:
-        """
-        Any-order matching (p. 308): all expected tools must appear in the
-        actual steps, but in any order. Uses greedy matching to maximize
-        the number of matched pairs.
-        """
-        matched = []
-        used_actual = set()
-
-        for exp_idx, exp in enumerate(expected):
-            for act_idx, act in enumerate(actual):
-                if act_idx not in used_actual and self._step_matches(exp, act):
-                    matched.append((exp_idx, act_idx))
-                    used_actual.add(act_idx)
-                    break
-
-        missing = [expected[i] for i in range(len(expected)) if i not in {m[0] for m in matched}]
-        extra = [actual[i] for i in range(len(actual)) if i not in used_actual]
-        tool_acc = len(matched) / len(expected) if expected else 1.0
-        args_acc = self._compute_args_accuracy(expected, actual, matched)
-        passed = len(matched) == len(expected)
-
-        return TrajectoryResult(
-            match_type=TrajectoryMatchType.ANY_ORDER,
-            passed=passed,
-            expected_steps=expected,
-            actual_steps=actual,
-            matched_indices=matched,
-            missing_steps=missing,
-            extra_steps=extra,
-            tool_accuracy=tool_acc,
-            args_accuracy=args_acc,
-            explanation=self._build_explanation("any_order", passed, matched, missing, extra),
-        )
-
-    def _eval_single_tool(
-        self, expected: list[ExpectedStep], actual: list[ActualStep]
-    ) -> TrajectoryResult:
-        """
-        Single-tool matching (p. 308): at least one expected tool must be
-        called at least once. This is the most lenient trajectory check.
-        """
-        matched = []
-        used_actual = set()
-
-        for exp_idx, exp in enumerate(expected):
-            for act_idx, act in enumerate(actual):
-                if act_idx not in used_actual and self._step_matches(exp, act):
-                    matched.append((exp_idx, act_idx))
-                    used_actual.add(act_idx)
-                    break  # only need one match per expected tool
-
-        missing = [expected[i] for i in range(len(expected)) if i not in {m[0] for m in matched}]
-        extra = [actual[i] for i in range(len(actual)) if i not in used_actual]
-        # For single-tool, passing requires at least one match
-        passed = len(matched) >= 1
-        tool_acc = len(matched) / len(expected) if expected else 1.0
-        args_acc = self._compute_args_accuracy(expected, actual, matched)
-
-        return TrajectoryResult(
-            match_type=TrajectoryMatchType.SINGLE_TOOL,
-            passed=passed,
-            expected_steps=expected,
-            actual_steps=actual,
-            matched_indices=matched,
-            missing_steps=missing,
-            extra_steps=extra,
-            tool_accuracy=tool_acc,
-            args_accuracy=args_acc,
-            explanation=self._build_explanation("single_tool", passed, matched, missing, extra),
-        )
-
-    def _compute_args_accuracy(
-        self,
-        expected: list[ExpectedStep],
-        actual: list[ActualStep],
-        matched: list[tuple[int, int]],
-    ) -> float:
-        """Compute what fraction of matched steps had fully correct arguments."""
-        if not matched:
-            return 0.0
-        correct = 0
-        for exp_idx, act_idx in matched:
-            exp = expected[exp_idx]
-            act = actual[act_idx]
-            if exp.args_exact is not None and act.tool_args == exp.args_exact:
-                correct += 1
-            elif exp.args_contain is not None:
-                all_match = all(
-                    k in act.tool_args and (
-                        v.lower() in act.tool_args[k].lower()
-                        if isinstance(v, str) and isinstance(act.tool_args.get(k), str)
-                        else act.tool_args.get(k) == v
-                    )
-                    for k, v in exp.args_contain.items()
-                )
-                if all_match:
-                    correct += 1
+        def evaluate(
+            self,
+            expected: list[ExpectedStep],
+            actual: list[ActualStep],
+            match_type: TrajectoryMatchType,
+        ) -> TrajectoryResult:
+            """Dispatch to the appropriate matching strategy."""
+            if match_type == TrajectoryMatchType.EXACT_ORDER:
+                return self._eval_exact_order(expected, actual)
+            elif match_type == TrajectoryMatchType.IN_ORDER:
+                return self._eval_in_order(expected, actual)
+            elif match_type == TrajectoryMatchType.ANY_ORDER:
+                return self._eval_any_order(expected, actual)
+            elif match_type == TrajectoryMatchType.SINGLE_TOOL:
+                return self._eval_single_tool(expected, actual)
             else:
-                correct += 1  # no args constraint means auto-pass
-        return correct / len(matched)
+                raise ValueError(f"Unknown match type: {match_type}")
 
-    def _build_explanation(
-        self, match_type: str, passed: bool, matched, missing, extra
-    ) -> str:
-        status = "PASSED" if passed else "FAILED"
-        return (
-            f"Trajectory evaluation ({match_type}): {status}. "
-            f"Matched {len(matched)} expected steps. "
-            f"Missing: {len(missing)}. Extra: {len(extra)}."
-        )
-```
+        def _step_matches(self, expected: ExpectedStep, actual: ActualStep) -> bool:
+            """Check if an actual step matches an expected step."""
+            if expected.tool_name != actual.tool_name:
+                return False
+            if expected.args_exact is not None:
+                if actual.tool_args != expected.args_exact:
+                    return False
+            if expected.args_contain is not None:
+                for key, value in expected.args_contain.items():
+                    if key not in actual.tool_args:
+                        return False
+                    if isinstance(value, str) and isinstance(actual.tool_args[key], str):
+                        if value.lower() not in actual.tool_args[key].lower():
+                            return False
+                    elif actual.tool_args[key] != value:
+                        return False
+            return True
+
+        def _eval_exact_order(
+            self, expected: list[ExpectedStep], actual: list[ActualStep]
+        ) -> TrajectoryResult:
+            """
+            Exact-order matching (p. 308): the agent must call exactly the
+            expected tools in exactly the expected sequence, with no extra steps.
+            """
+            matched = []
+            missing = []
+
+            if len(actual) != len(expected):
+                # Length mismatch is an automatic failure for exact-order
+                for i, exp in enumerate(expected):
+                    if i < len(actual) and self._step_matches(exp, actual[i]):
+                        matched.append((i, i))
+                    else:
+                        missing.append(exp)
+            else:
+                for i, (exp, act) in enumerate(zip(expected, actual)):
+                    if self._step_matches(exp, act):
+                        matched.append((i, i))
+                    else:
+                        missing.append(exp)
+
+            extra = [a for i, a in enumerate(actual) if i not in {m[1] for m in matched}]
+            tool_acc = len(matched) / len(expected) if expected else 1.0
+            args_acc = self._compute_args_accuracy(expected, actual, matched)
+            passed = len(matched) == len(expected) and len(extra) == 0
+
+            return TrajectoryResult(
+                match_type=TrajectoryMatchType.EXACT_ORDER,
+                passed=passed,
+                expected_steps=expected,
+                actual_steps=actual,
+                matched_indices=matched,
+                missing_steps=missing,
+                extra_steps=extra,
+                tool_accuracy=tool_acc,
+                args_accuracy=args_acc,
+                explanation=self._build_explanation("exact_order", passed, matched, missing, extra),
+            )
+
+        def _eval_in_order(
+            self, expected: list[ExpectedStep], actual: list[ActualStep]
+        ) -> TrajectoryResult:
+            """
+            In-order matching (p. 308): expected tools must appear in sequence
+            within the actual steps, but additional steps may appear between them.
+            Uses a two-pointer scan.
+            """
+            matched = []
+            exp_idx = 0
+
+            for act_idx, act in enumerate(actual):
+                if exp_idx < len(expected) and self._step_matches(expected[exp_idx], act):
+                    matched.append((exp_idx, act_idx))
+                    exp_idx += 1
+
+            missing = [expected[i] for i in range(len(expected)) if i not in {m[0] for m in matched}]
+            extra = [actual[i] for i in range(len(actual)) if i not in {m[1] for m in matched}]
+            tool_acc = len(matched) / len(expected) if expected else 1.0
+            args_acc = self._compute_args_accuracy(expected, actual, matched)
+            passed = len(matched) == len(expected)
+
+            return TrajectoryResult(
+                match_type=TrajectoryMatchType.IN_ORDER,
+                passed=passed,
+                expected_steps=expected,
+                actual_steps=actual,
+                matched_indices=matched,
+                missing_steps=missing,
+                extra_steps=extra,
+                tool_accuracy=tool_acc,
+                args_accuracy=args_acc,
+                explanation=self._build_explanation("in_order", passed, matched, missing, extra),
+            )
+
+        def _eval_any_order(
+            self, expected: list[ExpectedStep], actual: list[ActualStep]
+        ) -> TrajectoryResult:
+            """
+            Any-order matching (p. 308): all expected tools must appear in the
+            actual steps, but in any order. Uses greedy matching to maximize
+            the number of matched pairs.
+            """
+            matched = []
+            used_actual = set()
+
+            for exp_idx, exp in enumerate(expected):
+                for act_idx, act in enumerate(actual):
+                    if act_idx not in used_actual and self._step_matches(exp, act):
+                        matched.append((exp_idx, act_idx))
+                        used_actual.add(act_idx)
+                        break
+
+            missing = [expected[i] for i in range(len(expected)) if i not in {m[0] for m in matched}]
+            extra = [actual[i] for i in range(len(actual)) if i not in used_actual]
+            tool_acc = len(matched) / len(expected) if expected else 1.0
+            args_acc = self._compute_args_accuracy(expected, actual, matched)
+            passed = len(matched) == len(expected)
+
+            return TrajectoryResult(
+                match_type=TrajectoryMatchType.ANY_ORDER,
+                passed=passed,
+                expected_steps=expected,
+                actual_steps=actual,
+                matched_indices=matched,
+                missing_steps=missing,
+                extra_steps=extra,
+                tool_accuracy=tool_acc,
+                args_accuracy=args_acc,
+                explanation=self._build_explanation("any_order", passed, matched, missing, extra),
+            )
+
+        def _eval_single_tool(
+            self, expected: list[ExpectedStep], actual: list[ActualStep]
+        ) -> TrajectoryResult:
+            """
+            Single-tool matching (p. 308): at least one expected tool must be
+            called at least once. This is the most lenient trajectory check.
+            """
+            matched = []
+            used_actual = set()
+
+            for exp_idx, exp in enumerate(expected):
+                for act_idx, act in enumerate(actual):
+                    if act_idx not in used_actual and self._step_matches(exp, act):
+                        matched.append((exp_idx, act_idx))
+                        used_actual.add(act_idx)
+                        break  # only need one match per expected tool
+
+            missing = [expected[i] for i in range(len(expected)) if i not in {m[0] for m in matched}]
+            extra = [actual[i] for i in range(len(actual)) if i not in used_actual]
+            # For single-tool, passing requires at least one match
+            passed = len(matched) >= 1
+            tool_acc = len(matched) / len(expected) if expected else 1.0
+            args_acc = self._compute_args_accuracy(expected, actual, matched)
+
+            return TrajectoryResult(
+                match_type=TrajectoryMatchType.SINGLE_TOOL,
+                passed=passed,
+                expected_steps=expected,
+                actual_steps=actual,
+                matched_indices=matched,
+                missing_steps=missing,
+                extra_steps=extra,
+                tool_accuracy=tool_acc,
+                args_accuracy=args_acc,
+                explanation=self._build_explanation("single_tool", passed, matched, missing, extra),
+            )
+
+        def _compute_args_accuracy(
+            self,
+            expected: list[ExpectedStep],
+            actual: list[ActualStep],
+            matched: list[tuple[int, int]],
+        ) -> float:
+            """Compute what fraction of matched steps had fully correct arguments."""
+            if not matched:
+                return 0.0
+            correct = 0
+            for exp_idx, act_idx in matched:
+                exp = expected[exp_idx]
+                act = actual[act_idx]
+                if exp.args_exact is not None and act.tool_args == exp.args_exact:
+                    correct += 1
+                elif exp.args_contain is not None:
+                    all_match = all(
+                        k in act.tool_args and (
+                            v.lower() in act.tool_args[k].lower()
+                            if isinstance(v, str) and isinstance(act.tool_args.get(k), str)
+                            else act.tool_args.get(k) == v
+                        )
+                        for k, v in exp.args_contain.items()
+                    )
+                    if all_match:
+                        correct += 1
+                else:
+                    correct += 1  # no args constraint means auto-pass
+            return correct / len(matched)
+
+        def _build_explanation(
+            self, match_type: str, passed: bool, matched, missing, extra
+        ) -> str:
+            status = "PASSED" if passed else "FAILED"
+            return (
+                f"Trajectory evaluation ({match_type}): {status}. "
+                f"Matched {len(matched)} expected steps. "
+                f"Missing: {len(missing)}. Extra: {len(extra)}."
+            )
+    ```
 
 ### 4.4 Trajectory Evaluation in Context
 
@@ -803,44 +811,46 @@ A/B testing (Level 4 of the pyramid) provides the definitive evidence that one a
 
 An experiment compares two or more agent **variants** across a set of metrics:
 
-```json
-{
-  "experiment_id": "exp-uuid-v4",
-  "name": "research-agent-v2.3-vs-v2.4",
-  "status": "running",
-  "created_at": "2026-02-20T14:00:00Z",
-  "hypothesis": "v2.4 improves Completeness score by >= 5% without increasing latency by more than 10%",
-  "variants": [
+??? example "View JSON example"
+
+    ```json
     {
-      "variant_id": "control",
-      "agent_version": "research-agent@2.3.1",
-      "traffic_weight": 0.50
-    },
-    {
-      "variant_id": "treatment",
-      "agent_version": "research-agent@2.4.0",
-      "traffic_weight": 0.50
+      "experiment_id": "exp-uuid-v4",
+      "name": "research-agent-v2.3-vs-v2.4",
+      "status": "running",
+      "created_at": "2026-02-20T14:00:00Z",
+      "hypothesis": "v2.4 improves Completeness score by >= 5% without increasing latency by more than 10%",
+      "variants": [
+        {
+          "variant_id": "control",
+          "agent_version": "research-agent@2.3.1",
+          "traffic_weight": 0.50
+        },
+        {
+          "variant_id": "treatment",
+          "agent_version": "research-agent@2.4.0",
+          "traffic_weight": 0.50
+        }
+      ],
+      "primary_metric": "judge_weighted_score",
+      "secondary_metrics": ["latency_p95_ms", "token_usage_avg", "tool_accuracy"],
+      "guardrails": {
+        "max_latency_p95_ms": 10000,
+        "min_safety_score": 0.95,
+        "auto_stop_on_regression": true
+      },
+      "sample_size": {
+        "min_per_variant": 500,
+        "max_per_variant": 5000,
+        "confidence_level": 0.95,
+        "minimum_detectable_effect": 0.05
+      },
+      "duration": {
+        "min_hours": 24,
+        "max_hours": 168
+      }
     }
-  ],
-  "primary_metric": "judge_weighted_score",
-  "secondary_metrics": ["latency_p95_ms", "token_usage_avg", "tool_accuracy"],
-  "guardrails": {
-    "max_latency_p95_ms": 10000,
-    "min_safety_score": 0.95,
-    "auto_stop_on_regression": true
-  },
-  "sample_size": {
-    "min_per_variant": 500,
-    "max_per_variant": 5000,
-    "confidence_level": 0.95,
-    "minimum_detectable_effect": 0.05
-  },
-  "duration": {
-    "min_hours": 24,
-    "max_hours": 168
-  }
-}
-```
+    ```
 
 ### 5.2 Traffic Splitting
 
@@ -866,270 +876,272 @@ The framework uses sequential testing to allow early stopping without inflating 
 
 ### 5.4 Pseudocode: A/B Test Framework
 
-```python
-import math
-from dataclasses import dataclass
-from enum import Enum
-from typing import Optional
+??? example "View Python pseudocode"
+
+    ```python
+    import math
+    from dataclasses import dataclass
+    from enum import Enum
+    from typing import Optional
 
 
-class ExperimentStatus(Enum):
-    DRAFT = "draft"
-    RUNNING = "running"
-    STOPPED_EARLY = "stopped_early"   # guardrail triggered
-    COMPLETED = "completed"
-    WINNER_DECLARED = "winner_declared"
+    class ExperimentStatus(Enum):
+        DRAFT = "draft"
+        RUNNING = "running"
+        STOPPED_EARLY = "stopped_early"   # guardrail triggered
+        COMPLETED = "completed"
+        WINNER_DECLARED = "winner_declared"
 
 
-class VariantDecision(Enum):
-    WINNING = "winning"
-    LOSING = "losing"
-    INCONCLUSIVE = "inconclusive"
+    class VariantDecision(Enum):
+        WINNING = "winning"
+        LOSING = "losing"
+        INCONCLUSIVE = "inconclusive"
 
 
-@dataclass
-class VariantMetrics:
-    """Aggregated metrics for one variant in an experiment."""
-    variant_id: str
-    sample_count: int
-    mean_score: float
-    std_score: float
-    p95_latency_ms: float
-    mean_tokens: float
-    tool_accuracy: float
-    safety_score: float
+    @dataclass
+    class VariantMetrics:
+        """Aggregated metrics for one variant in an experiment."""
+        variant_id: str
+        sample_count: int
+        mean_score: float
+        std_score: float
+        p95_latency_ms: float
+        mean_tokens: float
+        tool_accuracy: float
+        safety_score: float
 
 
-@dataclass
-class ExperimentResult:
-    """Result of analyzing an experiment."""
-    experiment_id: str
-    status: ExperimentStatus
-    variant_metrics: dict[str, VariantMetrics]
-    primary_metric_p_value: Optional[float]
-    primary_metric_effect_size: Optional[float]
-    decision: VariantDecision
-    recommended_variant: Optional[str]
-    explanation: str
-    elo_ratings: Optional[dict[str, float]]  # for multi-arm experiments (p. 330-355)
+    @dataclass
+    class ExperimentResult:
+        """Result of analyzing an experiment."""
+        experiment_id: str
+        status: ExperimentStatus
+        variant_metrics: dict[str, VariantMetrics]
+        primary_metric_p_value: Optional[float]
+        primary_metric_effect_size: Optional[float]
+        decision: VariantDecision
+        recommended_variant: Optional[str]
+        explanation: str
+        elo_ratings: Optional[dict[str, float]]  # for multi-arm experiments (p. 330-355)
 
 
-class ABTestFramework:
-    """
-    A/B testing framework for comparing agent versions (p. 303, Level 4).
-
-    Implements sequential testing with early stopping, guardrail-based
-    automatic halt, and Elo-based ranking for multi-variant experiments.
-    Integrates with the Goal Setting pattern (p. 185) to verify that
-    SMART goal alignment is maintained across variants.
-    """
-
-    def __init__(
-        self,
-        confidence_level: float = 0.95,
-        min_detectable_effect: float = 0.05,
-        max_false_positive_rate: float = 0.05,
-    ):
-        self.confidence_level = confidence_level
-        self.min_detectable_effect = min_detectable_effect
-        self.alpha = max_false_positive_rate
-
-    async def assign_variant(
-        self,
-        experiment_id: str,
-        user_id: str,
-    ) -> str:
+    class ABTestFramework:
         """
-        Deterministically assign a user to a variant using consistent hashing.
-        Ensures the same user always sees the same variant within an experiment.
+        A/B testing framework for comparing agent versions (p. 303, Level 4).
+
+        Implements sequential testing with early stopping, guardrail-based
+        automatic halt, and Elo-based ranking for multi-variant experiments.
+        Integrates with the Goal Setting pattern (p. 185) to verify that
+        SMART goal alignment is maintained across variants.
         """
-        experiment = await self._load_experiment(experiment_id)
-        hash_value = consistent_hash(f"{experiment_id}:{user_id}")
-        cumulative = 0.0
-        for variant in experiment["variants"]:
-            cumulative += variant["traffic_weight"]
-            if hash_value < cumulative:
-                return variant["variant_id"]
-        return experiment["variants"][-1]["variant_id"]
 
-    async def record_observation(
-        self,
-        experiment_id: str,
-        variant_id: str,
-        metrics: dict[str, float],
-    ):
-        """
-        Record a single observation (one request processed by one variant).
-        After recording, check guardrails and sequential test boundaries.
-        """
-        await self._store_observation(experiment_id, variant_id, metrics)
+        def __init__(
+            self,
+            confidence_level: float = 0.95,
+            min_detectable_effect: float = 0.05,
+            max_false_positive_rate: float = 0.05,
+        ):
+            self.confidence_level = confidence_level
+            self.min_detectable_effect = min_detectable_effect
+            self.alpha = max_false_positive_rate
 
-        # Check safety guardrails -- auto-stop if violated
-        experiment = await self._load_experiment(experiment_id)
-        guardrails = experiment["guardrails"]
+        async def assign_variant(
+            self,
+            experiment_id: str,
+            user_id: str,
+        ) -> str:
+            """
+            Deterministically assign a user to a variant using consistent hashing.
+            Ensures the same user always sees the same variant within an experiment.
+            """
+            experiment = await self._load_experiment(experiment_id)
+            hash_value = consistent_hash(f"{experiment_id}:{user_id}")
+            cumulative = 0.0
+            for variant in experiment["variants"]:
+                cumulative += variant["traffic_weight"]
+                if hash_value < cumulative:
+                    return variant["variant_id"]
+            return experiment["variants"][-1]["variant_id"]
 
-        if guardrails.get("auto_stop_on_regression"):
-            variant_metrics = await self._aggregate_metrics(experiment_id, variant_id)
-            if variant_metrics.safety_score < guardrails.get("min_safety_score", 0.0):
-                await self._stop_experiment(
-                    experiment_id,
-                    reason=f"Safety score {variant_metrics.safety_score:.3f} "
-                           f"below threshold {guardrails['min_safety_score']}",
-                )
-                return
-            if variant_metrics.p95_latency_ms > guardrails.get("max_latency_p95_ms", float("inf")):
-                await self._stop_experiment(
-                    experiment_id,
-                    reason=f"P95 latency {variant_metrics.p95_latency_ms:.0f}ms "
-                           f"exceeds threshold {guardrails['max_latency_p95_ms']}ms",
-                )
-                return
+        async def record_observation(
+            self,
+            experiment_id: str,
+            variant_id: str,
+            metrics: dict[str, float],
+        ):
+            """
+            Record a single observation (one request processed by one variant).
+            After recording, check guardrails and sequential test boundaries.
+            """
+            await self._store_observation(experiment_id, variant_id, metrics)
 
-    async def analyze(self, experiment_id: str) -> ExperimentResult:
-        """
-        Analyze current experiment state. Uses sequential probability ratio
-        test (SPRT) to determine if a winner can be declared.
-        """
-        experiment = await self._load_experiment(experiment_id)
-        variants = experiment["variants"]
-        all_metrics = {}
+            # Check safety guardrails -- auto-stop if violated
+            experiment = await self._load_experiment(experiment_id)
+            guardrails = experiment["guardrails"]
 
-        for variant in variants:
-            vid = variant["variant_id"]
-            all_metrics[vid] = await self._aggregate_metrics(experiment_id, vid)
-
-        # For two-variant experiments: Welch's t-test with SPRT wrapper
-        if len(variants) == 2:
-            control = all_metrics[variants[0]["variant_id"]]
-            treatment = all_metrics[variants[1]["variant_id"]]
-
-            p_value, effect_size = self._welch_t_test(control, treatment)
-
-            if (
-                control.sample_count >= experiment["sample_size"]["min_per_variant"]
-                and treatment.sample_count >= experiment["sample_size"]["min_per_variant"]
-            ):
-                if p_value < self.alpha and effect_size > self.min_detectable_effect:
-                    winner = (
-                        variants[1]["variant_id"]
-                        if treatment.mean_score > control.mean_score
-                        else variants[0]["variant_id"]
+            if guardrails.get("auto_stop_on_regression"):
+                variant_metrics = await self._aggregate_metrics(experiment_id, variant_id)
+                if variant_metrics.safety_score < guardrails.get("min_safety_score", 0.0):
+                    await self._stop_experiment(
+                        experiment_id,
+                        reason=f"Safety score {variant_metrics.safety_score:.3f} "
+                               f"below threshold {guardrails['min_safety_score']}",
                     )
-                    decision = VariantDecision.WINNING
-                elif p_value < self.alpha and effect_size <= self.min_detectable_effect:
-                    decision = VariantDecision.INCONCLUSIVE
-                    winner = None
+                    return
+                if variant_metrics.p95_latency_ms > guardrails.get("max_latency_p95_ms", float("inf")):
+                    await self._stop_experiment(
+                        experiment_id,
+                        reason=f"P95 latency {variant_metrics.p95_latency_ms:.0f}ms "
+                               f"exceeds threshold {guardrails['max_latency_p95_ms']}ms",
+                    )
+                    return
+
+        async def analyze(self, experiment_id: str) -> ExperimentResult:
+            """
+            Analyze current experiment state. Uses sequential probability ratio
+            test (SPRT) to determine if a winner can be declared.
+            """
+            experiment = await self._load_experiment(experiment_id)
+            variants = experiment["variants"]
+            all_metrics = {}
+
+            for variant in variants:
+                vid = variant["variant_id"]
+                all_metrics[vid] = await self._aggregate_metrics(experiment_id, vid)
+
+            # For two-variant experiments: Welch's t-test with SPRT wrapper
+            if len(variants) == 2:
+                control = all_metrics[variants[0]["variant_id"]]
+                treatment = all_metrics[variants[1]["variant_id"]]
+
+                p_value, effect_size = self._welch_t_test(control, treatment)
+
+                if (
+                    control.sample_count >= experiment["sample_size"]["min_per_variant"]
+                    and treatment.sample_count >= experiment["sample_size"]["min_per_variant"]
+                ):
+                    if p_value < self.alpha and effect_size > self.min_detectable_effect:
+                        winner = (
+                            variants[1]["variant_id"]
+                            if treatment.mean_score > control.mean_score
+                            else variants[0]["variant_id"]
+                        )
+                        decision = VariantDecision.WINNING
+                    elif p_value < self.alpha and effect_size <= self.min_detectable_effect:
+                        decision = VariantDecision.INCONCLUSIVE
+                        winner = None
+                    else:
+                        decision = VariantDecision.INCONCLUSIVE
+                        winner = None
                 else:
                     decision = VariantDecision.INCONCLUSIVE
                     winner = None
+                    p_value = None
+                    effect_size = None
+
+                return ExperimentResult(
+                    experiment_id=experiment_id,
+                    status=ExperimentStatus.RUNNING if decision == VariantDecision.INCONCLUSIVE
+                           else ExperimentStatus.WINNER_DECLARED,
+                    variant_metrics=all_metrics,
+                    primary_metric_p_value=p_value,
+                    primary_metric_effect_size=effect_size,
+                    decision=decision,
+                    recommended_variant=winner,
+                    explanation=self._build_analysis_explanation(
+                        control, treatment, p_value, effect_size, decision
+                    ),
+                    elo_ratings=None,
+                )
+
+            # For multi-variant experiments: Elo-based ranking (p. 330-355)
             else:
-                decision = VariantDecision.INCONCLUSIVE
-                winner = None
-                p_value = None
-                effect_size = None
+                elo_ratings = await self._compute_elo_ratings(experiment_id, all_metrics)
+                best_variant = max(elo_ratings, key=elo_ratings.get)
 
-            return ExperimentResult(
-                experiment_id=experiment_id,
-                status=ExperimentStatus.RUNNING if decision == VariantDecision.INCONCLUSIVE
-                       else ExperimentStatus.WINNER_DECLARED,
-                variant_metrics=all_metrics,
-                primary_metric_p_value=p_value,
-                primary_metric_effect_size=effect_size,
-                decision=decision,
-                recommended_variant=winner,
-                explanation=self._build_analysis_explanation(
-                    control, treatment, p_value, effect_size, decision
-                ),
-                elo_ratings=None,
+                return ExperimentResult(
+                    experiment_id=experiment_id,
+                    status=ExperimentStatus.RUNNING,
+                    variant_metrics=all_metrics,
+                    primary_metric_p_value=None,
+                    primary_metric_effect_size=None,
+                    decision=VariantDecision.INCONCLUSIVE,
+                    recommended_variant=best_variant,
+                    explanation=f"Elo rankings: {elo_ratings}. Leading variant: {best_variant}.",
+                    elo_ratings=elo_ratings,
+                )
+
+        def _welch_t_test(
+            self,
+            control: VariantMetrics,
+            treatment: VariantMetrics,
+        ) -> tuple[float, float]:
+            """Welch's t-test for unequal variances."""
+            n1, n2 = control.sample_count, treatment.sample_count
+            m1, m2 = control.mean_score, treatment.mean_score
+            s1, s2 = control.std_score, treatment.std_score
+
+            if n1 < 2 or n2 < 2:
+                return 1.0, 0.0
+
+            se = math.sqrt((s1**2 / n1) + (s2**2 / n2))
+            if se == 0:
+                return 1.0, 0.0
+
+            t_stat = (m2 - m1) / se
+            # Welch-Satterthwaite degrees of freedom
+            df_num = ((s1**2 / n1) + (s2**2 / n2)) ** 2
+            df_den = ((s1**2 / n1)**2 / (n1 - 1)) + ((s2**2 / n2)**2 / (n2 - 1))
+            df = df_num / df_den if df_den > 0 else 1
+
+            p_value = t_distribution_two_tailed_p(t_stat, df)  # scipy.stats.t.sf
+            effect_size = abs(m2 - m1) / math.sqrt((s1**2 + s2**2) / 2)  # Cohen's d
+
+            return p_value, effect_size
+
+        async def _compute_elo_ratings(
+            self,
+            experiment_id: str,
+            all_metrics: dict[str, VariantMetrics],
+        ) -> dict[str, float]:
+            """
+            Compute Elo ratings from pairwise comparisons (p. 330-355).
+
+            Each observation is compared pairwise between variants that served
+            similar inputs. The Elo update follows the standard formula with
+            K=32 for initial convergence speed.
+            """
+            K = 32
+            ratings = {vid: 1500.0 for vid in all_metrics}
+
+            comparisons = await self._load_pairwise_comparisons(experiment_id)
+            for comp in comparisons:
+                ra = ratings[comp["variant_a"]]
+                rb = ratings[comp["variant_b"]]
+                ea = 1.0 / (1.0 + 10 ** ((rb - ra) / 400))
+                eb = 1.0 / (1.0 + 10 ** ((ra - rb) / 400))
+
+                # sa = 1 if a won, 0 if b won, 0.5 if tie
+                sa = comp["score_a_wins"]
+                sb = 1.0 - sa
+
+                ratings[comp["variant_a"]] = ra + K * (sa - ea)
+                ratings[comp["variant_b"]] = rb + K * (sb - eb)
+
+            return ratings
+
+        def _build_analysis_explanation(
+            self, control, treatment, p_value, effect_size, decision
+        ) -> str:
+            return (
+                f"Control: n={control.sample_count}, mean={control.mean_score:.4f}, "
+                f"std={control.std_score:.4f}. "
+                f"Treatment: n={treatment.sample_count}, mean={treatment.mean_score:.4f}, "
+                f"std={treatment.std_score:.4f}. "
+                f"p-value={p_value}, effect_size={effect_size}, decision={decision.value}."
             )
-
-        # For multi-variant experiments: Elo-based ranking (p. 330-355)
-        else:
-            elo_ratings = await self._compute_elo_ratings(experiment_id, all_metrics)
-            best_variant = max(elo_ratings, key=elo_ratings.get)
-
-            return ExperimentResult(
-                experiment_id=experiment_id,
-                status=ExperimentStatus.RUNNING,
-                variant_metrics=all_metrics,
-                primary_metric_p_value=None,
-                primary_metric_effect_size=None,
-                decision=VariantDecision.INCONCLUSIVE,
-                recommended_variant=best_variant,
-                explanation=f"Elo rankings: {elo_ratings}. Leading variant: {best_variant}.",
-                elo_ratings=elo_ratings,
-            )
-
-    def _welch_t_test(
-        self,
-        control: VariantMetrics,
-        treatment: VariantMetrics,
-    ) -> tuple[float, float]:
-        """Welch's t-test for unequal variances."""
-        n1, n2 = control.sample_count, treatment.sample_count
-        m1, m2 = control.mean_score, treatment.mean_score
-        s1, s2 = control.std_score, treatment.std_score
-
-        if n1 < 2 or n2 < 2:
-            return 1.0, 0.0
-
-        se = math.sqrt((s1**2 / n1) + (s2**2 / n2))
-        if se == 0:
-            return 1.0, 0.0
-
-        t_stat = (m2 - m1) / se
-        # Welch-Satterthwaite degrees of freedom
-        df_num = ((s1**2 / n1) + (s2**2 / n2)) ** 2
-        df_den = ((s1**2 / n1)**2 / (n1 - 1)) + ((s2**2 / n2)**2 / (n2 - 1))
-        df = df_num / df_den if df_den > 0 else 1
-
-        p_value = t_distribution_two_tailed_p(t_stat, df)  # scipy.stats.t.sf
-        effect_size = abs(m2 - m1) / math.sqrt((s1**2 + s2**2) / 2)  # Cohen's d
-
-        return p_value, effect_size
-
-    async def _compute_elo_ratings(
-        self,
-        experiment_id: str,
-        all_metrics: dict[str, VariantMetrics],
-    ) -> dict[str, float]:
-        """
-        Compute Elo ratings from pairwise comparisons (p. 330-355).
-
-        Each observation is compared pairwise between variants that served
-        similar inputs. The Elo update follows the standard formula with
-        K=32 for initial convergence speed.
-        """
-        K = 32
-        ratings = {vid: 1500.0 for vid in all_metrics}
-
-        comparisons = await self._load_pairwise_comparisons(experiment_id)
-        for comp in comparisons:
-            ra = ratings[comp["variant_a"]]
-            rb = ratings[comp["variant_b"]]
-            ea = 1.0 / (1.0 + 10 ** ((rb - ra) / 400))
-            eb = 1.0 / (1.0 + 10 ** ((ra - rb) / 400))
-
-            # sa = 1 if a won, 0 if b won, 0.5 if tie
-            sa = comp["score_a_wins"]
-            sb = 1.0 - sa
-
-            ratings[comp["variant_a"]] = ra + K * (sa - ea)
-            ratings[comp["variant_b"]] = rb + K * (sb - eb)
-
-        return ratings
-
-    def _build_analysis_explanation(
-        self, control, treatment, p_value, effect_size, decision
-    ) -> str:
-        return (
-            f"Control: n={control.sample_count}, mean={control.mean_score:.4f}, "
-            f"std={control.std_score:.4f}. "
-            f"Treatment: n={treatment.sample_count}, mean={treatment.mean_score:.4f}, "
-            f"std={treatment.std_score:.4f}. "
-            f"p-value={p_value}, effect_size={effect_size}, decision={decision.value}."
-        )
-```
+    ```
 
 ### 5.5 Guardrail Integration
 
@@ -1164,22 +1176,24 @@ The framework ships with adapters for widely-used benchmarks:
 
 Teams can define domain-specific benchmarks that follow the evalset format but are designated as benchmarks (immutable reference sets):
 
-```json
-{
-  "benchmark_id": "bench-uuid",
-  "name": "financial-research-benchmark-v1",
-  "type": "custom",
-  "immutable": true,
-  "entries": [ "..." ],
-  "baseline_results": {
-    "research-agent@2.0.0": {
-      "accuracy": 0.78,
-      "latency_p95_ms": 5200,
-      "judge_weighted_score": 0.72
+??? example "View JSON example"
+
+    ```json
+    {
+      "benchmark_id": "bench-uuid",
+      "name": "financial-research-benchmark-v1",
+      "type": "custom",
+      "immutable": true,
+      "entries": [ "..." ],
+      "baseline_results": {
+        "research-agent@2.0.0": {
+          "accuracy": 0.78,
+          "latency_p95_ms": 5200,
+          "judge_weighted_score": 0.72
+        }
+      }
     }
-  }
-}
-```
+    ```
 
 ### 6.3 Leaderboard
 
@@ -1278,65 +1292,67 @@ The evaluation pipeline is the orchestrator that ties together all evaluation co
 
 ### 7.4 Result Storage Schema
 
-```sql
--- Core evaluation runs
-CREATE TABLE eval_runs (
-    run_id          UUID PRIMARY KEY,
-    experiment_id   UUID REFERENCES experiments(experiment_id),
-    agent_id        VARCHAR NOT NULL,
-    agent_version   VARCHAR NOT NULL,
-    evalset_id      UUID NOT NULL,
-    evalset_version VARCHAR NOT NULL,
-    trigger_type    VARCHAR NOT NULL,  -- 'promotion', 'scheduled', 'sampling', 'ab_test', 'manual'
-    status          VARCHAR NOT NULL,  -- 'pending', 'running', 'completed', 'failed'
-    started_at      TIMESTAMPTZ NOT NULL,
-    completed_at    TIMESTAMPTZ,
-    created_by      VARCHAR NOT NULL
-);
+??? example "View SQL schema"
 
--- Per-entry results
-CREATE TABLE eval_entry_results (
-    result_id       UUID PRIMARY KEY,
-    run_id          UUID REFERENCES eval_runs(run_id),
-    entry_id        VARCHAR NOT NULL,
-    -- Level 1: Core metrics
-    accuracy_score  FLOAT,
-    latency_ms      INT,
-    token_count     INT,
-    tool_accuracy   FLOAT,
-    cost_usd        FLOAT,
-    -- Level 2: Evalset regression
-    output_match    BOOLEAN,
-    trajectory_match BOOLEAN,
-    trajectory_type VARCHAR,  -- 'exact_order', 'in_order', 'any_order', 'single_tool'
-    -- Level 3: LLM-as-Judge
-    judge_verdict   JSONB,  -- full JudgeVerdict serialized
-    judge_weighted_score FLOAT,
-    -- Metadata
-    raw_output      TEXT,
-    raw_trajectory  JSONB,
-    evaluated_at    TIMESTAMPTZ NOT NULL
-);
+    ```sql
+    -- Core evaluation runs
+    CREATE TABLE eval_runs (
+        run_id          UUID PRIMARY KEY,
+        experiment_id   UUID REFERENCES experiments(experiment_id),
+        agent_id        VARCHAR NOT NULL,
+        agent_version   VARCHAR NOT NULL,
+        evalset_id      UUID NOT NULL,
+        evalset_version VARCHAR NOT NULL,
+        trigger_type    VARCHAR NOT NULL,  -- 'promotion', 'scheduled', 'sampling', 'ab_test', 'manual'
+        status          VARCHAR NOT NULL,  -- 'pending', 'running', 'completed', 'failed'
+        started_at      TIMESTAMPTZ NOT NULL,
+        completed_at    TIMESTAMPTZ,
+        created_by      VARCHAR NOT NULL
+    );
 
--- Aggregate run summaries
-CREATE TABLE eval_run_summaries (
-    run_id              UUID PRIMARY KEY REFERENCES eval_runs(run_id),
-    total_entries       INT NOT NULL,
-    passed_entries      INT NOT NULL,
-    accuracy_mean       FLOAT,
-    accuracy_std        FLOAT,
-    judge_score_mean    FLOAT,
-    judge_score_std     FLOAT,
-    latency_p50_ms      INT,
-    latency_p95_ms      INT,
-    latency_p99_ms      INT,
-    token_usage_mean    FLOAT,
-    tool_accuracy_mean  FLOAT,
-    cost_total_usd      FLOAT,
-    pass_rate           FLOAT,  -- passed_entries / total_entries
-    overall_verdict     VARCHAR NOT NULL  -- 'pass', 'fail', 'warning'
-);
-```
+    -- Per-entry results
+    CREATE TABLE eval_entry_results (
+        result_id       UUID PRIMARY KEY,
+        run_id          UUID REFERENCES eval_runs(run_id),
+        entry_id        VARCHAR NOT NULL,
+        -- Level 1: Core metrics
+        accuracy_score  FLOAT,
+        latency_ms      INT,
+        token_count     INT,
+        tool_accuracy   FLOAT,
+        cost_usd        FLOAT,
+        -- Level 2: Evalset regression
+        output_match    BOOLEAN,
+        trajectory_match BOOLEAN,
+        trajectory_type VARCHAR,  -- 'exact_order', 'in_order', 'any_order', 'single_tool'
+        -- Level 3: LLM-as-Judge
+        judge_verdict   JSONB,  -- full JudgeVerdict serialized
+        judge_weighted_score FLOAT,
+        -- Metadata
+        raw_output      TEXT,
+        raw_trajectory  JSONB,
+        evaluated_at    TIMESTAMPTZ NOT NULL
+    );
+
+    -- Aggregate run summaries
+    CREATE TABLE eval_run_summaries (
+        run_id              UUID PRIMARY KEY REFERENCES eval_runs(run_id),
+        total_entries       INT NOT NULL,
+        passed_entries      INT NOT NULL,
+        accuracy_mean       FLOAT,
+        accuracy_std        FLOAT,
+        judge_score_mean    FLOAT,
+        judge_score_std     FLOAT,
+        latency_p50_ms      INT,
+        latency_p95_ms      INT,
+        latency_p99_ms      INT,
+        token_usage_mean    FLOAT,
+        tool_accuracy_mean  FLOAT,
+        cost_total_usd      FLOAT,
+        pass_rate           FLOAT,  -- passed_entries / total_entries
+        overall_verdict     VARCHAR NOT NULL  -- 'pass', 'fail', 'warning'
+    );
+    ```
 
 ---
 
@@ -1374,29 +1390,31 @@ Prompt Registry                    Evaluation Framework
 
 Each agent can configure its eval gate policy:
 
-```json
-{
-  "agent_id": "research-agent",
-  "eval_gate_policy": {
-    "required_levels": [1, 2, 3],
-    "level_1_criteria": {
-      "min_accuracy": 0.85,
-      "max_latency_p95_ms": 8000,
-      "max_regression_pct": 5.0
-    },
-    "level_2_criteria": {
-      "min_pass_rate": 0.90,
-      "min_tool_accuracy": 0.85
-    },
-    "level_3_criteria": {
-      "min_judge_weighted_score": 0.75,
-      "max_regression_pct": 3.0
-    },
-    "on_warning": "hitl_review",
-    "on_failure": "reject_and_notify"
-  }
-}
-```
+??? example "View JSON example"
+
+    ```json
+    {
+      "agent_id": "research-agent",
+      "eval_gate_policy": {
+        "required_levels": [1, 2, 3],
+        "level_1_criteria": {
+          "min_accuracy": 0.85,
+          "max_latency_p95_ms": 8000,
+          "max_regression_pct": 5.0
+        },
+        "level_2_criteria": {
+          "min_pass_rate": 0.90,
+          "min_tool_accuracy": 0.85
+        },
+        "level_3_criteria": {
+          "min_judge_weighted_score": 0.75,
+          "max_regression_pct": 3.0
+        },
+        "on_warning": "hitl_review",
+        "on_failure": "reject_and_notify"
+      }
+    }
+    ```
 
 The `max_regression_pct` fields compare the new version against the **currently-deployed version** on the same evalset, ensuring that improvements are always relative to the established baseline (p. 305).
 
@@ -1418,60 +1436,70 @@ This enables the system to learn which types of prompt modifications lead to imp
 
 ### 9.1 Evalset Management
 
-```
-POST   /api/v1/evalsets                          Create a new evalset
-GET    /api/v1/evalsets                          List all evalsets (filterable)
-GET    /api/v1/evalsets/{evalset_id}             Get evalset by ID
-GET    /api/v1/evalsets/{evalset_id}/versions    List all versions
-PUT    /api/v1/evalsets/{evalset_id}/entries      Add/update entries (creates new version)
-DELETE /api/v1/evalsets/{evalset_id}/entries/{id} Remove an entry (creates new version)
-POST   /api/v1/evalsets/{evalset_id}/refresh     Trigger production-based refresh
-```
+??? example "View API example"
+
+    ```
+    POST   /api/v1/evalsets                          Create a new evalset
+    GET    /api/v1/evalsets                          List all evalsets (filterable)
+    GET    /api/v1/evalsets/{evalset_id}             Get evalset by ID
+    GET    /api/v1/evalsets/{evalset_id}/versions    List all versions
+    PUT    /api/v1/evalsets/{evalset_id}/entries      Add/update entries (creates new version)
+    DELETE /api/v1/evalsets/{evalset_id}/entries/{id} Remove an entry (creates new version)
+    POST   /api/v1/evalsets/{evalset_id}/refresh     Trigger production-based refresh
+    ```
 
 ### 9.2 Evaluation Runs
 
-```
-POST   /api/v1/eval-runs                         Trigger a new evaluation run
-GET    /api/v1/eval-runs                         List evaluation runs (filterable)
-GET    /api/v1/eval-runs/{run_id}                Get run details and summary
-GET    /api/v1/eval-runs/{run_id}/entries         Get per-entry results (paginated)
-GET    /api/v1/eval-runs/{run_id}/entries/{id}    Get single entry result with full detail
-POST   /api/v1/eval-runs/{run_id}/cancel         Cancel a running evaluation
-```
+??? example "View API example"
+
+    ```
+    POST   /api/v1/eval-runs                         Trigger a new evaluation run
+    GET    /api/v1/eval-runs                         List evaluation runs (filterable)
+    GET    /api/v1/eval-runs/{run_id}                Get run details and summary
+    GET    /api/v1/eval-runs/{run_id}/entries         Get per-entry results (paginated)
+    GET    /api/v1/eval-runs/{run_id}/entries/{id}    Get single entry result with full detail
+    POST   /api/v1/eval-runs/{run_id}/cancel         Cancel a running evaluation
+    ```
 
 ### 9.3 LLM-as-Judge
 
-```
-POST   /api/v1/judge/evaluate                    Run a single judge evaluation
-POST   /api/v1/judge/evaluate-batch               Run judge evaluation over a batch
-GET    /api/v1/judge/rubrics                      List available rubrics
-POST   /api/v1/judge/rubrics                      Create a custom rubric
-GET    /api/v1/judge/rubrics/{rubric_id}          Get rubric details
-PUT    /api/v1/judge/rubrics/{rubric_id}          Update a rubric
-```
+??? example "View API example"
+
+    ```
+    POST   /api/v1/judge/evaluate                    Run a single judge evaluation
+    POST   /api/v1/judge/evaluate-batch               Run judge evaluation over a batch
+    GET    /api/v1/judge/rubrics                      List available rubrics
+    POST   /api/v1/judge/rubrics                      Create a custom rubric
+    GET    /api/v1/judge/rubrics/{rubric_id}          Get rubric details
+    PUT    /api/v1/judge/rubrics/{rubric_id}          Update a rubric
+    ```
 
 ### 9.4 Experiments (A/B Testing)
 
-```
-POST   /api/v1/experiments                       Create a new experiment
-GET    /api/v1/experiments                       List experiments (filterable by status)
-GET    /api/v1/experiments/{exp_id}              Get experiment details
-PUT    /api/v1/experiments/{exp_id}/status        Update experiment status (start/stop)
-GET    /api/v1/experiments/{exp_id}/analysis      Get current statistical analysis
-GET    /api/v1/experiments/{exp_id}/variants      Get per-variant metrics
-POST   /api/v1/experiments/{exp_id}/declare-winner Manually declare a winner
-```
+??? example "View API example"
+
+    ```
+    POST   /api/v1/experiments                       Create a new experiment
+    GET    /api/v1/experiments                       List experiments (filterable by status)
+    GET    /api/v1/experiments/{exp_id}              Get experiment details
+    PUT    /api/v1/experiments/{exp_id}/status        Update experiment status (start/stop)
+    GET    /api/v1/experiments/{exp_id}/analysis      Get current statistical analysis
+    GET    /api/v1/experiments/{exp_id}/variants      Get per-variant metrics
+    POST   /api/v1/experiments/{exp_id}/declare-winner Manually declare a winner
+    ```
 
 ### 9.5 Benchmarks & Leaderboard
 
-```
-GET    /api/v1/benchmarks                        List available benchmarks
-POST   /api/v1/benchmarks                        Register a custom benchmark
-POST   /api/v1/benchmarks/{bench_id}/run          Trigger a benchmark run
-GET    /api/v1/benchmarks/{bench_id}/results       Get results for a benchmark
-GET    /api/v1/leaderboard                       Get global leaderboard
-GET    /api/v1/leaderboard/{agent_id}            Get leaderboard history for an agent
-```
+??? example "View API example"
+
+    ```
+    GET    /api/v1/benchmarks                        List available benchmarks
+    POST   /api/v1/benchmarks                        Register a custom benchmark
+    POST   /api/v1/benchmarks/{bench_id}/run          Trigger a benchmark run
+    GET    /api/v1/benchmarks/{bench_id}/results       Get results for a benchmark
+    GET    /api/v1/leaderboard                       Get global leaderboard
+    GET    /api/v1/leaderboard/{agent_id}            Get leaderboard history for an agent
+    ```
 
 ### 9.6 Eval Gates (Prompt Registry Integration)
 

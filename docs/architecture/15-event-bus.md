@@ -113,34 +113,36 @@ The design follows the principle from Multi-Agent Collaboration (p. 127): avoid 
 
 Every event in the platform follows a single, uniform envelope structure. This is non-negotiable -- no subsystem may publish a raw payload without the envelope. The envelope design draws from the A2A task state model (p. 245), where every state transition carries a standardized structure containing the task identifier, new state, and associated data.
 
-```json
-{
-  "$schema": "https://agentforge.io/schemas/event-envelope/v1.json",
-  "id": "evt-550e8400-e29b-41d4-a716-446655440000",
-  "type": "agent.deployed",
-  "source": "subsystem:agent-builder",
-  "subject": "agent:research-agent-v2.3.1",
-  "timestamp": "2026-02-27T14:32:10.847Z",
-  "spec_version": "1.0",
-  "data_content_type": "application/json",
-  "data": {
-    "agent_id": "agent-research-001",
-    "agent_version": "2.3.1",
-    "deployment_target": "production",
-    "previous_version": "2.3.0"
-  },
-  "metadata": {
-    "trace_id": "tr-8f3a2b4c",
-    "span_id": "sp-001",
-    "correlation_id": "req-7890abcd",
-    "causation_id": "evt-prev-1234",
-    "tenant_id": "tenant-acme",
-    "environment": "production",
-    "schema_version": "1.0.0",
-    "idempotency_key": "deploy-research-agent-2.3.1-1709044330"
-  }
-}
-```
+??? example "View JSON example"
+
+    ```json
+    {
+      "$schema": "https://agentforge.io/schemas/event-envelope/v1.json",
+      "id": "evt-550e8400-e29b-41d4-a716-446655440000",
+      "type": "agent.deployed",
+      "source": "subsystem:agent-builder",
+      "subject": "agent:research-agent-v2.3.1",
+      "timestamp": "2026-02-27T14:32:10.847Z",
+      "spec_version": "1.0",
+      "data_content_type": "application/json",
+      "data": {
+        "agent_id": "agent-research-001",
+        "agent_version": "2.3.1",
+        "deployment_target": "production",
+        "previous_version": "2.3.0"
+      },
+      "metadata": {
+        "trace_id": "tr-8f3a2b4c",
+        "span_id": "sp-001",
+        "correlation_id": "req-7890abcd",
+        "causation_id": "evt-prev-1234",
+        "tenant_id": "tenant-acme",
+        "environment": "production",
+        "schema_version": "1.0.0",
+        "idempotency_key": "deploy-research-agent-2.3.1-1709044330"
+      }
+    }
+    ```
 
 ### 2.2 Envelope Field Definitions
 
@@ -165,92 +167,94 @@ Every event in the platform follows a single, uniform envelope structure. This i
 
 ### 2.3 Event Envelope Python Model
 
-```python
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Optional
-import uuid
+??? example "View Python pseudocode"
+
+    ```python
+    from dataclasses import dataclass, field
+    from datetime import datetime, timezone
+    from typing import Any, Optional
+    import uuid
 
 
-@dataclass(frozen=True)
-class EventMetadata:
-    """Metadata attached to every event for tracing, correlation, and governance."""
-    trace_id: str
-    tenant_id: str
-    environment: str
-    schema_version: str
-    span_id: Optional[str] = None
-    correlation_id: Optional[str] = None
-    causation_id: Optional[str] = None
-    idempotency_key: Optional[str] = None
+    @dataclass(frozen=True)
+    class EventMetadata:
+        """Metadata attached to every event for tracing, correlation, and governance."""
+        trace_id: str
+        tenant_id: str
+        environment: str
+        schema_version: str
+        span_id: Optional[str] = None
+        correlation_id: Optional[str] = None
+        causation_id: Optional[str] = None
+        idempotency_key: Optional[str] = None
 
 
-@dataclass(frozen=True)
-class Event:
-    """
-    Standard event envelope for all platform events.
-    Immutable after creation -- events are facts, never modified.
-    """
-    type: str
-    source: str
-    data: dict[str, Any]
-    metadata: EventMetadata
-    id: str = field(default_factory=lambda: f"evt-{uuid.uuid4()}")
-    timestamp: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
-    subject: Optional[str] = None
-    spec_version: str = "1.0"
-    data_content_type: str = "application/json"
-
-    def to_dict(self) -> dict[str, Any]:
-        """Serialize to dictionary for transport."""
-        return {
-            "id": self.id,
-            "type": self.type,
-            "source": self.source,
-            "subject": self.subject,
-            "timestamp": self.timestamp,
-            "spec_version": self.spec_version,
-            "data_content_type": self.data_content_type,
-            "data": self.data,
-            "metadata": {
-                "trace_id": self.metadata.trace_id,
-                "span_id": self.metadata.span_id,
-                "correlation_id": self.metadata.correlation_id,
-                "causation_id": self.metadata.causation_id,
-                "tenant_id": self.metadata.tenant_id,
-                "environment": self.metadata.environment,
-                "schema_version": self.metadata.schema_version,
-                "idempotency_key": self.metadata.idempotency_key,
-            },
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Event":
-        """Deserialize from dictionary."""
-        meta = data["metadata"]
-        return cls(
-            id=data["id"],
-            type=data["type"],
-            source=data["source"],
-            subject=data.get("subject"),
-            timestamp=data["timestamp"],
-            spec_version=data["spec_version"],
-            data_content_type=data["data_content_type"],
-            data=data["data"],
-            metadata=EventMetadata(
-                trace_id=meta["trace_id"],
-                span_id=meta.get("span_id"),
-                correlation_id=meta.get("correlation_id"),
-                causation_id=meta.get("causation_id"),
-                tenant_id=meta["tenant_id"],
-                environment=meta["environment"],
-                schema_version=meta["schema_version"],
-                idempotency_key=meta.get("idempotency_key"),
-            ),
+    @dataclass(frozen=True)
+    class Event:
+        """
+        Standard event envelope for all platform events.
+        Immutable after creation -- events are facts, never modified.
+        """
+        type: str
+        source: str
+        data: dict[str, Any]
+        metadata: EventMetadata
+        id: str = field(default_factory=lambda: f"evt-{uuid.uuid4()}")
+        timestamp: str = field(
+            default_factory=lambda: datetime.now(timezone.utc).isoformat()
         )
-```
+        subject: Optional[str] = None
+        spec_version: str = "1.0"
+        data_content_type: str = "application/json"
+
+        def to_dict(self) -> dict[str, Any]:
+            """Serialize to dictionary for transport."""
+            return {
+                "id": self.id,
+                "type": self.type,
+                "source": self.source,
+                "subject": self.subject,
+                "timestamp": self.timestamp,
+                "spec_version": self.spec_version,
+                "data_content_type": self.data_content_type,
+                "data": self.data,
+                "metadata": {
+                    "trace_id": self.metadata.trace_id,
+                    "span_id": self.metadata.span_id,
+                    "correlation_id": self.metadata.correlation_id,
+                    "causation_id": self.metadata.causation_id,
+                    "tenant_id": self.metadata.tenant_id,
+                    "environment": self.metadata.environment,
+                    "schema_version": self.metadata.schema_version,
+                    "idempotency_key": self.metadata.idempotency_key,
+                },
+            }
+
+        @classmethod
+        def from_dict(cls, data: dict[str, Any]) -> "Event":
+            """Deserialize from dictionary."""
+            meta = data["metadata"]
+            return cls(
+                id=data["id"],
+                type=data["type"],
+                source=data["source"],
+                subject=data.get("subject"),
+                timestamp=data["timestamp"],
+                spec_version=data["spec_version"],
+                data_content_type=data["data_content_type"],
+                data=data["data"],
+                metadata=EventMetadata(
+                    trace_id=meta["trace_id"],
+                    span_id=meta.get("span_id"),
+                    correlation_id=meta.get("correlation_id"),
+                    causation_id=meta.get("causation_id"),
+                    tenant_id=meta["tenant_id"],
+                    environment=meta["environment"],
+                    schema_version=meta["schema_version"],
+                    idempotency_key=meta.get("idempotency_key"),
+                ),
+            )
+    ```
 
 ---
 
@@ -549,204 +553,206 @@ Publisher                  Event Bus                         Subscriber
 
 Every subsystem uses the `EventPublisher` client to emit events. The client handles serialization, schema validation, retry on publish failure, and trace context propagation.
 
-```python
-import json
-import time
-import logging
-from typing import Any, Optional
+??? example "View Python pseudocode"
 
-import redis.asyncio as redis
+    ```python
+    import json
+    import time
+    import logging
+    from typing import Any, Optional
 
-from agentforge.events.schema import Event, EventMetadata
-from agentforge.events.registry import SchemaRegistry
-from agentforge.observability import get_current_trace_context
+    import redis.asyncio as redis
+
+    from agentforge.events.schema import Event, EventMetadata
+    from agentforge.events.registry import SchemaRegistry
+    from agentforge.observability import get_current_trace_context
 
 
-logger = logging.getLogger("agentforge.events.publisher")
+    logger = logging.getLogger("agentforge.events.publisher")
 
 
-class EventPublisher:
-    """
-    Client for publishing events to the Event Bus.
-
-    Used by all subsystems to emit structured events. Handles schema
-    validation, serialization, and reliable delivery to Redis Streams.
-
-    Usage:
-        publisher = EventPublisher(redis_client, schema_registry, source="subsystem:agent-builder")
-        await publisher.publish(
-            event_type="agent.deployed",
-            data={"agent_id": "agent-001", "version": "2.3.1", ...},
-            subject="agent:agent-001",
-        )
-    """
-
-    def __init__(
-        self,
-        redis_client: redis.Redis,
-        schema_registry: "SchemaRegistry",
-        source: str,
-        environment: str = "production",
-        tenant_id: str = "default",
-        max_publish_retries: int = 3,
-    ):
-        self._redis = redis_client
-        self._schema_registry = schema_registry
-        self._source = source
-        self._environment = environment
-        self._tenant_id = tenant_id
-        self._max_retries = max_publish_retries
-
-    def _resolve_stream(self, event_type: str) -> str:
+    class EventPublisher:
         """
-        Map event type to Redis Stream name.
-        'agent.deployed' -> 'events:agent'
-        'team.task.submitted' -> 'events:team'
-        """
-        namespace = event_type.split(".")[0]
-        return f"events:{namespace}"
+        Client for publishing events to the Event Bus.
 
-    async def publish(
-        self,
-        event_type: str,
-        data: dict[str, Any],
-        subject: Optional[str] = None,
-        correlation_id: Optional[str] = None,
-        causation_id: Optional[str] = None,
-        idempotency_key: Optional[str] = None,
-        schema_version: str = "1.0.0",
-    ) -> str:
-        """
-        Publish a single event to the Event Bus.
+        Used by all subsystems to emit structured events. Handles schema
+        validation, serialization, and reliable delivery to Redis Streams.
 
-        Validates the event data against the registered schema, wraps it
-        in the standard envelope, and appends it to the appropriate
-        Redis Stream.
-
-        Returns the event ID on success.
-        Raises EventPublishError on failure after all retries.
-        """
-        # Build the event envelope
-        trace_ctx = get_current_trace_context()
-        metadata = EventMetadata(
-            trace_id=trace_ctx.trace_id,
-            span_id=trace_ctx.span_id,
-            correlation_id=correlation_id,
-            causation_id=causation_id,
-            tenant_id=self._tenant_id,
-            environment=self._environment,
-            schema_version=schema_version,
-            idempotency_key=idempotency_key,
-        )
-        event = Event(
-            type=event_type,
-            source=self._source,
-            data=data,
-            metadata=metadata,
-            subject=subject,
-        )
-
-        # Validate against schema registry
-        validation_result = self._schema_registry.validate(event)
-        if not validation_result.valid:
-            raise EventSchemaError(
-                f"Event data for '{event_type}' failed schema validation: "
-                f"{validation_result.errors}"
+        Usage:
+            publisher = EventPublisher(redis_client, schema_registry, source="subsystem:agent-builder")
+            await publisher.publish(
+                event_type="agent.deployed",
+                data={"agent_id": "agent-001", "version": "2.3.1", ...},
+                subject="agent:agent-001",
             )
-
-        # Publish to Redis Stream with retry
-        stream = self._resolve_stream(event_type)
-        serialized = json.dumps(event.to_dict())
-
-        for attempt in range(1, self._max_retries + 1):
-            try:
-                stream_id = await self._redis.xadd(
-                    stream,
-                    {"event": serialized},
-                    maxlen=1_000_000,  # cap stream length, oldest trimmed
-                )
-                logger.info(
-                    "Published event",
-                    extra={
-                        "event_id": event.id,
-                        "event_type": event_type,
-                        "stream": stream,
-                        "stream_id": stream_id,
-                        "attempt": attempt,
-                    },
-                )
-                return event.id
-
-            except redis.RedisError as exc:
-                logger.warning(
-                    "Publish attempt failed",
-                    extra={
-                        "event_id": event.id,
-                        "stream": stream,
-                        "attempt": attempt,
-                        "error": str(exc),
-                    },
-                )
-                if attempt == self._max_retries:
-                    raise EventPublishError(
-                        f"Failed to publish event {event.id} after "
-                        f"{self._max_retries} attempts: {exc}"
-                    ) from exc
-                await self._backoff(attempt)
-
-    async def publish_batch(
-        self,
-        events: list[tuple[str, dict[str, Any]]],
-        **kwargs,
-    ) -> list[str]:
         """
-        Publish multiple events atomically using a Redis pipeline.
-        Each tuple is (event_type, data).
-        Returns list of event IDs.
-        """
-        pipe = self._redis.pipeline()
-        built_events = []
 
-        for event_type, data in events:
+        def __init__(
+            self,
+            redis_client: redis.Redis,
+            schema_registry: "SchemaRegistry",
+            source: str,
+            environment: str = "production",
+            tenant_id: str = "default",
+            max_publish_retries: int = 3,
+        ):
+            self._redis = redis_client
+            self._schema_registry = schema_registry
+            self._source = source
+            self._environment = environment
+            self._tenant_id = tenant_id
+            self._max_retries = max_publish_retries
+
+        def _resolve_stream(self, event_type: str) -> str:
+            """
+            Map event type to Redis Stream name.
+            'agent.deployed' -> 'events:agent'
+            'team.task.submitted' -> 'events:team'
+            """
+            namespace = event_type.split(".")[0]
+            return f"events:{namespace}"
+
+        async def publish(
+            self,
+            event_type: str,
+            data: dict[str, Any],
+            subject: Optional[str] = None,
+            correlation_id: Optional[str] = None,
+            causation_id: Optional[str] = None,
+            idempotency_key: Optional[str] = None,
+            schema_version: str = "1.0.0",
+        ) -> str:
+            """
+            Publish a single event to the Event Bus.
+
+            Validates the event data against the registered schema, wraps it
+            in the standard envelope, and appends it to the appropriate
+            Redis Stream.
+
+            Returns the event ID on success.
+            Raises EventPublishError on failure after all retries.
+            """
+            # Build the event envelope
             trace_ctx = get_current_trace_context()
             metadata = EventMetadata(
                 trace_id=trace_ctx.trace_id,
                 span_id=trace_ctx.span_id,
+                correlation_id=correlation_id,
+                causation_id=causation_id,
                 tenant_id=self._tenant_id,
                 environment=self._environment,
-                schema_version=kwargs.get("schema_version", "1.0.0"),
+                schema_version=schema_version,
+                idempotency_key=idempotency_key,
             )
             event = Event(
                 type=event_type,
                 source=self._source,
                 data=data,
                 metadata=metadata,
+                subject=subject,
             )
+
+            # Validate against schema registry
+            validation_result = self._schema_registry.validate(event)
+            if not validation_result.valid:
+                raise EventSchemaError(
+                    f"Event data for '{event_type}' failed schema validation: "
+                    f"{validation_result.errors}"
+                )
+
+            # Publish to Redis Stream with retry
             stream = self._resolve_stream(event_type)
             serialized = json.dumps(event.to_dict())
-            pipe.xadd(stream, {"event": serialized}, maxlen=1_000_000)
-            built_events.append(event)
 
-        await pipe.execute()
-        return [e.id for e in built_events]
+            for attempt in range(1, self._max_retries + 1):
+                try:
+                    stream_id = await self._redis.xadd(
+                        stream,
+                        {"event": serialized},
+                        maxlen=1_000_000,  # cap stream length, oldest trimmed
+                    )
+                    logger.info(
+                        "Published event",
+                        extra={
+                            "event_id": event.id,
+                            "event_type": event_type,
+                            "stream": stream,
+                            "stream_id": stream_id,
+                            "attempt": attempt,
+                        },
+                    )
+                    return event.id
 
-    @staticmethod
-    async def _backoff(attempt: int) -> None:
-        """Exponential backoff: 100ms, 200ms, 400ms, ..."""
-        import asyncio
-        delay = 0.1 * (2 ** (attempt - 1))
-        await asyncio.sleep(delay)
+                except redis.RedisError as exc:
+                    logger.warning(
+                        "Publish attempt failed",
+                        extra={
+                            "event_id": event.id,
+                            "stream": stream,
+                            "attempt": attempt,
+                            "error": str(exc),
+                        },
+                    )
+                    if attempt == self._max_retries:
+                        raise EventPublishError(
+                            f"Failed to publish event {event.id} after "
+                            f"{self._max_retries} attempts: {exc}"
+                        ) from exc
+                    await self._backoff(attempt)
+
+        async def publish_batch(
+            self,
+            events: list[tuple[str, dict[str, Any]]],
+            **kwargs,
+        ) -> list[str]:
+            """
+            Publish multiple events atomically using a Redis pipeline.
+            Each tuple is (event_type, data).
+            Returns list of event IDs.
+            """
+            pipe = self._redis.pipeline()
+            built_events = []
+
+            for event_type, data in events:
+                trace_ctx = get_current_trace_context()
+                metadata = EventMetadata(
+                    trace_id=trace_ctx.trace_id,
+                    span_id=trace_ctx.span_id,
+                    tenant_id=self._tenant_id,
+                    environment=self._environment,
+                    schema_version=kwargs.get("schema_version", "1.0.0"),
+                )
+                event = Event(
+                    type=event_type,
+                    source=self._source,
+                    data=data,
+                    metadata=metadata,
+                )
+                stream = self._resolve_stream(event_type)
+                serialized = json.dumps(event.to_dict())
+                pipe.xadd(stream, {"event": serialized}, maxlen=1_000_000)
+                built_events.append(event)
+
+            await pipe.execute()
+            return [e.id for e in built_events]
+
+        @staticmethod
+        async def _backoff(attempt: int) -> None:
+            """Exponential backoff: 100ms, 200ms, 400ms, ..."""
+            import asyncio
+            delay = 0.1 * (2 ** (attempt - 1))
+            await asyncio.sleep(delay)
 
 
-class EventPublishError(Exception):
-    """Raised when event publishing fails after all retry attempts."""
-    pass
+    class EventPublishError(Exception):
+        """Raised when event publishing fails after all retry attempts."""
+        pass
 
 
-class EventSchemaError(Exception):
-    """Raised when event data does not conform to the registered schema."""
-    pass
-```
+    class EventSchemaError(Exception):
+        """Raised when event data does not conform to the registered schema."""
+        pass
+    ```
 
 ### 5.2 Publishing Patterns
 
@@ -754,43 +760,49 @@ Subsystems follow standard patterns when publishing events:
 
 **Pattern 1: Fire-and-forget (non-critical events)**
 
-```python
-# Tool invocation logging -- high volume, best-effort
-await publisher.publish(
-    event_type="tool.invoked",
-    data={"tool_server": "mcp://db-server", "tool_name": "sql_query", "agent_id": agent_id},
-)
-```
+??? example "View Python pseudocode"
+
+    ```python
+    # Tool invocation logging -- high volume, best-effort
+    await publisher.publish(
+        event_type="tool.invoked",
+        data={"tool_server": "mcp://db-server", "tool_name": "sql_query", "agent_id": agent_id},
+    )
+    ```
 
 **Pattern 2: Correlated event chain (workflow tracking)**
 
-```python
-# Deployment workflow -- each event references the previous one
-deploy_evt_id = await publisher.publish(
-    event_type="deployment.started",
-    data={"deployment_id": dep_id, "entity_id": agent_id, "version": "2.3.1"},
-    correlation_id=request_id,
-)
+??? example "View Python pseudocode"
 
-# Later, after canary evaluation...
-await publisher.publish(
-    event_type="deployment.canary_promoted",
-    data={"deployment_id": dep_id, "canary_metrics": metrics},
-    correlation_id=request_id,
-    causation_id=deploy_evt_id,
-)
-```
+    ```python
+    # Deployment workflow -- each event references the previous one
+    deploy_evt_id = await publisher.publish(
+        event_type="deployment.started",
+        data={"deployment_id": dep_id, "entity_id": agent_id, "version": "2.3.1"},
+        correlation_id=request_id,
+    )
+
+    # Later, after canary evaluation...
+    await publisher.publish(
+        event_type="deployment.canary_promoted",
+        data={"deployment_id": dep_id, "canary_metrics": metrics},
+        correlation_id=request_id,
+        causation_id=deploy_evt_id,
+    )
+    ```
 
 **Pattern 3: Idempotent publish (exactly-once semantics for critical events)**
 
-```python
-# Budget exceeded -- must not trigger duplicate degradation
-await publisher.publish(
-    event_type="budget.exceeded",
-    data={"budget_id": budget_id, "entity_id": team_id, "overage_amount": 12.50},
-    idempotency_key=f"budget-exceeded-{budget_id}-{current_period}",
-)
-```
+??? example "View Python pseudocode"
+
+    ```python
+    # Budget exceeded -- must not trigger duplicate degradation
+    await publisher.publish(
+        event_type="budget.exceeded",
+        data={"budget_id": budget_id, "entity_id": team_id, "overage_amount": 12.50},
+        idempotency_key=f"budget-exceeded-{budget_id}-{current_period}",
+    )
+    ```
 
 ---
 
@@ -800,243 +812,245 @@ await publisher.publish(
 
 Subscribers use consumer groups to receive events. Multiple instances of the same subscriber share a consumer group so that each event is processed by exactly one instance (load balancing). Different subscriber groups each receive their own copy of every event (fan-out).
 
-```python
-import json
-import asyncio
-import logging
-from typing import Any, Callable, Awaitable, Optional
-from dataclasses import dataclass
+??? example "View Python pseudocode"
 
-import redis.asyncio as redis
+    ```python
+    import json
+    import asyncio
+    import logging
+    from typing import Any, Callable, Awaitable, Optional
+    from dataclasses import dataclass
 
-from agentforge.events.schema import Event
+    import redis.asyncio as redis
+
+    from agentforge.events.schema import Event
 
 
-logger = logging.getLogger("agentforge.events.subscriber")
+    logger = logging.getLogger("agentforge.events.subscriber")
 
 
-@dataclass
-class SubscriptionFilter:
-    """
-    Filter criteria for event subscriptions.
-    Subscribers only receive events matching ALL specified criteria.
-    """
-    event_types: Optional[list[str]] = None       # e.g., ["agent.deployed", "agent.failed"]
-    source_prefix: Optional[str] = None            # e.g., "subsystem:agent-builder"
-    subject_prefix: Optional[str] = None           # e.g., "agent:"
-    tenant_id: Optional[str] = None                # e.g., "tenant-acme"
-    min_severity: Optional[str] = None             # for guardrail events: "low", "medium", "high", "critical"
+    @dataclass
+    class SubscriptionFilter:
+        """
+        Filter criteria for event subscriptions.
+        Subscribers only receive events matching ALL specified criteria.
+        """
+        event_types: Optional[list[str]] = None       # e.g., ["agent.deployed", "agent.failed"]
+        source_prefix: Optional[str] = None            # e.g., "subsystem:agent-builder"
+        subject_prefix: Optional[str] = None           # e.g., "agent:"
+        tenant_id: Optional[str] = None                # e.g., "tenant-acme"
+        min_severity: Optional[str] = None             # for guardrail events: "low", "medium", "high", "critical"
 
-    def matches(self, event: Event) -> bool:
-        """Evaluate whether an event passes this filter."""
-        if self.event_types and event.type not in self.event_types:
-            return False
-        if self.source_prefix and not event.source.startswith(self.source_prefix):
-            return False
-        if self.subject_prefix and (
-            event.subject is None or not event.subject.startswith(self.subject_prefix)
-        ):
-            return False
-        if self.tenant_id and event.metadata.tenant_id != self.tenant_id:
-            return False
-        if self.min_severity:
-            event_severity = event.data.get("severity", "low")
-            severity_order = {"low": 0, "medium": 1, "high": 2, "critical": 3}
-            if severity_order.get(event_severity, 0) < severity_order.get(self.min_severity, 0):
+        def matches(self, event: Event) -> bool:
+            """Evaluate whether an event passes this filter."""
+            if self.event_types and event.type not in self.event_types:
                 return False
-        return True
+            if self.source_prefix and not event.source.startswith(self.source_prefix):
+                return False
+            if self.subject_prefix and (
+                event.subject is None or not event.subject.startswith(self.subject_prefix)
+            ):
+                return False
+            if self.tenant_id and event.metadata.tenant_id != self.tenant_id:
+                return False
+            if self.min_severity:
+                event_severity = event.data.get("severity", "low")
+                severity_order = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+                if severity_order.get(event_severity, 0) < severity_order.get(self.min_severity, 0):
+                    return False
+            return True
 
 
-# Type alias for event handler callbacks
-EventHandler = Callable[[Event], Awaitable[None]]
+    # Type alias for event handler callbacks
+    EventHandler = Callable[[Event], Awaitable[None]]
 
 
-class EventSubscriber:
-    """
-    Client for consuming events from the Event Bus.
-
-    Manages consumer group membership, long-poll reading, client-side
-    filtering, acknowledgment, and retry/DLQ escalation.
-
-    Usage:
-        subscriber = EventSubscriber(redis_client, group="observability", consumer="obs-1")
-        subscriber.subscribe("events:agent", handler=handle_agent_event, filter=my_filter)
-        await subscriber.start()
-    """
-
-    def __init__(
-        self,
-        redis_client: redis.Redis,
-        group: str,
-        consumer: str,
-        max_retries: int = 3,
-        retry_delay_ms: int = 1000,
-        block_ms: int = 5000,
-        batch_size: int = 10,
-    ):
-        self._redis = redis_client
-        self._group = group
-        self._consumer = consumer
-        self._max_retries = max_retries
-        self._retry_delay_ms = retry_delay_ms
-        self._block_ms = block_ms
-        self._batch_size = batch_size
-        self._subscriptions: list[tuple[str, EventHandler, Optional[SubscriptionFilter]]] = []
-        self._running = False
-
-    def subscribe(
-        self,
-        stream: str,
-        handler: EventHandler,
-        filter: Optional[SubscriptionFilter] = None,
-    ) -> None:
-        """Register a handler for a stream with optional filtering."""
-        self._subscriptions.append((stream, handler, filter))
-
-    async def start(self) -> None:
+    class EventSubscriber:
         """
-        Start consuming events from all subscribed streams.
-        Creates consumer groups if they do not exist.
-        Runs until stop() is called.
+        Client for consuming events from the Event Bus.
+
+        Manages consumer group membership, long-poll reading, client-side
+        filtering, acknowledgment, and retry/DLQ escalation.
+
+        Usage:
+            subscriber = EventSubscriber(redis_client, group="observability", consumer="obs-1")
+            subscriber.subscribe("events:agent", handler=handle_agent_event, filter=my_filter)
+            await subscriber.start()
         """
-        self._running = True
 
-        # Ensure consumer groups exist
-        for stream, _, _ in self._subscriptions:
-            try:
-                await self._redis.xgroup_create(
-                    stream, self._group, id="0", mkstream=True
-                )
-            except redis.ResponseError as e:
-                if "BUSYGROUP" not in str(e):
-                    raise  # Group already exists -- safe to ignore
+        def __init__(
+            self,
+            redis_client: redis.Redis,
+            group: str,
+            consumer: str,
+            max_retries: int = 3,
+            retry_delay_ms: int = 1000,
+            block_ms: int = 5000,
+            batch_size: int = 10,
+        ):
+            self._redis = redis_client
+            self._group = group
+            self._consumer = consumer
+            self._max_retries = max_retries
+            self._retry_delay_ms = retry_delay_ms
+            self._block_ms = block_ms
+            self._batch_size = batch_size
+            self._subscriptions: list[tuple[str, EventHandler, Optional[SubscriptionFilter]]] = []
+            self._running = False
 
-        logger.info(
-            "EventSubscriber started",
-            extra={
-                "group": self._group,
-                "consumer": self._consumer,
-                "streams": [s for s, _, _ in self._subscriptions],
-            },
-        )
+        def subscribe(
+            self,
+            stream: str,
+            handler: EventHandler,
+            filter: Optional[SubscriptionFilter] = None,
+        ) -> None:
+            """Register a handler for a stream with optional filtering."""
+            self._subscriptions.append((stream, handler, filter))
 
-        while self._running:
-            await self._poll_cycle()
+        async def start(self) -> None:
+            """
+            Start consuming events from all subscribed streams.
+            Creates consumer groups if they do not exist.
+            Runs until stop() is called.
+            """
+            self._running = True
 
-    async def stop(self) -> None:
-        """Gracefully stop the subscriber."""
-        self._running = False
+            # Ensure consumer groups exist
+            for stream, _, _ in self._subscriptions:
+                try:
+                    await self._redis.xgroup_create(
+                        stream, self._group, id="0", mkstream=True
+                    )
+                except redis.ResponseError as e:
+                    if "BUSYGROUP" not in str(e):
+                        raise  # Group already exists -- safe to ignore
 
-    async def _poll_cycle(self) -> None:
-        """Execute one read cycle across all subscribed streams."""
-        streams = {stream: ">" for stream, _, _ in self._subscriptions}
-        try:
-            results = await self._redis.xreadgroup(
-                groupname=self._group,
-                consumername=self._consumer,
-                streams=streams,
-                count=self._batch_size,
-                block=self._block_ms,
+            logger.info(
+                "EventSubscriber started",
+                extra={
+                    "group": self._group,
+                    "consumer": self._consumer,
+                    "streams": [s for s, _, _ in self._subscriptions],
+                },
             )
-        except redis.RedisError as exc:
-            logger.error(f"XREADGROUP failed: {exc}")
-            await asyncio.sleep(1)
-            return
 
-        if not results:
-            return  # No new messages in this cycle
+            while self._running:
+                await self._poll_cycle()
 
-        for stream_name, messages in results:
-            handler, filter_ = self._find_handler(stream_name)
-            for message_id, fields in messages:
-                event_data = json.loads(fields[b"event"])
-                event = Event.from_dict(event_data)
+        async def stop(self) -> None:
+            """Gracefully stop the subscriber."""
+            self._running = False
 
-                # Client-side filtering
-                if filter_ and not filter_.matches(event):
-                    await self._redis.xack(stream_name, self._group, message_id)
-                    continue
-
-                # Process with retry
-                await self._process_with_retry(
-                    stream_name, message_id, event, handler
-                )
-
-    def _find_handler(
-        self, stream_name: str
-    ) -> tuple[EventHandler, Optional[SubscriptionFilter]]:
-        """Look up the handler and filter for a given stream."""
-        stream_str = stream_name.decode() if isinstance(stream_name, bytes) else stream_name
-        for stream, handler, filter_ in self._subscriptions:
-            if stream == stream_str:
-                return handler, filter_
-        raise ValueError(f"No handler registered for stream: {stream_str}")
-
-    async def _process_with_retry(
-        self,
-        stream: str,
-        message_id: str,
-        event: Event,
-        handler: EventHandler,
-    ) -> None:
-        """
-        Attempt to process an event. Retry on failure up to max_retries.
-        If all retries fail, move the event to the Dead Letter Queue.
-        """
-        for attempt in range(1, self._max_retries + 1):
+        async def _poll_cycle(self) -> None:
+            """Execute one read cycle across all subscribed streams."""
+            streams = {stream: ">" for stream, _, _ in self._subscriptions}
             try:
-                await handler(event)
-                await self._redis.xack(stream, self._group, message_id)
-                logger.debug(
-                    "Event processed",
-                    extra={"event_id": event.id, "stream": stream, "attempt": attempt},
+                results = await self._redis.xreadgroup(
+                    groupname=self._group,
+                    consumername=self._consumer,
+                    streams=streams,
+                    count=self._batch_size,
+                    block=self._block_ms,
                 )
+            except redis.RedisError as exc:
+                logger.error(f"XREADGROUP failed: {exc}")
+                await asyncio.sleep(1)
                 return
-            except Exception as exc:
-                logger.warning(
-                    "Event processing failed",
-                    extra={
-                        "event_id": event.id,
-                        "stream": stream,
-                        "attempt": attempt,
-                        "error": str(exc),
-                    },
-                )
-                if attempt < self._max_retries:
-                    await asyncio.sleep(self._retry_delay_ms / 1000 * attempt)
 
-        # All retries exhausted -- send to DLQ
-        await self._send_to_dlq(stream, message_id, event)
+            if not results:
+                return  # No new messages in this cycle
 
-    async def _send_to_dlq(
-        self, source_stream: str, message_id: str, event: Event
-    ) -> None:
-        """Move a failed event to the Dead Letter Queue stream."""
-        import time
+            for stream_name, messages in results:
+                handler, filter_ = self._find_handler(stream_name)
+                for message_id, fields in messages:
+                    event_data = json.loads(fields[b"event"])
+                    event = Event.from_dict(event_data)
 
-        dlq_entry = {
-            "event": json.dumps(event.to_dict()),
-            "source_stream": source_stream,
-            "original_message_id": message_id.decode()
-                if isinstance(message_id, bytes) else message_id,
-            "consumer_group": self._group,
-            "consumer": self._consumer,
-            "failure_timestamp": time.time(),
-            "retry_count": self._max_retries,
-        }
-        await self._redis.xadd("events:dlq", {
-            "entry": json.dumps(dlq_entry),
-        })
-        await self._redis.xack(source_stream, self._group, message_id)
-        logger.error(
-            "Event moved to DLQ",
-            extra={
-                "event_id": event.id,
+                    # Client-side filtering
+                    if filter_ and not filter_.matches(event):
+                        await self._redis.xack(stream_name, self._group, message_id)
+                        continue
+
+                    # Process with retry
+                    await self._process_with_retry(
+                        stream_name, message_id, event, handler
+                    )
+
+        def _find_handler(
+            self, stream_name: str
+        ) -> tuple[EventHandler, Optional[SubscriptionFilter]]:
+            """Look up the handler and filter for a given stream."""
+            stream_str = stream_name.decode() if isinstance(stream_name, bytes) else stream_name
+            for stream, handler, filter_ in self._subscriptions:
+                if stream == stream_str:
+                    return handler, filter_
+            raise ValueError(f"No handler registered for stream: {stream_str}")
+
+        async def _process_with_retry(
+            self,
+            stream: str,
+            message_id: str,
+            event: Event,
+            handler: EventHandler,
+        ) -> None:
+            """
+            Attempt to process an event. Retry on failure up to max_retries.
+            If all retries fail, move the event to the Dead Letter Queue.
+            """
+            for attempt in range(1, self._max_retries + 1):
+                try:
+                    await handler(event)
+                    await self._redis.xack(stream, self._group, message_id)
+                    logger.debug(
+                        "Event processed",
+                        extra={"event_id": event.id, "stream": stream, "attempt": attempt},
+                    )
+                    return
+                except Exception as exc:
+                    logger.warning(
+                        "Event processing failed",
+                        extra={
+                            "event_id": event.id,
+                            "stream": stream,
+                            "attempt": attempt,
+                            "error": str(exc),
+                        },
+                    )
+                    if attempt < self._max_retries:
+                        await asyncio.sleep(self._retry_delay_ms / 1000 * attempt)
+
+            # All retries exhausted -- send to DLQ
+            await self._send_to_dlq(stream, message_id, event)
+
+        async def _send_to_dlq(
+            self, source_stream: str, message_id: str, event: Event
+        ) -> None:
+            """Move a failed event to the Dead Letter Queue stream."""
+            import time
+
+            dlq_entry = {
+                "event": json.dumps(event.to_dict()),
                 "source_stream": source_stream,
+                "original_message_id": message_id.decode()
+                    if isinstance(message_id, bytes) else message_id,
                 "consumer_group": self._group,
-            },
-        )
-```
+                "consumer": self._consumer,
+                "failure_timestamp": time.time(),
+                "retry_count": self._max_retries,
+            }
+            await self._redis.xadd("events:dlq", {
+                "entry": json.dumps(dlq_entry),
+            })
+            await self._redis.xack(source_stream, self._group, message_id)
+            logger.error(
+                "Event moved to DLQ",
+                extra={
+                    "event_id": event.id,
+                    "source_stream": source_stream,
+                    "consumer_group": self._group,
+                },
+            )
+    ```
 
 ### 6.2 Subscription Patterns
 
@@ -1044,68 +1058,74 @@ class EventSubscriber:
 
 The Observability Platform subscribes to all streams to compute metrics from event flows (p. 310). It uses a dedicated consumer group so it sees every event independently of other subscribers.
 
-```python
-subscriber = EventSubscriber(redis_client, group="observability", consumer="obs-1")
+??? example "View Python pseudocode"
 
-async def handle_any_event(event: Event) -> None:
-    """Feed every event into the metrics pipeline."""
-    await metrics_pipeline.ingest(event)
-    await trace_correlator.link_event(event)
+    ```python
+    subscriber = EventSubscriber(redis_client, group="observability", consumer="obs-1")
 
-# Subscribe to every stream -- no filter, process all events
-for stream in ALL_EVENT_STREAMS:
-    subscriber.subscribe(stream, handler=handle_any_event)
+    async def handle_any_event(event: Event) -> None:
+        """Feed every event into the metrics pipeline."""
+        await metrics_pipeline.ingest(event)
+        await trace_correlator.link_event(event)
 
-await subscriber.start()
-```
+    # Subscribe to every stream -- no filter, process all events
+    for stream in ALL_EVENT_STREAMS:
+        subscriber.subscribe(stream, handler=handle_any_event)
+
+    await subscriber.start()
+    ```
 
 **Pattern 2: Selective consumer with filter (Evaluation Framework)**
 
-```python
-subscriber = EventSubscriber(redis_client, group="eval-framework", consumer="eval-1")
+??? example "View Python pseudocode"
 
-# Only care about deployment and agent lifecycle events
-filter_ = SubscriptionFilter(
-    event_types=["agent.deployed", "agent.rollback", "deployment.started"]
-)
+    ```python
+    subscriber = EventSubscriber(redis_client, group="eval-framework", consumer="eval-1")
 
-async def handle_deploy_event(event: Event) -> None:
-    """Trigger post-deployment evaluation when an agent is deployed."""
-    if event.type == "agent.deployed":
-        await trigger_eval_suite(event.data["agent_id"], event.data["version"])
+    # Only care about deployment and agent lifecycle events
+    filter_ = SubscriptionFilter(
+        event_types=["agent.deployed", "agent.rollback", "deployment.started"]
+    )
 
-subscriber.subscribe("events:agent", handler=handle_deploy_event, filter=filter_)
-subscriber.subscribe("events:deployment", handler=handle_deploy_event, filter=filter_)
+    async def handle_deploy_event(event: Event) -> None:
+        """Trigger post-deployment evaluation when an agent is deployed."""
+        if event.type == "agent.deployed":
+            await trigger_eval_suite(event.data["agent_id"], event.data["version"])
 
-await subscriber.start()
-```
+    subscriber.subscribe("events:agent", handler=handle_deploy_event, filter=filter_)
+    subscriber.subscribe("events:deployment", handler=handle_deploy_event, filter=filter_)
+
+    await subscriber.start()
+    ```
 
 **Pattern 3: Fan-out to multiple handlers (Guardrail System)**
 
 The Guardrail System monitors many event streams simultaneously for policy enforcement (p. 297). Safety intervention events are generated when a guardrail detects a violation in any subsystem's events.
 
-```python
-guardrail_sub = EventSubscriber(redis_client, group="guardrails", consumer="guard-1")
+??? example "View Python pseudocode"
 
-async def monitor_tool_events(event: Event) -> None:
-    """Check tool invocations against security policies (p. 288)."""
-    if event.type == "tool.failed" and event.data.get("error_type") == "permission_denied":
-        await publisher.publish(
-            event_type="guardrail.alert",
-            data={"policy_id": "tool-permission", "severity": "high", ...},
-            causation_id=event.id,
-        )
+    ```python
+    guardrail_sub = EventSubscriber(redis_client, group="guardrails", consumer="guard-1")
 
-async def monitor_auth_events(event: Event) -> None:
-    """Detect suspicious authentication patterns."""
-    if event.type == "auth.permission_denied":
-        await rate_limiter.record_denied(event.data["user_id"])
+    async def monitor_tool_events(event: Event) -> None:
+        """Check tool invocations against security policies (p. 288)."""
+        if event.type == "tool.failed" and event.data.get("error_type") == "permission_denied":
+            await publisher.publish(
+                event_type="guardrail.alert",
+                data={"policy_id": "tool-permission", "severity": "high", ...},
+                causation_id=event.id,
+            )
 
-guardrail_sub.subscribe("events:tool", handler=monitor_tool_events)
-guardrail_sub.subscribe("events:auth", handler=monitor_auth_events)
+    async def monitor_auth_events(event: Event) -> None:
+        """Detect suspicious authentication patterns."""
+        if event.type == "auth.permission_denied":
+            await rate_limiter.record_denied(event.data["user_id"])
 
-await guardrail_sub.start()
-```
+    guardrail_sub.subscribe("events:tool", handler=monitor_tool_events)
+    guardrail_sub.subscribe("events:auth", handler=monitor_auth_events)
+
+    await guardrail_sub.start()
+    ```
 
 ---
 
@@ -1138,52 +1158,54 @@ Publisher ──XADD──> Stream ──XREADGROUP──> Consumer
 
 A background process runs in every subscriber instance to detect and reclaim stale pending entries:
 
-```python
-class PendingEntryClaimer:
-    """
-    Reclaims events that were delivered but never acknowledged.
-    Runs as a background task in every EventSubscriber instance.
-    Detects events stuck in the Pending Entries List (PEL) beyond
-    the idle threshold and reassigns them to active consumers.
-    """
+??? example "View Python pseudocode"
 
-    def __init__(
-        self,
-        redis_client: redis.Redis,
-        group: str,
-        consumer: str,
-        idle_threshold_ms: int = 60_000,
-        claim_interval_s: int = 30,
-    ):
-        self._redis = redis_client
-        self._group = group
-        self._consumer = consumer
-        self._idle_threshold_ms = idle_threshold_ms
-        self._claim_interval_s = claim_interval_s
+    ```python
+    class PendingEntryClaimer:
+        """
+        Reclaims events that were delivered but never acknowledged.
+        Runs as a background task in every EventSubscriber instance.
+        Detects events stuck in the Pending Entries List (PEL) beyond
+        the idle threshold and reassigns them to active consumers.
+        """
 
-    async def run(self, streams: list[str]) -> None:
-        """Periodically scan PEL and reclaim stale entries."""
-        while True:
-            for stream in streams:
-                try:
-                    # XAUTOCLAIM: atomically claim entries idle beyond threshold
-                    _, claimed, _ = await self._redis.xautoclaim(
-                        stream,
-                        self._group,
-                        self._consumer,
-                        min_idle_time=self._idle_threshold_ms,
-                        start_id="0-0",
-                        count=50,
-                    )
-                    if claimed:
-                        logger.info(
-                            f"Claimed {len(claimed)} stale entries from {stream}"
+        def __init__(
+            self,
+            redis_client: redis.Redis,
+            group: str,
+            consumer: str,
+            idle_threshold_ms: int = 60_000,
+            claim_interval_s: int = 30,
+        ):
+            self._redis = redis_client
+            self._group = group
+            self._consumer = consumer
+            self._idle_threshold_ms = idle_threshold_ms
+            self._claim_interval_s = claim_interval_s
+
+        async def run(self, streams: list[str]) -> None:
+            """Periodically scan PEL and reclaim stale entries."""
+            while True:
+                for stream in streams:
+                    try:
+                        # XAUTOCLAIM: atomically claim entries idle beyond threshold
+                        _, claimed, _ = await self._redis.xautoclaim(
+                            stream,
+                            self._group,
+                            self._consumer,
+                            min_idle_time=self._idle_threshold_ms,
+                            start_id="0-0",
+                            count=50,
                         )
-                except redis.RedisError as exc:
-                    logger.error(f"PEL claim failed for {stream}: {exc}")
+                        if claimed:
+                            logger.info(
+                                f"Claimed {len(claimed)} stale entries from {stream}"
+                            )
+                    except redis.RedisError as exc:
+                        logger.error(f"PEL claim failed for {stream}: {exc}")
 
-            await asyncio.sleep(self._claim_interval_s)
-```
+                await asyncio.sleep(self._claim_interval_s)
+    ```
 
 ### 7.3 Ordering Guarantees
 
@@ -1197,40 +1219,44 @@ At-least-once delivery means a consumer may see the same event more than once (e
 
 **Mechanism 1: Idempotency key deduplication**
 
-```python
-class IdempotencyGuard:
-    """
-    Prevents duplicate processing of events using a Redis-backed
-    deduplication set. Events with the same idempotency key are
-    processed only once within the TTL window.
-    """
+??? example "View Python pseudocode"
 
-    def __init__(self, redis_client: redis.Redis, ttl_seconds: int = 86400):
-        self._redis = redis_client
-        self._ttl = ttl_seconds
+    ```python
+    class IdempotencyGuard:
+        """
+        Prevents duplicate processing of events using a Redis-backed
+        deduplication set. Events with the same idempotency key are
+        processed only once within the TTL window.
+        """
 
-    async def is_duplicate(self, event: Event) -> bool:
-        """Check if this event has already been processed."""
-        key = event.metadata.idempotency_key or event.id
-        dedup_key = f"idempotency:{key}"
+        def __init__(self, redis_client: redis.Redis, ttl_seconds: int = 86400):
+            self._redis = redis_client
+            self._ttl = ttl_seconds
 
-        # SET NX: only sets if key does not exist
-        was_set = await self._redis.set(dedup_key, "1", nx=True, ex=self._ttl)
-        return not was_set  # True if key already existed (duplicate)
-```
+        async def is_duplicate(self, event: Event) -> bool:
+            """Check if this event has already been processed."""
+            key = event.metadata.idempotency_key or event.id
+            dedup_key = f"idempotency:{key}"
+
+            # SET NX: only sets if key does not exist
+            was_set = await self._redis.set(dedup_key, "1", nx=True, ex=self._ttl)
+            return not was_set  # True if key already existed (duplicate)
+    ```
 
 **Mechanism 2: Event ID tracking**
 
 Consumers that cannot rely on idempotency keys track processed event IDs in their local state:
 
-```python
-async def idempotent_handler(event: Event) -> None:
-    """Example handler with event ID-based deduplication."""
-    if await idempotency_guard.is_duplicate(event):
-        logger.debug(f"Skipping duplicate event: {event.id}")
-        return
-    # ... process event ...
-```
+??? example "View Python pseudocode"
+
+    ```python
+    async def idempotent_handler(event: Event) -> None:
+        """Example handler with event ID-based deduplication."""
+        if await idempotency_guard.is_duplicate(event):
+            logger.debug(f"Skipping duplicate event: {event.id}")
+            return
+        # ... process event ...
+    ```
 
 ---
 
@@ -1276,167 +1302,171 @@ Normal processing flow:
 
 ### 8.2 DLQ Entry Schema
 
-```json
-{
-  "event": { "...full event envelope..." },
-  "source_stream": "events:agent",
-  "original_message_id": "1709044330000-0",
-  "consumer_group": "eval-framework",
-  "consumer": "eval-1",
-  "failure_timestamp": "2026-02-27T14:32:10.847Z",
-  "retry_count": 3,
-  "last_error": "ConnectionError: evaluation service unreachable",
-  "error_category": "transient",
-  "dlq_entry_id": "dlq-550e8400-e29b-41d4-a716-446655440099"
-}
-```
+??? example "View JSON example"
+
+    ```json
+    {
+      "event": { "...full event envelope..." },
+      "source_stream": "events:agent",
+      "original_message_id": "1709044330000-0",
+      "consumer_group": "eval-framework",
+      "consumer": "eval-1",
+      "failure_timestamp": "2026-02-27T14:32:10.847Z",
+      "retry_count": 3,
+      "last_error": "ConnectionError: evaluation service unreachable",
+      "error_category": "transient",
+      "dlq_entry_id": "dlq-550e8400-e29b-41d4-a716-446655440099"
+    }
+    ```
 
 ### 8.3 DLQ Handler
 
-```python
-import json
-import asyncio
-import logging
-from typing import Optional
-from datetime import datetime, timezone
+??? example "View Python pseudocode"
 
-import redis.asyncio as redis
+    ```python
+    import json
+    import asyncio
+    import logging
+    from typing import Optional
+    from datetime import datetime, timezone
 
-from agentforge.events.schema import Event
+    import redis.asyncio as redis
+
+    from agentforge.events.schema import Event
 
 
-logger = logging.getLogger("agentforge.events.dlq")
+    logger = logging.getLogger("agentforge.events.dlq")
 
 
-class DLQHandler:
-    """
-    Manages the Dead Letter Queue for failed events.
-
-    Provides three operations:
-    1. Inspect: List and filter DLQ entries for manual review.
-    2. Retry: Re-publish a DLQ entry back to its original stream.
-    3. Discard: Permanently remove a DLQ entry after review.
-
-    Also runs an automatic retry scheduler for transient failures.
-    """
-
-    def __init__(
-        self,
-        redis_client: redis.Redis,
-        auto_retry_interval_s: int = 300,
-        max_auto_retries: int = 5,
-    ):
-        self._redis = redis_client
-        self._auto_retry_interval = auto_retry_interval_s
-        self._max_auto_retries = max_auto_retries
-        self._dlq_stream = "events:dlq"
-
-    async def inspect(
-        self,
-        count: int = 50,
-        source_stream: Optional[str] = None,
-        error_category: Optional[str] = None,
-    ) -> list[dict]:
+    class DLQHandler:
         """
-        List DLQ entries for manual review.
-        Supports filtering by source stream and error category.
+        Manages the Dead Letter Queue for failed events.
+
+        Provides three operations:
+        1. Inspect: List and filter DLQ entries for manual review.
+        2. Retry: Re-publish a DLQ entry back to its original stream.
+        3. Discard: Permanently remove a DLQ entry after review.
+
+        Also runs an automatic retry scheduler for transient failures.
         """
-        entries = await self._redis.xrange(self._dlq_stream, count=count)
-        results = []
-        for message_id, fields in entries:
-            entry = json.loads(fields[b"entry"])
-            if source_stream and entry.get("source_stream") != source_stream:
-                continue
-            if error_category and entry.get("error_category") != error_category:
-                continue
-            entry["dlq_message_id"] = message_id
-            results.append(entry)
-        return results
 
-    async def retry(self, dlq_message_id: str) -> str:
-        """
-        Re-publish a DLQ entry back to its original stream.
-        Returns the new stream message ID.
-        """
-        entries = await self._redis.xrange(
-            self._dlq_stream, min=dlq_message_id, max=dlq_message_id, count=1
-        )
-        if not entries:
-            raise ValueError(f"DLQ entry not found: {dlq_message_id}")
+        def __init__(
+            self,
+            redis_client: redis.Redis,
+            auto_retry_interval_s: int = 300,
+            max_auto_retries: int = 5,
+        ):
+            self._redis = redis_client
+            self._auto_retry_interval = auto_retry_interval_s
+            self._max_auto_retries = max_auto_retries
+            self._dlq_stream = "events:dlq"
 
-        _, fields = entries[0]
-        entry = json.loads(fields[b"entry"])
-        event_data = entry["event"]
-        source_stream = entry["source_stream"]
-
-        # Re-publish to original stream
-        new_id = await self._redis.xadd(
-            source_stream, {"event": json.dumps(event_data)}
-        )
-
-        # Remove from DLQ
-        await self._redis.xdel(self._dlq_stream, dlq_message_id)
-
-        logger.info(
-            "DLQ entry retried",
-            extra={
-                "dlq_message_id": dlq_message_id,
-                "source_stream": source_stream,
-                "new_message_id": new_id,
-            },
-        )
-        return new_id
-
-    async def discard(self, dlq_message_id: str, reason: str = "") -> None:
-        """
-        Permanently remove a DLQ entry after manual review.
-        The reason is logged for audit purposes.
-        """
-        await self._redis.xdel(self._dlq_stream, dlq_message_id)
-        logger.info(
-            "DLQ entry discarded",
-            extra={"dlq_message_id": dlq_message_id, "reason": reason},
-        )
-
-    async def run_auto_retry(self) -> None:
-        """
-        Background task that automatically retries DLQ entries
-        categorized as transient failures.
-
-        Runs on a fixed interval. Only retries entries that have
-        not exceeded the max auto-retry count.
-        """
-        while True:
-            entries = await self.inspect(
-                count=100, error_category="transient"
-            )
-            for entry in entries:
-                retry_count = entry.get("retry_count", 0)
-                auto_retries = entry.get("auto_retry_count", 0)
-
-                if auto_retries >= self._max_auto_retries:
-                    # Escalate: re-categorize as permanent failure
-                    logger.warning(
-                        "DLQ entry exceeded auto-retry limit, escalating",
-                        extra={"dlq_entry_id": entry.get("dlq_entry_id")},
-                    )
+        async def inspect(
+            self,
+            count: int = 50,
+            source_stream: Optional[str] = None,
+            error_category: Optional[str] = None,
+        ) -> list[dict]:
+            """
+            List DLQ entries for manual review.
+            Supports filtering by source stream and error category.
+            """
+            entries = await self._redis.xrange(self._dlq_stream, count=count)
+            results = []
+            for message_id, fields in entries:
+                entry = json.loads(fields[b"entry"])
+                if source_stream and entry.get("source_stream") != source_stream:
                     continue
+                if error_category and entry.get("error_category") != error_category:
+                    continue
+                entry["dlq_message_id"] = message_id
+                results.append(entry)
+            return results
 
-                try:
-                    await self.retry(entry["dlq_message_id"])
-                except Exception as exc:
-                    logger.error(
-                        f"Auto-retry failed: {exc}",
-                        extra={"dlq_entry_id": entry.get("dlq_entry_id")},
-                    )
+        async def retry(self, dlq_message_id: str) -> str:
+            """
+            Re-publish a DLQ entry back to its original stream.
+            Returns the new stream message ID.
+            """
+            entries = await self._redis.xrange(
+                self._dlq_stream, min=dlq_message_id, max=dlq_message_id, count=1
+            )
+            if not entries:
+                raise ValueError(f"DLQ entry not found: {dlq_message_id}")
 
-            await asyncio.sleep(self._auto_retry_interval)
+            _, fields = entries[0]
+            entry = json.loads(fields[b"entry"])
+            event_data = entry["event"]
+            source_stream = entry["source_stream"]
 
-    async def get_depth(self) -> int:
-        """Return the current number of entries in the DLQ."""
-        info = await self._redis.xinfo_stream(self._dlq_stream)
-        return info["length"]
-```
+            # Re-publish to original stream
+            new_id = await self._redis.xadd(
+                source_stream, {"event": json.dumps(event_data)}
+            )
+
+            # Remove from DLQ
+            await self._redis.xdel(self._dlq_stream, dlq_message_id)
+
+            logger.info(
+                "DLQ entry retried",
+                extra={
+                    "dlq_message_id": dlq_message_id,
+                    "source_stream": source_stream,
+                    "new_message_id": new_id,
+                },
+            )
+            return new_id
+
+        async def discard(self, dlq_message_id: str, reason: str = "") -> None:
+            """
+            Permanently remove a DLQ entry after manual review.
+            The reason is logged for audit purposes.
+            """
+            await self._redis.xdel(self._dlq_stream, dlq_message_id)
+            logger.info(
+                "DLQ entry discarded",
+                extra={"dlq_message_id": dlq_message_id, "reason": reason},
+            )
+
+        async def run_auto_retry(self) -> None:
+            """
+            Background task that automatically retries DLQ entries
+            categorized as transient failures.
+
+            Runs on a fixed interval. Only retries entries that have
+            not exceeded the max auto-retry count.
+            """
+            while True:
+                entries = await self.inspect(
+                    count=100, error_category="transient"
+                )
+                for entry in entries:
+                    retry_count = entry.get("retry_count", 0)
+                    auto_retries = entry.get("auto_retry_count", 0)
+
+                    if auto_retries >= self._max_auto_retries:
+                        # Escalate: re-categorize as permanent failure
+                        logger.warning(
+                            "DLQ entry exceeded auto-retry limit, escalating",
+                            extra={"dlq_entry_id": entry.get("dlq_entry_id")},
+                        )
+                        continue
+
+                    try:
+                        await self.retry(entry["dlq_message_id"])
+                    except Exception as exc:
+                        logger.error(
+                            f"Auto-retry failed: {exc}",
+                            extra={"dlq_entry_id": entry.get("dlq_entry_id")},
+                        )
+
+                await asyncio.sleep(self._auto_retry_interval)
+
+        async def get_depth(self) -> int:
+            """Return the current number of entries in the DLQ."""
+            info = await self._redis.xinfo_stream(self._dlq_stream)
+            return info["length"]
+    ```
 
 ### 8.4 DLQ Alerting
 
@@ -1487,140 +1517,142 @@ Redis Streams are an append-only log with configurable retention, making replay 
 
 ### 9.2 Replay Engine
 
-```python
-import json
-import asyncio
-import logging
-from typing import AsyncIterator, Optional
-from dataclasses import dataclass
-from datetime import datetime
+??? example "View Python pseudocode"
 
-import redis.asyncio as redis
+    ```python
+    import json
+    import asyncio
+    import logging
+    from typing import AsyncIterator, Optional
+    from dataclasses import dataclass
+    from datetime import datetime
 
-from agentforge.events.schema import Event
+    import redis.asyncio as redis
 
-
-logger = logging.getLogger("agentforge.events.replay")
-
-
-@dataclass
-class ReplayRequest:
-    """Defines the scope of an event replay operation."""
-    stream: str
-    from_timestamp: Optional[str] = None    # ISO 8601 or Redis stream ID
-    to_timestamp: Optional[str] = None      # ISO 8601 or Redis stream ID
-    event_types: Optional[list[str]] = None # Filter to specific event types
-    max_events: int = 10_000                # Safety limit
-    replay_id: Optional[str] = None         # For tracking and deduplication
+    from agentforge.events.schema import Event
 
 
-class ReplayEngine:
-    """
-    Replays historical events from Redis Streams.
+    logger = logging.getLogger("agentforge.events.replay")
 
-    Supports three replay modes:
-    1. Time-range: Replay all events between two timestamps.
-    2. Event-type: Replay only specific event types from a stream.
-    3. Consumer rebuild: Create a new consumer group starting from
-       a historical position to rebuild subscriber state.
 
-    All replayed events are tagged with replay metadata so consumers
-    can distinguish replayed events from live events.
-    """
+    @dataclass
+    class ReplayRequest:
+        """Defines the scope of an event replay operation."""
+        stream: str
+        from_timestamp: Optional[str] = None    # ISO 8601 or Redis stream ID
+        to_timestamp: Optional[str] = None      # ISO 8601 or Redis stream ID
+        event_types: Optional[list[str]] = None # Filter to specific event types
+        max_events: int = 10_000                # Safety limit
+        replay_id: Optional[str] = None         # For tracking and deduplication
 
-    def __init__(self, redis_client: redis.Redis):
-        self._redis = redis_client
 
-    async def replay(
-        self, request: ReplayRequest
-    ) -> AsyncIterator[Event]:
+    class ReplayEngine:
         """
-        Yield events matching the replay request.
+        Replays historical events from Redis Streams.
 
-        Events are read directly from the stream using XRANGE
-        (not consumer groups) to avoid affecting live consumers.
+        Supports three replay modes:
+        1. Time-range: Replay all events between two timestamps.
+        2. Event-type: Replay only specific event types from a stream.
+        3. Consumer rebuild: Create a new consumer group starting from
+           a historical position to rebuild subscriber state.
+
+        All replayed events are tagged with replay metadata so consumers
+        can distinguish replayed events from live events.
         """
-        start = self._to_stream_id(request.from_timestamp) if request.from_timestamp else "-"
-        end = self._to_stream_id(request.to_timestamp) if request.to_timestamp else "+"
 
-        count = 0
-        cursor = start
+        def __init__(self, redis_client: redis.Redis):
+            self._redis = redis_client
 
-        while count < request.max_events:
-            batch = await self._redis.xrange(
-                request.stream, min=cursor, max=end, count=100
-            )
-            if not batch:
-                break
+        async def replay(
+            self, request: ReplayRequest
+        ) -> AsyncIterator[Event]:
+            """
+            Yield events matching the replay request.
 
-            for message_id, fields in batch:
-                event_data = json.loads(fields[b"event"])
-                event = Event.from_dict(event_data)
+            Events are read directly from the stream using XRANGE
+            (not consumer groups) to avoid affecting live consumers.
+            """
+            start = self._to_stream_id(request.from_timestamp) if request.from_timestamp else "-"
+            end = self._to_stream_id(request.to_timestamp) if request.to_timestamp else "+"
 
-                # Apply event type filter
-                if request.event_types and event.type not in request.event_types:
-                    continue
+            count = 0
+            cursor = start
 
-                count += 1
-                if count > request.max_events:
+            while count < request.max_events:
+                batch = await self._redis.xrange(
+                    request.stream, min=cursor, max=end, count=100
+                )
+                if not batch:
                     break
 
-                yield event
+                for message_id, fields in batch:
+                    event_data = json.loads(fields[b"event"])
+                    event = Event.from_dict(event_data)
 
-            # Move cursor past the last message in this batch
-            last_id = batch[-1][0]
-            cursor = self._increment_id(last_id)
+                    # Apply event type filter
+                    if request.event_types and event.type not in request.event_types:
+                        continue
 
-        logger.info(
-            "Replay completed",
-            extra={
-                "stream": request.stream,
-                "events_replayed": count,
-                "replay_id": request.replay_id,
-            },
-        )
+                    count += 1
+                    if count > request.max_events:
+                        break
 
-    async def rebuild_consumer_group(
-        self,
-        stream: str,
-        group: str,
-        start_id: str = "0",
-    ) -> None:
-        """
-        Create a new consumer group starting from a historical position.
-        Used to bootstrap new subscribers that need to process historical events.
-        """
-        try:
-            await self._redis.xgroup_create(stream, group, id=start_id, mkstream=False)
+                    yield event
+
+                # Move cursor past the last message in this batch
+                last_id = batch[-1][0]
+                cursor = self._increment_id(last_id)
+
             logger.info(
-                f"Created consumer group '{group}' on '{stream}' starting from {start_id}"
+                "Replay completed",
+                extra={
+                    "stream": request.stream,
+                    "events_replayed": count,
+                    "replay_id": request.replay_id,
+                },
             )
-        except redis.ResponseError as e:
-            if "BUSYGROUP" in str(e):
-                # Group already exists -- reset its position
-                await self._redis.xgroup_setid(stream, group, start_id)
+
+        async def rebuild_consumer_group(
+            self,
+            stream: str,
+            group: str,
+            start_id: str = "0",
+        ) -> None:
+            """
+            Create a new consumer group starting from a historical position.
+            Used to bootstrap new subscribers that need to process historical events.
+            """
+            try:
+                await self._redis.xgroup_create(stream, group, id=start_id, mkstream=False)
                 logger.info(
-                    f"Reset consumer group '{group}' on '{stream}' to {start_id}"
+                    f"Created consumer group '{group}' on '{stream}' starting from {start_id}"
                 )
-            else:
-                raise
+            except redis.ResponseError as e:
+                if "BUSYGROUP" in str(e):
+                    # Group already exists -- reset its position
+                    await self._redis.xgroup_setid(stream, group, start_id)
+                    logger.info(
+                        f"Reset consumer group '{group}' on '{stream}' to {start_id}"
+                    )
+                else:
+                    raise
 
-    @staticmethod
-    def _to_stream_id(timestamp: str) -> str:
-        """Convert ISO 8601 timestamp to Redis stream ID."""
-        if "-" in timestamp and timestamp[0].isdigit() and len(timestamp) < 30:
-            return timestamp  # Already a stream ID
-        dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-        ms = int(dt.timestamp() * 1000)
-        return f"{ms}-0"
+        @staticmethod
+        def _to_stream_id(timestamp: str) -> str:
+            """Convert ISO 8601 timestamp to Redis stream ID."""
+            if "-" in timestamp and timestamp[0].isdigit() and len(timestamp) < 30:
+                return timestamp  # Already a stream ID
+            dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            ms = int(dt.timestamp() * 1000)
+            return f"{ms}-0"
 
-    @staticmethod
-    def _increment_id(stream_id: bytes | str) -> str:
-        """Increment a Redis stream ID to get the next exclusive start."""
-        id_str = stream_id.decode() if isinstance(stream_id, bytes) else stream_id
-        parts = id_str.split("-")
-        return f"{parts[0]}-{int(parts[1]) + 1}"
-```
+        @staticmethod
+        def _increment_id(stream_id: bytes | str) -> str:
+            """Increment a Redis stream ID to get the next exclusive start."""
+            id_str = stream_id.decode() if isinstance(stream_id, bytes) else stream_id
+            parts = id_str.split("-")
+            return f"{parts[0]}-{int(parts[1]) + 1}"
+    ```
 
 ### 9.3 Replay Use Cases
 
@@ -1675,193 +1707,195 @@ This is analogous to how the Prompt Registry (subsystem 07) versions prompt temp
 
 ### 10.2 Schema Registration and Validation
 
-```python
-import json
-import logging
-from typing import Any, Optional
-from dataclasses import dataclass
-from enum import Enum
+??? example "View Python pseudocode"
 
-import jsonschema
+    ```python
+    import json
+    import logging
+    from typing import Any, Optional
+    from dataclasses import dataclass
+    from enum import Enum
 
-from agentforge.events.schema import Event
+    import jsonschema
 
-
-logger = logging.getLogger("agentforge.events.registry")
-
-
-class CompatibilityMode(Enum):
-    BACKWARD = "backward"   # New schema can read data written by old schema
-    FORWARD = "forward"     # Old schema can read data written by new schema
-    FULL = "full"           # Both backward and forward compatible
-    NONE = "none"           # No compatibility check (use with caution)
+    from agentforge.events.schema import Event
 
 
-@dataclass
-class ValidationResult:
-    valid: bool
-    errors: list[str]
+    logger = logging.getLogger("agentforge.events.registry")
 
 
-class SchemaRegistry:
-    """
-    Central registry for event data schemas.
+    class CompatibilityMode(Enum):
+        BACKWARD = "backward"   # New schema can read data written by old schema
+        FORWARD = "forward"     # Old schema can read data written by new schema
+        FULL = "full"           # Both backward and forward compatible
+        NONE = "none"           # No compatibility check (use with caution)
 
-    Stores versioned JSON Schemas for every event type's data field.
-    Validates events at publish time. Enforces compatibility rules
-    when new schema versions are registered.
 
-    All schemas are cached in memory after first load for
-    sub-millisecond validation performance.
-    """
+    @dataclass
+    class ValidationResult:
+        valid: bool
+        errors: list[str]
 
-    def __init__(self, db_connection, redis_client=None):
-        self._db = db_connection
-        self._redis = redis_client
-        self._cache: dict[str, jsonschema.Draft7Validator] = {}
 
-    async def register(
-        self,
-        event_type: str,
-        version: str,
-        schema: dict[str, Any],
-        compatibility: CompatibilityMode = CompatibilityMode.BACKWARD,
-    ) -> None:
+    class SchemaRegistry:
         """
-        Register a new schema version for an event type.
+        Central registry for event data schemas.
 
-        If a previous version exists and compatibility is not NONE,
-        validates that the new schema is compatible with the latest
-        existing version.
+        Stores versioned JSON Schemas for every event type's data field.
+        Validates events at publish time. Enforces compatibility rules
+        when new schema versions are registered.
+
+        All schemas are cached in memory after first load for
+        sub-millisecond validation performance.
         """
-        # Check compatibility with existing schemas
-        if compatibility != CompatibilityMode.NONE:
-            latest = await self._get_latest_schema(event_type)
-            if latest is not None:
-                self._check_compatibility(latest, schema, compatibility)
 
-        # Store in database
-        await self._db.execute(
+        def __init__(self, db_connection, redis_client=None):
+            self._db = db_connection
+            self._redis = redis_client
+            self._cache: dict[str, jsonschema.Draft7Validator] = {}
+
+        async def register(
+            self,
+            event_type: str,
+            version: str,
+            schema: dict[str, Any],
+            compatibility: CompatibilityMode = CompatibilityMode.BACKWARD,
+        ) -> None:
             """
-            INSERT INTO event_schemas (event_type, version, schema, compatibility_mode)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (event_type, version) DO UPDATE SET schema = $3
-            """,
-            event_type,
-            version,
-            json.dumps(schema),
-            compatibility.value,
-        )
+            Register a new schema version for an event type.
 
-        # Invalidate cache
-        cache_key = f"{event_type}:{version}"
-        self._cache.pop(cache_key, None)
-        if self._redis:
-            await self._redis.delete(f"schema_cache:{cache_key}")
+            If a previous version exists and compatibility is not NONE,
+            validates that the new schema is compatible with the latest
+            existing version.
+            """
+            # Check compatibility with existing schemas
+            if compatibility != CompatibilityMode.NONE:
+                latest = await self._get_latest_schema(event_type)
+                if latest is not None:
+                    self._check_compatibility(latest, schema, compatibility)
 
-        logger.info(f"Registered schema: {event_type} v{version}")
+            # Store in database
+            await self._db.execute(
+                """
+                INSERT INTO event_schemas (event_type, version, schema, compatibility_mode)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (event_type, version) DO UPDATE SET schema = $3
+                """,
+                event_type,
+                version,
+                json.dumps(schema),
+                compatibility.value,
+            )
 
-    def validate(self, event: Event) -> ValidationResult:
-        """
-        Validate an event's data field against its registered schema.
-        Uses cached compiled validators for performance.
-        """
-        cache_key = f"{event.type}:{event.metadata.schema_version}"
-        validator = self._cache.get(cache_key)
+            # Invalidate cache
+            cache_key = f"{event_type}:{version}"
+            self._cache.pop(cache_key, None)
+            if self._redis:
+                await self._redis.delete(f"schema_cache:{cache_key}")
 
-        if validator is None:
-            # Load and compile schema (synchronous for publish-path performance)
-            schema = self._load_schema_sync(event.type, event.metadata.schema_version)
-            if schema is None:
+            logger.info(f"Registered schema: {event_type} v{version}")
+
+        def validate(self, event: Event) -> ValidationResult:
+            """
+            Validate an event's data field against its registered schema.
+            Uses cached compiled validators for performance.
+            """
+            cache_key = f"{event.type}:{event.metadata.schema_version}"
+            validator = self._cache.get(cache_key)
+
+            if validator is None:
+                # Load and compile schema (synchronous for publish-path performance)
+                schema = self._load_schema_sync(event.type, event.metadata.schema_version)
+                if schema is None:
+                    return ValidationResult(
+                        valid=False,
+                        errors=[f"No schema registered for {event.type} v{event.metadata.schema_version}"],
+                    )
+                validator = jsonschema.Draft7Validator(schema)
+                self._cache[cache_key] = validator
+
+            errors = list(validator.iter_errors(event.data))
+            if errors:
                 return ValidationResult(
                     valid=False,
-                    errors=[f"No schema registered for {event.type} v{event.metadata.schema_version}"],
+                    errors=[f"{e.path}: {e.message}" for e in errors],
                 )
-            validator = jsonschema.Draft7Validator(schema)
-            self._cache[cache_key] = validator
+            return ValidationResult(valid=True, errors=[])
 
-        errors = list(validator.iter_errors(event.data))
-        if errors:
-            return ValidationResult(
-                valid=False,
-                errors=[f"{e.path}: {e.message}" for e in errors],
-            )
-        return ValidationResult(valid=True, errors=[])
+        def _check_compatibility(
+            self,
+            old_schema: dict,
+            new_schema: dict,
+            mode: CompatibilityMode,
+        ) -> None:
+            """
+            Verify schema compatibility between versions.
 
-    def _check_compatibility(
-        self,
-        old_schema: dict,
-        new_schema: dict,
-        mode: CompatibilityMode,
-    ) -> None:
-        """
-        Verify schema compatibility between versions.
+            BACKWARD: All fields required in old schema must exist in new schema.
+                      New schema may add optional fields.
+            FORWARD:  All fields required in new schema must exist in old schema.
+            FULL:     Both backward and forward compatible.
+            """
+            old_required = set(old_schema.get("required", []))
+            new_required = set(new_schema.get("required", []))
+            old_props = set(old_schema.get("properties", {}).keys())
+            new_props = set(new_schema.get("properties", {}).keys())
 
-        BACKWARD: All fields required in old schema must exist in new schema.
-                  New schema may add optional fields.
-        FORWARD:  All fields required in new schema must exist in old schema.
-        FULL:     Both backward and forward compatible.
-        """
-        old_required = set(old_schema.get("required", []))
-        new_required = set(new_schema.get("required", []))
-        old_props = set(old_schema.get("properties", {}).keys())
-        new_props = set(new_schema.get("properties", {}).keys())
-
-        if mode in (CompatibilityMode.BACKWARD, CompatibilityMode.FULL):
-            # New schema must still accept data written under old schema
-            removed_fields = old_props - new_props
-            if removed_fields:
-                raise SchemaCompatibilityError(
-                    f"Backward incompatible: fields removed: {removed_fields}"
-                )
-            new_required_additions = new_required - old_required
-            if new_required_additions:
-                raise SchemaCompatibilityError(
-                    f"Backward incompatible: new required fields: {new_required_additions}"
-                )
-
-        if mode in (CompatibilityMode.FORWARD, CompatibilityMode.FULL):
-            # Old schema must still accept data written under new schema
-            newly_required = new_required - old_required
-            for field in newly_required:
-                if field not in old_props:
+            if mode in (CompatibilityMode.BACKWARD, CompatibilityMode.FULL):
+                # New schema must still accept data written under old schema
+                removed_fields = old_props - new_props
+                if removed_fields:
                     raise SchemaCompatibilityError(
-                        f"Forward incompatible: new required field '{field}' "
-                        f"not present in old schema"
+                        f"Backward incompatible: fields removed: {removed_fields}"
+                    )
+                new_required_additions = new_required - old_required
+                if new_required_additions:
+                    raise SchemaCompatibilityError(
+                        f"Backward incompatible: new required fields: {new_required_additions}"
                     )
 
-    async def _get_latest_schema(self, event_type: str) -> Optional[dict]:
-        """Fetch the latest registered schema for an event type."""
-        row = await self._db.fetchrow(
-            """
-            SELECT schema FROM event_schemas
-            WHERE event_type = $1
-            ORDER BY version DESC LIMIT 1
-            """,
-            event_type,
-        )
-        return json.loads(row["schema"]) if row else None
+            if mode in (CompatibilityMode.FORWARD, CompatibilityMode.FULL):
+                # Old schema must still accept data written under new schema
+                newly_required = new_required - old_required
+                for field in newly_required:
+                    if field not in old_props:
+                        raise SchemaCompatibilityError(
+                            f"Forward incompatible: new required field '{field}' "
+                            f"not present in old schema"
+                        )
 
-    def _load_schema_sync(self, event_type: str, version: str) -> Optional[dict]:
-        """Synchronous schema load for the hot publish path."""
-        # In production, pre-warm the cache at startup
-        # This fallback uses a sync DB call
-        raise NotImplementedError("Pre-warm cache at startup; see SchemaRegistry.warmup()")
+        async def _get_latest_schema(self, event_type: str) -> Optional[dict]:
+            """Fetch the latest registered schema for an event type."""
+            row = await self._db.fetchrow(
+                """
+                SELECT schema FROM event_schemas
+                WHERE event_type = $1
+                ORDER BY version DESC LIMIT 1
+                """,
+                event_type,
+            )
+            return json.loads(row["schema"]) if row else None
 
-    async def warmup(self) -> None:
-        """Pre-load all schemas into the in-memory cache at startup."""
-        rows = await self._db.fetch("SELECT event_type, version, schema FROM event_schemas")
-        for row in rows:
-            cache_key = f"{row['event_type']}:{row['version']}"
-            schema = json.loads(row["schema"])
-            self._cache[cache_key] = jsonschema.Draft7Validator(schema)
-        logger.info(f"Schema cache warmed: {len(rows)} schemas loaded")
+        def _load_schema_sync(self, event_type: str, version: str) -> Optional[dict]:
+            """Synchronous schema load for the hot publish path."""
+            # In production, pre-warm the cache at startup
+            # This fallback uses a sync DB call
+            raise NotImplementedError("Pre-warm cache at startup; see SchemaRegistry.warmup()")
+
+        async def warmup(self) -> None:
+            """Pre-load all schemas into the in-memory cache at startup."""
+            rows = await self._db.fetch("SELECT event_type, version, schema FROM event_schemas")
+            for row in rows:
+                cache_key = f"{row['event_type']}:{row['version']}"
+                schema = json.loads(row["schema"])
+                self._cache[cache_key] = jsonschema.Draft7Validator(schema)
+            logger.info(f"Schema cache warmed: {len(rows)} schemas loaded")
 
 
-class SchemaCompatibilityError(Exception):
-    """Raised when a new schema version breaks compatibility rules."""
-    pass
-```
+    class SchemaCompatibilityError(Exception):
+        """Raised when a new schema version breaks compatibility rules."""
+        pass
+    ```
 
 ### 10.3 Schema Evolution Rules
 
@@ -1876,35 +1910,37 @@ class SchemaCompatibilityError(Exception):
 
 ### 10.4 Example Schema Registration
 
-```json
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "agent.deployed v1.0.0",
-  "type": "object",
-  "required": ["agent_id", "version", "deployment_target"],
-  "properties": {
-    "agent_id": {
-      "type": "string",
-      "description": "Unique identifier of the deployed agent"
-    },
-    "version": {
-      "type": "string",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$",
-      "description": "Semantic version of the agent"
-    },
-    "deployment_target": {
-      "type": "string",
-      "enum": ["development", "staging", "production"],
-      "description": "Target environment"
-    },
-    "previous_version": {
-      "type": "string",
-      "description": "Version being replaced (null for first deployment)"
+??? example "View JSON example"
+
+    ```json
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "agent.deployed v1.0.0",
+      "type": "object",
+      "required": ["agent_id", "version", "deployment_target"],
+      "properties": {
+        "agent_id": {
+          "type": "string",
+          "description": "Unique identifier of the deployed agent"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Semantic version of the agent"
+        },
+        "deployment_target": {
+          "type": "string",
+          "enum": ["development", "staging", "production"],
+          "description": "Target environment"
+        },
+        "previous_version": {
+          "type": "string",
+          "description": "Version being replaced (null for first deployment)"
+        }
+      },
+      "additionalProperties": false
     }
-  },
-  "additionalProperties": false
-}
-```
+    ```
 
 ---
 
@@ -1937,112 +1973,120 @@ The Event Bus exposes an HTTP API for management, inspection, and replay operati
 
 **Publish an event (HTTP)**
 
-```
-POST /api/v1/events/publish
-Content-Type: application/json
+??? example "View API example"
 
-{
-  "type": "integration.webhook_received",
-  "data": {
-    "connector_id": "slack-connector-01",
-    "service_name": "slack",
-    "webhook_type": "message.received",
-    "payload_hash": "sha256:abc123..."
-  },
-  "subject": "connector:slack-connector-01",
-  "correlation_id": "req-ext-001"
-}
+    ```
+    POST /api/v1/events/publish
+    Content-Type: application/json
 
-Response: 201 Created
-{
-  "event_id": "evt-550e8400-e29b-41d4-a716-446655440000",
-  "stream": "events:integration",
-  "stream_id": "1709044330847-0"
-}
-```
+    {
+      "type": "integration.webhook_received",
+      "data": {
+        "connector_id": "slack-connector-01",
+        "service_name": "slack",
+        "webhook_type": "message.received",
+        "payload_hash": "sha256:abc123..."
+      },
+      "subject": "connector:slack-connector-01",
+      "correlation_id": "req-ext-001"
+    }
+
+    Response: 201 Created
+    {
+      "event_id": "evt-550e8400-e29b-41d4-a716-446655440000",
+      "stream": "events:integration",
+      "stream_id": "1709044330847-0"
+    }
+    ```
 
 **Initiate a replay**
 
-```
-POST /api/v1/events/replay
-Content-Type: application/json
+??? example "View API example"
 
-{
-  "stream": "events:agent",
-  "from_timestamp": "2026-02-27T14:00:00Z",
-  "to_timestamp": "2026-02-27T14:30:00Z",
-  "event_types": ["agent.failed", "agent.rollback"],
-  "target_group": "incident-debug-20260227",
-  "max_events": 5000
-}
+    ```
+    POST /api/v1/events/replay
+    Content-Type: application/json
 
-Response: 202 Accepted
-{
-  "replay_id": "rpl-7890abcd",
-  "status": "running",
-  "estimated_events": 847
-}
-```
+    {
+      "stream": "events:agent",
+      "from_timestamp": "2026-02-27T14:00:00Z",
+      "to_timestamp": "2026-02-27T14:30:00Z",
+      "event_types": ["agent.failed", "agent.rollback"],
+      "target_group": "incident-debug-20260227",
+      "max_events": 5000
+    }
+
+    Response: 202 Accepted
+    {
+      "replay_id": "rpl-7890abcd",
+      "status": "running",
+      "estimated_events": 847
+    }
+    ```
 
 **List DLQ entries**
 
-```
-GET /api/v1/events/dlq?source_stream=events:eval&limit=10
+??? example "View API example"
 
-Response: 200 OK
-{
-  "entries": [
+    ```
+    GET /api/v1/events/dlq?source_stream=events:eval&limit=10
+
+    Response: 200 OK
     {
-      "dlq_message_id": "1709044330847-0",
-      "event_id": "evt-aaa111",
-      "event_type": "eval.completed",
-      "source_stream": "events:eval",
-      "consumer_group": "agent-builder",
-      "failure_timestamp": "2026-02-27T14:32:10.847Z",
-      "retry_count": 3,
-      "last_error": "TimeoutError: eval service did not respond",
-      "error_category": "transient",
-      "age_seconds": 3847
+      "entries": [
+        {
+          "dlq_message_id": "1709044330847-0",
+          "event_id": "evt-aaa111",
+          "event_type": "eval.completed",
+          "source_stream": "events:eval",
+          "consumer_group": "agent-builder",
+          "failure_timestamp": "2026-02-27T14:32:10.847Z",
+          "retry_count": 3,
+          "last_error": "TimeoutError: eval service did not respond",
+          "error_category": "transient",
+          "age_seconds": 3847
+        }
+      ],
+      "total": 1,
+      "dlq_depth": 1
     }
-  ],
-  "total": 1,
-  "dlq_depth": 1
-}
-```
+    ```
 
 ### 11.3 Internal Python API Summary
 
-```python
-# --- Publishing ---
-publisher = EventPublisher(redis, schema_registry, source="subsystem:agent-builder")
-event_id = await publisher.publish("agent.deployed", data={...})
-event_ids = await publisher.publish_batch([("agent.deployed", {...}), ("deployment.started", {...})])
+??? example "View Python pseudocode"
 
-# --- Subscribing ---
-subscriber = EventSubscriber(redis, group="eval-framework", consumer="eval-1")
-subscriber.subscribe("events:agent", handler=my_handler, filter=my_filter)
-await subscriber.start()
-await subscriber.stop()
+    ```python
+    # --- Publishing ---
+    publisher = EventPublisher(redis, schema_registry, source="subsystem:agent-builder")
+    event_id = await publisher.publish("agent.deployed", data={...})
+    event_ids = await publisher.publish_batch([("agent.deployed", {...}), ("deployment.started", {...})])
 
-# --- DLQ Management ---
-dlq = DLQHandler(redis)
-entries = await dlq.inspect(source_stream="events:eval")
-await dlq.retry(dlq_message_id="1709044330847-0")
-await dlq.discard(dlq_message_id="...", reason="Known bug, event irrelevant")
-depth = await dlq.get_depth()
+    # --- Subscribing ---
+    subscriber = EventSubscriber(redis, group="eval-framework", consumer="eval-1")
+    subscriber.subscribe("events:agent", handler=my_handler, filter=my_filter)
+    await subscriber.start()
+    await subscriber.stop()
 
-# --- Event Replay ---
-engine = ReplayEngine(redis)
-async for event in engine.replay(ReplayRequest(stream="events:agent", from_timestamp="...", to_timestamp="...")):
-    process(event)
-await engine.rebuild_consumer_group("events:agent", "new-subscriber", start_id="0")
+    # --- DLQ Management ---
+    dlq = DLQHandler(redis)
+    entries = await dlq.inspect(source_stream="events:eval")
+    await dlq.retry(dlq_message_id="1709044330847-0")
+    await dlq.discard(dlq_message_id="...", reason="Known bug, event irrelevant")
+    depth = await dlq.get_depth()
 
-# --- Schema Registry ---
-registry = SchemaRegistry(db, redis)
-await registry.register("agent.deployed", "1.0.0", schema={...})
-result = registry.validate(event)
-await registry.warmup()
-```
+    # --- Event Replay ---
+    engine = ReplayEngine(redis)
+    async for event in engine.replay(ReplayRequest(stream="events:agent", from_timestamp="...", to_timestamp="...")):
+        process(event)
+    await engine.rebuild_consumer_group("events:agent", "new-subscriber", start_id="0")
+
+    # --- Schema Registry ---
+    registry = SchemaRegistry(db, redis)
+    await registry.register("agent.deployed", "1.0.0", schema={...})
+    result = registry.validate(event)
+    await registry.warmup()
+    ```
 
 ---
 
@@ -2067,68 +2111,70 @@ await registry.warmup()
 
 Following the exception handling strategy (p. 206-209), the Event Bus client implements a circuit breaker to prevent cascading failures when Redis is unhealthy:
 
-```python
-from enum import Enum
-from time import time
+??? example "View Python pseudocode"
+
+    ```python
+    from enum import Enum
+    from time import time
 
 
-class CircuitState(Enum):
-    CLOSED = "closed"       # Normal operation
-    OPEN = "open"           # All calls fail immediately
-    HALF_OPEN = "half_open" # Testing if service recovered
+    class CircuitState(Enum):
+        CLOSED = "closed"       # Normal operation
+        OPEN = "open"           # All calls fail immediately
+        HALF_OPEN = "half_open" # Testing if service recovered
 
 
-class CircuitBreaker:
-    """
-    Circuit breaker for Event Bus operations.
+    class CircuitBreaker:
+        """
+        Circuit breaker for Event Bus operations.
 
-    Prevents cascading failures when Redis is unhealthy by
-    fast-failing publish/subscribe operations instead of
-    blocking on timeouts.
+        Prevents cascading failures when Redis is unhealthy by
+        fast-failing publish/subscribe operations instead of
+        blocking on timeouts.
 
-    States:
-    - CLOSED: Normal operation. Track failure count.
-    - OPEN: All operations fail immediately with CircuitOpenError.
-            Transitions to HALF_OPEN after reset_timeout_s.
-    - HALF_OPEN: Allow one probe request. Success -> CLOSED, failure -> OPEN.
-    """
+        States:
+        - CLOSED: Normal operation. Track failure count.
+        - OPEN: All operations fail immediately with CircuitOpenError.
+                Transitions to HALF_OPEN after reset_timeout_s.
+        - HALF_OPEN: Allow one probe request. Success -> CLOSED, failure -> OPEN.
+        """
 
-    def __init__(
-        self,
-        failure_threshold: int = 5,
-        reset_timeout_s: float = 30.0,
-    ):
-        self._failure_threshold = failure_threshold
-        self._reset_timeout = reset_timeout_s
-        self._state = CircuitState.CLOSED
-        self._failure_count = 0
-        self._last_failure_time = 0.0
+        def __init__(
+            self,
+            failure_threshold: int = 5,
+            reset_timeout_s: float = 30.0,
+        ):
+            self._failure_threshold = failure_threshold
+            self._reset_timeout = reset_timeout_s
+            self._state = CircuitState.CLOSED
+            self._failure_count = 0
+            self._last_failure_time = 0.0
 
-    @property
-    def state(self) -> CircuitState:
-        if self._state == CircuitState.OPEN:
-            if time() - self._last_failure_time >= self._reset_timeout:
-                self._state = CircuitState.HALF_OPEN
-        return self._state
+        @property
+        def state(self) -> CircuitState:
+            if self._state == CircuitState.OPEN:
+                if time() - self._last_failure_time >= self._reset_timeout:
+                    self._state = CircuitState.HALF_OPEN
+            return self._state
 
-    def record_success(self) -> None:
-        self._failure_count = 0
-        self._state = CircuitState.CLOSED
+        def record_success(self) -> None:
+            self._failure_count = 0
+            self._state = CircuitState.CLOSED
 
-    def record_failure(self) -> None:
-        self._failure_count += 1
-        self._last_failure_time = time()
-        if self._failure_count >= self._failure_threshold:
-            self._state = CircuitState.OPEN
+        def record_failure(self) -> None:
+            self._failure_count += 1
+            self._last_failure_time = time()
+            if self._failure_count >= self._failure_threshold:
+                self._state = CircuitState.OPEN
 
-    def allow_request(self) -> bool:
-        state = self.state
-        if state == CircuitState.CLOSED:
-            return True
-        if state == CircuitState.HALF_OPEN:
-            return True  # Allow probe
-        return False  # OPEN -- fail fast
-```
+        def allow_request(self) -> bool:
+            state = self.state
+            if state == CircuitState.CLOSED:
+                return True
+            if state == CircuitState.HALF_OPEN:
+                return True  # Allow probe
+            return False  # OPEN -- fail fast
+    ```
 
 ### 12.3 Graceful Degradation
 
@@ -2199,22 +2245,24 @@ The Event Bus dashboard in Grafana provides the following views:
 
 All Event Bus operations emit structured log entries following the Observability Platform's schema conventions:
 
-```json
-{
-  "timestamp": "2026-02-27T14:32:10.847Z",
-  "level": "INFO",
-  "logger": "agentforge.events.publisher",
-  "message": "Published event",
-  "event_id": "evt-550e8400",
-  "event_type": "agent.deployed",
-  "stream": "events:agent",
-  "stream_id": "1709044330847-0",
-  "attempt": 1,
-  "latency_ms": 2.3,
-  "trace_id": "tr-8f3a2b4c",
-  "span_id": "sp-evt-001"
-}
-```
+??? example "View JSON example"
+
+    ```json
+    {
+      "timestamp": "2026-02-27T14:32:10.847Z",
+      "level": "INFO",
+      "logger": "agentforge.events.publisher",
+      "message": "Published event",
+      "event_id": "evt-550e8400",
+      "event_type": "agent.deployed",
+      "stream": "events:agent",
+      "stream_id": "1709044330847-0",
+      "attempt": 1,
+      "latency_ms": 2.3,
+      "trace_id": "tr-8f3a2b4c",
+      "span_id": "sp-evt-001"
+    }
+    ```
 
 ---
 

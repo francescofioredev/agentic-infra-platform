@@ -24,22 +24,39 @@ The **Team Orchestrator** is the core composition engine of the AgentForge platf
 
 The Team Orchestrator operates at **Level 1** of the platform hierarchy (see System Overview, Section 3.1). It receives dispatched requests from the Level 0 Platform Orchestrator and coordinates Level 2 Worker Agents to fulfill them.
 
-```
-                        ┌───────────────────────────┐
-                        │  Platform Orchestrator    │  Level 0
-                        │  (routes request to team) │
-                        └────────────┬──────────────┘
-                                     │
-                    ┌────────────────┼────────────────┐
-                    │                │                │
-           ┌────────┴─────────┐ ┌────┴──────┐ ┌───────┴────────┐
-           │ Team Orchestrator│ │  Team     │ │  Team          │  Level 1
-           │  Alpha           │ │  Beta     │ │  Gamma         │
-           │  (THIS DOC)      │ │           │ │                │
-           └──┬───┬───┬───────┘ └───────────┘ └────────────────┘
-              │   │   │
-             ┌┘   │   └┐
-             A1   A2   A3   Worker Agents                         Level 2
+```mermaid
+graph TD
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef platform fill:#1ABC9C,stroke:#148F77,color:#fff
+
+    subgraph L0["Level 0"]
+        PO["Platform Orchestrator<br/><small>routes request to team</small>"]
+    end
+
+    subgraph L1["Level 1"]
+        direction LR
+        TA["Team Orchestrator<br/>Alpha<br/><small>(THIS DOC)</small>"]
+        TB2["Team Beta"]
+        TG2["Team Gamma"]
+    end
+
+    subgraph L2["Level 2 — Worker Agents"]
+        direction LR
+        A1a["A1"]
+        A2a["A2"]
+        A3a["A3"]
+    end
+
+    PO --> TA
+    PO --> TB2
+    PO --> TG2
+    TA --> A1a & A2a & A3a
+
+    class PO platform
+    class TA infra
+    class TB2,TG2 infra
+    class A1a,A2a,A3a core
 ```
 
 **Core responsibilities**:
@@ -63,130 +80,132 @@ The Team Orchestrator operates at **Level 1** of the platform hierarchy (see Sys
 
 Every team is defined by a declarative JSON configuration stored in the platform's persistent state store. This schema drives all orchestration behavior at runtime.
 
-```json
-{
-  "$schema": "https://agentforge.io/schemas/team-definition/v1.json",
-  "team_id": "team-alpha-research",
-  "name": "Research & Analysis Team",
-  "version": "1.4.0",
-  "description": "Conducts multi-source research, synthesizes findings, and produces cited reports.",
+??? example "View JSON example"
 
-  "topology": {
-    "type": "supervisor",
-    "supervisor_agent_id": "agent-supervisor-alpha",
-    "max_hierarchy_depth": 2,
-    "allow_agent_to_agent": false
-  },
+    ```json
+    {
+      "$schema": "https://agentforge.io/schemas/team-definition/v1.json",
+      "team_id": "team-alpha-research",
+      "name": "Research & Analysis Team",
+      "version": "1.4.0",
+      "description": "Conducts multi-source research, synthesizes findings, and produces cited reports.",
 
-  "agents": [
-    {
-      "agent_id": "agent-supervisor-alpha",
-      "role": "supervisor",
-      "name": "ResearchSupervisor",
-      "system_prompt_ref": "prompt-registry://research-supervisor@1.4.0",
-      "capabilities": ["task_decomposition", "result_aggregation", "quality_review"],
-      "input_schema": { "$ref": "#/schemas/research_request" },
-      "output_schema": { "$ref": "#/schemas/research_report" },
-      "model_tier": "mid",
-      "max_iterations": 5
-    },
-    {
-      "agent_id": "agent-web-researcher",
-      "role": "worker",
-      "name": "WebResearcher",
-      "system_prompt_ref": "prompt-registry://web-researcher@2.1.0",
-      "capabilities": ["web_search", "content_extraction", "summarization"],
-      "tools": ["mcp://search-server/web_search", "mcp://search-server/scrape_url"],
-      "input_schema": { "$ref": "#/schemas/search_query" },
-      "output_schema": { "$ref": "#/schemas/search_results" },
-      "model_tier": "mid",
-      "max_iterations": 10
-    },
-    {
-      "agent_id": "agent-data-analyst",
-      "role": "worker",
-      "name": "DataAnalyst",
-      "system_prompt_ref": "prompt-registry://data-analyst@1.2.0",
-      "capabilities": ["data_analysis", "chart_generation", "statistical_summary"],
-      "tools": ["mcp://data-server/query_db", "mcp://data-server/run_pandas"],
-      "input_schema": { "$ref": "#/schemas/analysis_request" },
-      "output_schema": { "$ref": "#/schemas/analysis_results" },
-      "model_tier": "high",
-      "max_iterations": 8
-    },
-    {
-      "agent_id": "agent-report-writer",
-      "role": "worker",
-      "name": "ReportWriter",
-      "system_prompt_ref": "prompt-registry://report-writer@1.0.3",
-      "capabilities": ["writing", "citation", "formatting"],
-      "tools": ["mcp://doc-server/format_markdown", "mcp://doc-server/generate_pdf"],
-      "input_schema": { "$ref": "#/schemas/writing_request" },
-      "output_schema": { "$ref": "#/schemas/formatted_report" },
-      "model_tier": "high",
-      "max_iterations": 5
-    }
-  ],
-
-  "communication_rules": {
-    "default_mode": "sync",
-    "timeout_ms": 30000,
-    "max_message_size_bytes": 1048576,
-    "rules": [
-      {
-        "from": "agent-supervisor-alpha",
-        "to": "agent-web-researcher",
-        "mode": "async",
-        "priority": "normal",
-        "retry_policy": { "max_retries": 2, "backoff_ms": 1000 }
+      "topology": {
+        "type": "supervisor",
+        "supervisor_agent_id": "agent-supervisor-alpha",
+        "max_hierarchy_depth": 2,
+        "allow_agent_to_agent": false
       },
-      {
-        "from": "agent-supervisor-alpha",
-        "to": "agent-data-analyst",
-        "mode": "async",
-        "priority": "normal",
-        "retry_policy": { "max_retries": 2, "backoff_ms": 1000 }
+
+      "agents": [
+        {
+          "agent_id": "agent-supervisor-alpha",
+          "role": "supervisor",
+          "name": "ResearchSupervisor",
+          "system_prompt_ref": "prompt-registry://research-supervisor@1.4.0",
+          "capabilities": ["task_decomposition", "result_aggregation", "quality_review"],
+          "input_schema": { "$ref": "#/schemas/research_request" },
+          "output_schema": { "$ref": "#/schemas/research_report" },
+          "model_tier": "mid",
+          "max_iterations": 5
+        },
+        {
+          "agent_id": "agent-web-researcher",
+          "role": "worker",
+          "name": "WebResearcher",
+          "system_prompt_ref": "prompt-registry://web-researcher@2.1.0",
+          "capabilities": ["web_search", "content_extraction", "summarization"],
+          "tools": ["mcp://search-server/web_search", "mcp://search-server/scrape_url"],
+          "input_schema": { "$ref": "#/schemas/search_query" },
+          "output_schema": { "$ref": "#/schemas/search_results" },
+          "model_tier": "mid",
+          "max_iterations": 10
+        },
+        {
+          "agent_id": "agent-data-analyst",
+          "role": "worker",
+          "name": "DataAnalyst",
+          "system_prompt_ref": "prompt-registry://data-analyst@1.2.0",
+          "capabilities": ["data_analysis", "chart_generation", "statistical_summary"],
+          "tools": ["mcp://data-server/query_db", "mcp://data-server/run_pandas"],
+          "input_schema": { "$ref": "#/schemas/analysis_request" },
+          "output_schema": { "$ref": "#/schemas/analysis_results" },
+          "model_tier": "high",
+          "max_iterations": 8
+        },
+        {
+          "agent_id": "agent-report-writer",
+          "role": "worker",
+          "name": "ReportWriter",
+          "system_prompt_ref": "prompt-registry://report-writer@1.0.3",
+          "capabilities": ["writing", "citation", "formatting"],
+          "tools": ["mcp://doc-server/format_markdown", "mcp://doc-server/generate_pdf"],
+          "input_schema": { "$ref": "#/schemas/writing_request" },
+          "output_schema": { "$ref": "#/schemas/formatted_report" },
+          "model_tier": "high",
+          "max_iterations": 5
+        }
+      ],
+
+      "communication_rules": {
+        "default_mode": "sync",
+        "timeout_ms": 30000,
+        "max_message_size_bytes": 1048576,
+        "rules": [
+          {
+            "from": "agent-supervisor-alpha",
+            "to": "agent-web-researcher",
+            "mode": "async",
+            "priority": "normal",
+            "retry_policy": { "max_retries": 2, "backoff_ms": 1000 }
+          },
+          {
+            "from": "agent-supervisor-alpha",
+            "to": "agent-data-analyst",
+            "mode": "async",
+            "priority": "normal",
+            "retry_policy": { "max_retries": 2, "backoff_ms": 1000 }
+          },
+          {
+            "from": "agent-supervisor-alpha",
+            "to": "agent-report-writer",
+            "mode": "sync",
+            "priority": "high",
+            "retry_policy": { "max_retries": 1, "backoff_ms": 500 }
+          }
+        ]
       },
-      {
-        "from": "agent-supervisor-alpha",
-        "to": "agent-report-writer",
-        "mode": "sync",
-        "priority": "high",
-        "retry_policy": { "max_retries": 1, "backoff_ms": 500 }
+
+      "planning": {
+        "strategy": "llm_structured",
+        "max_plan_steps": 15,
+        "allow_dynamic_replan": true,
+        "replan_trigger": "step_failure | goal_drift",
+        "max_replans": 3,
+        "feasibility_check": true
+      },
+
+      "goal": {
+        "description": "Produce a comprehensive, cited research report answering the user query.",
+        "success_criteria": [
+          "report contains >= 3 cited sources",
+          "all claims have supporting evidence",
+          "report passes quality threshold >= 0.8"
+        ],
+        "max_iterations": 20,
+        "timeout_s": 300
+      },
+
+      "guardrail_policies": ["no-pii-output", "citation-required", "no-fabrication"],
+
+      "metadata": {
+        "created_at": "2026-01-15T10:30:00Z",
+        "updated_at": "2026-02-20T14:22:00Z",
+        "owner": "platform-team",
+        "tags": ["research", "analysis", "reporting"]
       }
-    ]
-  },
-
-  "planning": {
-    "strategy": "llm_structured",
-    "max_plan_steps": 15,
-    "allow_dynamic_replan": true,
-    "replan_trigger": "step_failure | goal_drift",
-    "max_replans": 3,
-    "feasibility_check": true
-  },
-
-  "goal": {
-    "description": "Produce a comprehensive, cited research report answering the user query.",
-    "success_criteria": [
-      "report contains >= 3 cited sources",
-      "all claims have supporting evidence",
-      "report passes quality threshold >= 0.8"
-    ],
-    "max_iterations": 20,
-    "timeout_s": 300
-  },
-
-  "guardrail_policies": ["no-pii-output", "citation-required", "no-fabrication"],
-
-  "metadata": {
-    "created_at": "2026-01-15T10:30:00Z",
-    "updated_at": "2026-02-20T14:22:00Z",
-    "owner": "platform-team",
-    "tags": ["research", "analysis", "reporting"]
-  }
-}
-```
+    }
+    ```
 
 **Schema validation rules**:
 - `topology.max_hierarchy_depth` must not exceed 3 (p. 130).
@@ -207,232 +226,268 @@ The Team Orchestrator supports six topology types (p. 122). Each determines how 
 
 A single supervisor agent receives all tasks, delegates to workers, and aggregates results. Workers never communicate with each other directly. The supervisor handles routing, not business logic (p. 127).
 
-```
-                 ┌─────────────────────┐
-                 │     Supervisor      │
-                 │  (routes & aggreg.) │
-                 └──┬──────┬──────┬────┘
-                    │      │      │
-               ┌────┘      │      └────┐
-               │           │           │
-          ┌────┴────┐ ┌────┴────┐ ┌────┴────┐
-          │Worker A │ │Worker B │ │Worker C │
-          │(search) │ │(analyze)│ │(write)  │
-          └─────────┘ └─────────┘ └─────────┘
+```mermaid
+graph TD
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
 
-    Control flow:  Supervisor ──► Worker ──► Supervisor
-    Data flow:     Supervisor passes subtask context to worker;
-                   worker returns result to supervisor only.
+    SUP["Supervisor<br/><small>routes & aggregates</small>"]
+    WA["Worker A<br/><small>(search)</small>"]
+    WB["Worker B<br/><small>(analyze)</small>"]
+    WC["Worker C<br/><small>(write)</small>"]
+
+    SUP --> WA & WB & WC
+    WA & WB & WC --> SUP
+
+    class SUP infra
+    class WA,WB,WC core
 ```
+
+**Control flow**: Supervisor --> Worker --> Supervisor.
+**Data flow**: Supervisor passes subtask context to worker; worker returns result to supervisor only.
 
 **When to use**: Default for most teams. Simple coordination, clear accountability, straightforward debugging.
 
 **Configuration**:
-```json
-{
-  "topology": {
-    "type": "supervisor",
-    "supervisor_agent_id": "agent-supervisor-alpha",
-    "max_hierarchy_depth": 2,
-    "allow_agent_to_agent": false
-  }
-}
-```
+
+??? example "View JSON example"
+
+    ```json
+    {
+      "topology": {
+        "type": "supervisor",
+        "supervisor_agent_id": "agent-supervisor-alpha",
+        "max_hierarchy_depth": 2,
+        "allow_agent_to_agent": false
+      }
+    }
+    ```
 
 ### 3.2 Network (Decentralized) Topology
 
 All agents can communicate with any other agent. No single coordinator. Agents negotiate task ownership based on capability matching.
 
-```
-          ┌─────────┐
-          │Agent A  │
-          └──┬───┬──┘
-             │   │
-     ┌───────┘   └───────┐
-     │                   │
-┌────┴────┐          ┌───┴─────┐
-│Agent B  │◄────────►│Agent C  │
-└────┬────┘          └───┬─────┘
-     │                   │
-     └───────┐   ┌───────┘
-             │   │
-          ┌──┴───┴──┐
-          │Agent D  │
-          └─────────┘
+```mermaid
+graph TD
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
 
-    Control flow:  Any agent ──► Any agent (peer-to-peer)
-    Data flow:     Shared message bus; agents publish/subscribe.
+    NA["Agent A"]
+    NB["Agent B"]
+    NC["Agent C"]
+    ND["Agent D"]
+
+    NA <--> NB
+    NA <--> NC
+    NB <--> NC
+    NB <--> ND
+    NC <--> ND
+
+    class NA,NB,NC,ND core
 ```
+
+**Control flow**: Any agent --> Any agent (peer-to-peer).
+**Data flow**: Shared message bus; agents publish/subscribe.
 
 **When to use**: Small teams (2-4 agents) where tasks require tight collaboration and agents have overlapping context. Higher complexity; avoid for teams > 5 agents.
 
 **Configuration**:
-```json
-{
-  "topology": {
-    "type": "network",
-    "max_hops": 3,
-    "message_bus": "shared",
-    "termination_strategy": "consensus"
-  }
-}
-```
+
+??? example "View JSON example"
+
+    ```json
+    {
+      "topology": {
+        "type": "network",
+        "max_hops": 3,
+        "message_bus": "shared",
+        "termination_strategy": "consensus"
+      }
+    }
+    ```
 
 ### 3.3 Hierarchical Topology
 
 Multiple levels of supervisors forming a tree. A top-level supervisor delegates to mid-level supervisors, which in turn delegate to workers. Maximum depth: 3 levels (p. 130).
 
-```
-                    ┌───────────────────┐
-                    │  Top Supervisor   │  Level 0
-                    └───────┬───────────┘
-                            │
-               ┌────────────┼─────────────┐
-               │                          │
-      ┌────────┴─────────┐     ┌──────────┴──────────┐
-      │ Sub-Supervisor A │     │ Sub-Supervisor B    │  Level 1
-      └──┬─────────┬─────┘     └──┬─────────┬────────┘
-         │         │              │         │
-    ┌────┴──┐ ┌────┴──┐     ┌─────┴──┐ ┌────┴──┐
-    │Wkr A1 │ │Wkr A2 │     │Wkr B1  │ │Wkr B2 │        Level 2
-    └───────┘ └───────┘     └────────┘ └───────┘
+```mermaid
+graph TD
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef platform fill:#1ABC9C,stroke:#148F77,color:#fff
+
+    TS["Top Supervisor<br/><small>Level 0</small>"]
+    SSA["Sub-Supervisor A<br/><small>Level 1</small>"]
+    SSB["Sub-Supervisor B<br/><small>Level 1</small>"]
+    WA1["Wkr A1<br/><small>Level 2</small>"]
+    WA2["Wkr A2<br/><small>Level 2</small>"]
+    WB1["Wkr B1<br/><small>Level 2</small>"]
+    WB2["Wkr B2<br/><small>Level 2</small>"]
+
+    TS --> SSA & SSB
+    SSA --> WA1 & WA2
+    SSB --> WB1 & WB2
+
+    class TS platform
+    class SSA,SSB infra
+    class WA1,WA2,WB1,WB2 core
 ```
 
 **When to use**: Large, complex tasks requiring domain specialization at multiple levels. Each sub-supervisor owns a domain (e.g., "research" vs. "writing").
 
 **Configuration**:
-```json
-{
-  "topology": {
-    "type": "hierarchical",
-    "supervisor_agent_id": "agent-top-supervisor",
-    "sub_supervisors": [
-      {
-        "agent_id": "agent-sub-supervisor-a",
-        "workers": ["agent-worker-a1", "agent-worker-a2"]
-      },
-      {
-        "agent_id": "agent-sub-supervisor-b",
-        "workers": ["agent-worker-b1", "agent-worker-b2"]
+
+??? example "View JSON example"
+
+    ```json
+    {
+      "topology": {
+        "type": "hierarchical",
+        "supervisor_agent_id": "agent-top-supervisor",
+        "sub_supervisors": [
+          {
+            "agent_id": "agent-sub-supervisor-a",
+            "workers": ["agent-worker-a1", "agent-worker-a2"]
+          },
+          {
+            "agent_id": "agent-sub-supervisor-b",
+            "workers": ["agent-worker-b1", "agent-worker-b2"]
+          }
+        ],
+        "max_hierarchy_depth": 3
       }
-    ],
-    "max_hierarchy_depth": 3
-  }
-}
-```
+    }
+    ```
 
 ### 3.4 Pipeline Topology
 
 Agents are chained in a fixed sequence. The output of one agent becomes the input of the next. No branching or parallelism within the pipeline itself.
 
-```
-  ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
-  │ Agent A  │────►│ Agent B  │────►│ Agent C  │────►│ Agent D  │
-  │ (ingest) │     │(process) │     │(validate)│     │ (output) │
-  └──────────┘     └──────────┘     └──────────┘     └──────────┘
+```mermaid
+graph LR
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
 
-    Control flow:  Strictly sequential, left to right.
-    Data flow:     Each agent's output_schema matches next agent's input_schema.
+    PA["Agent A<br/><small>(ingest)</small>"]
+    PB["Agent B<br/><small>(process)</small>"]
+    PC["Agent C<br/><small>(validate)</small>"]
+    PD["Agent D<br/><small>(output)</small>"]
+
+    PA --> PB --> PC --> PD
+
+    class PA,PB,PC,PD core
 ```
+
+**Control flow**: Strictly sequential, left to right.
+**Data flow**: Each agent's output_schema matches next agent's input_schema.
 
 **When to use**: Deterministic workflows where ordering matters (e.g., extract -> transform -> validate -> format). Maps to Prompt Chaining (p. 1).
 
 **Configuration**:
-```json
-{
-  "topology": {
-    "type": "pipeline",
-    "stages": [
-      { "agent_id": "agent-ingest", "order": 1 },
-      { "agent_id": "agent-process", "order": 2 },
-      { "agent_id": "agent-validate", "order": 3 },
-      { "agent_id": "agent-output", "order": 4 }
-    ],
-    "gate_between_stages": true
-  }
-}
-```
+
+??? example "View JSON example"
+
+    ```json
+    {
+      "topology": {
+        "type": "pipeline",
+        "stages": [
+          { "agent_id": "agent-ingest", "order": 1 },
+          { "agent_id": "agent-process", "order": 2 },
+          { "agent_id": "agent-validate", "order": 3 },
+          { "agent_id": "agent-output", "order": 4 }
+        ],
+        "gate_between_stages": true
+      }
+    }
+    ```
 
 ### 3.5 Voting Topology
 
 Multiple agents process the same input independently, and an aggregator collects and reconciles their outputs via majority voting or weighted scoring (p. 48).
 
-```
-                    ┌──────────────┐
-                    │  Dispatcher  │
-                    └──┬───┬───┬───┘
-                       │   │   │           (same input to all)
-              ┌────────┘   │   └────────┐
-              │            │            │
-         ┌────┴────┐   ┌───┴─────┐  ┌───┴─────┐
-         │Agent A  │   │Agent B  │  │Agent C  │
-         │(model X)│   │(model Y)│  │(model Z)│
-         └────┬────┘   └───┬─────┘  └───┬─────┘
-              │            │            │
-              └────────┐   │   ┌────────┘
-                       │   │   │
-                    ┌──┴───┴───┴──┐
-                    │  Aggregator │     (majority vote / scoring)
-                    └─────────────┘
+```mermaid
+graph TD
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+
+    DIS["Dispatcher"]
+    VA["Agent A<br/><small>(model X)</small>"]
+    VB["Agent B<br/><small>(model Y)</small>"]
+    VC["Agent C<br/><small>(model Z)</small>"]
+    AGG["Aggregator<br/><small>majority vote / scoring</small>"]
+
+    DIS -->|"same input to all"| VA & VB & VC
+    VA & VB & VC --> AGG
+
+    class DIS,AGG infra
+    class VA,VB,VC core
 ```
 
 **When to use**: High-stakes decisions where correctness matters more than latency. Safety-critical classifications, legal analysis, medical triage.
 
 **Configuration**:
-```json
-{
-  "topology": {
-    "type": "voting",
-    "voters": ["agent-a", "agent-b", "agent-c"],
-    "aggregation_strategy": "majority_vote",
-    "min_agreement": 0.66,
-    "tiebreak": "highest_confidence"
-  }
-}
-```
+
+??? example "View JSON example"
+
+    ```json
+    {
+      "topology": {
+        "type": "voting",
+        "voters": ["agent-a", "agent-b", "agent-c"],
+        "aggregation_strategy": "majority_vote",
+        "min_agreement": 0.66,
+        "tiebreak": "highest_confidence"
+      }
+    }
+    ```
 
 ### 3.6 Custom Topology
 
 A user-defined directed graph of agent connections. Supports arbitrary communication patterns including conditional edges, loops with termination conditions, and mixed sync/async channels.
 
-```
-         ┌──────────┐
-         │ Agent A  │──────────────────┐
-         └────┬─────┘                  │
-              │                        │
-         ┌────┴─────┐                  │
-         │ Agent B  │─────┐            │
-         └────┬─────┘     │            │
-              │       ┌───┴─────┐      │
-              │       │ Agent D │      │
-              │       └───┬─────┘      │
-         ┌────┴─────┐     │       ┌────┴─────┐
-         │ Agent C  │─────┴──────►│ Agent E  │
-         └──────────┘             └──────────┘
+```mermaid
+graph TD
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
 
-    Edges defined explicitly in configuration.
-    Supports conditional routing and feedback loops.
+    CA["Agent A"]
+    CB["Agent B"]
+    CC["Agent C"]
+    CD["Agent D"]
+    CE["Agent E"]
+
+    CA --> CB
+    CA --> CE
+    CB --> CC
+    CB --> CD
+    CC --> CE
+    CD --> CE
+
+    class CA,CB,CC,CD,CE core
 ```
+
+Edges defined explicitly in configuration. Supports conditional routing and feedback loops.
 
 **Configuration**:
-```json
-{
-  "topology": {
-    "type": "custom",
-    "edges": [
-      { "from": "agent-a", "to": "agent-b", "condition": "always" },
-      { "from": "agent-a", "to": "agent-e", "condition": "input.priority == 'urgent'" },
-      { "from": "agent-b", "to": "agent-c", "condition": "always" },
-      { "from": "agent-b", "to": "agent-d", "condition": "always" },
-      { "from": "agent-c", "to": "agent-e", "condition": "always" },
-      { "from": "agent-d", "to": "agent-e", "condition": "always" }
-    ],
-    "entry_point": "agent-a",
-    "exit_point": "agent-e",
-    "max_loop_iterations": 5
-  }
-}
-```
+
+??? example "View JSON example"
+
+    ```json
+    {
+      "topology": {
+        "type": "custom",
+        "edges": [
+          { "from": "agent-a", "to": "agent-b", "condition": "always" },
+          { "from": "agent-a", "to": "agent-e", "condition": "input.priority == 'urgent'" },
+          { "from": "agent-b", "to": "agent-c", "condition": "always" },
+          { "from": "agent-b", "to": "agent-d", "condition": "always" },
+          { "from": "agent-c", "to": "agent-e", "condition": "always" },
+          { "from": "agent-d", "to": "agent-e", "condition": "always" }
+        ],
+        "entry_point": "agent-a",
+        "exit_point": "agent-e",
+        "max_loop_iterations": 5
+      }
+    }
+    ```
 
 ### Topology Comparison Matrix
 
@@ -501,41 +556,43 @@ Supervisor                      Worker
 
 All inter-agent messages within a team use a standardized envelope:
 
-```json
-{
-  "message_id": "msg-uuid-v4",
-  "trace_id": "trace-uuid-v4",
-  "span_id": "span-uuid-v4",
-  "parent_span_id": "span-uuid-v4-parent",
+??? example "View JSON example"
 
-  "from_agent_id": "agent-supervisor-alpha",
-  "to_agent_id": "agent-web-researcher",
+    ```json
+    {
+      "message_id": "msg-uuid-v4",
+      "trace_id": "trace-uuid-v4",
+      "span_id": "span-uuid-v4",
+      "parent_span_id": "span-uuid-v4-parent",
 
-  "mode": "async",
-  "priority": "normal",
-  "timestamp": "2026-02-27T10:15:30.123Z",
+      "from_agent_id": "agent-supervisor-alpha",
+      "to_agent_id": "agent-web-researcher",
 
-  "payload": {
-    "task_type": "web_search",
-    "input": {
-      "query": "renewable energy market trends 2026",
-      "max_results": 10,
-      "source_filter": ["academic", "news"]
-    },
-    "context": {
-      "original_goal": "Research report on renewable energy investment outlook",
-      "plan_step_id": "step-2",
-      "depends_on_results": {}
+      "mode": "async",
+      "priority": "normal",
+      "timestamp": "2026-02-27T10:15:30.123Z",
+
+      "payload": {
+        "task_type": "web_search",
+        "input": {
+          "query": "renewable energy market trends 2026",
+          "max_results": 10,
+          "source_filter": ["academic", "news"]
+        },
+        "context": {
+          "original_goal": "Research report on renewable energy investment outlook",
+          "plan_step_id": "step-2",
+          "depends_on_results": {}
+        }
+      },
+
+      "metadata": {
+        "retry_count": 0,
+        "timeout_ms": 30000,
+        "schema_version": "1.0"
+      }
     }
-  },
-
-  "metadata": {
-    "retry_count": 0,
-    "timeout_ms": 30000,
-    "schema_version": "1.0"
-  }
-}
-```
+    ```
 
 **Key design rules**:
 - Every message carries `trace_id` and `span_id` for distributed tracing (Observability).
@@ -547,69 +604,71 @@ All inter-agent messages within a team use a standardized envelope:
 
 Within a team, the supervisor routes subtasks to workers using LLM-based routing with confidence thresholds (p. 25). The routing decision considers agent capabilities, current load, and the nature of the subtask.
 
-```python
-class IntraTeamRouter:
-    """Routes subtasks to the appropriate worker agent within a team.
-    Uses LLM-based classification with confidence thresholds (p. 25).
-    Always includes a fallback handler (p. 27)."""
+??? example "View Python pseudocode"
 
-    def __init__(self, team_config: TeamDefinition, router_model: str = "haiku"):
-        self.team_config = team_config
-        self.router_model = router_model  # cheap/fast model for routing (p. 258)
-        self.agents = {a.agent_id: a for a in team_config.agents if a.role == "worker"}
-        self.confidence_threshold = 0.7
+    ```python
+    class IntraTeamRouter:
+        """Routes subtasks to the appropriate worker agent within a team.
+        Uses LLM-based classification with confidence thresholds (p. 25).
+        Always includes a fallback handler (p. 27)."""
 
-    async def route(self, subtask: SubTask, trace_ctx: TraceContext) -> RoutingDecision:
-        """Determine which worker agent should handle a subtask."""
+        def __init__(self, team_config: TeamDefinition, router_model: str = "haiku"):
+            self.team_config = team_config
+            self.router_model = router_model  # cheap/fast model for routing (p. 258)
+            self.agents = {a.agent_id: a for a in team_config.agents if a.role == "worker"}
+            self.confidence_threshold = 0.7
 
-        # Build routing prompt with agent capability descriptions
-        agent_descriptions = [
-            f"- {a.name} (id={a.agent_id}): capabilities={a.capabilities}"
-            for a in self.agents.values()
-        ]
-        routing_prompt = f"""Given the following subtask, select the best agent to handle it.
+        async def route(self, subtask: SubTask, trace_ctx: TraceContext) -> RoutingDecision:
+            """Determine which worker agent should handle a subtask."""
 
-Subtask: {subtask.description}
-Required capabilities: {subtask.required_capabilities}
+            # Build routing prompt with agent capability descriptions
+            agent_descriptions = [
+                f"- {a.name} (id={a.agent_id}): capabilities={a.capabilities}"
+                for a in self.agents.values()
+            ]
+            routing_prompt = f"""Given the following subtask, select the best agent to handle it.
 
-Available agents:
-{chr(10).join(agent_descriptions)}
+    Subtask: {subtask.description}
+    Required capabilities: {subtask.required_capabilities}
 
-Respond with JSON: {{"agent_id": "...", "confidence": 0.0-1.0, "reasoning": "..."}}"""
+    Available agents:
+    {chr(10).join(agent_descriptions)}
 
-        # LLM-based routing decision (p. 25)
-        response = await llm_call(
-            model=self.router_model,
-            prompt=routing_prompt,
-            response_format="json"
-        )
+    Respond with JSON: {{"agent_id": "...", "confidence": 0.0-1.0, "reasoning": "..."}}"""
 
-        decision = RoutingDecision.parse(response)
-
-        # Log routing decision for observability (p. 26)
-        trace_ctx.log_routing_decision(
-            subtask_id=subtask.id,
-            selected_agent=decision.agent_id,
-            confidence=decision.confidence,
-            reasoning=decision.reasoning,
-            all_candidates=list(self.agents.keys())
-        )
-
-        # Apply confidence threshold; fallback if below (p. 27)
-        if decision.confidence < self.confidence_threshold:
-            logger.warning(
-                f"Low routing confidence ({decision.confidence}) for subtask "
-                f"{subtask.id}. Falling back to supervisor self-handling or escalation."
+            # LLM-based routing decision (p. 25)
+            response = await llm_call(
+                model=self.router_model,
+                prompt=routing_prompt,
+                response_format="json"
             )
-            return RoutingDecision(
-                agent_id=self.team_config.topology.supervisor_agent_id,
+
+            decision = RoutingDecision.parse(response)
+
+            # Log routing decision for observability (p. 26)
+            trace_ctx.log_routing_decision(
+                subtask_id=subtask.id,
+                selected_agent=decision.agent_id,
                 confidence=decision.confidence,
-                reasoning="Below confidence threshold; escalating to supervisor.",
-                is_fallback=True
+                reasoning=decision.reasoning,
+                all_candidates=list(self.agents.keys())
             )
 
-        return decision
-```
+            # Apply confidence threshold; fallback if below (p. 27)
+            if decision.confidence < self.confidence_threshold:
+                logger.warning(
+                    f"Low routing confidence ({decision.confidence}) for subtask "
+                    f"{subtask.id}. Falling back to supervisor self-handling or escalation."
+                )
+                return RoutingDecision(
+                    agent_id=self.team_config.topology.supervisor_agent_id,
+                    confidence=decision.confidence,
+                    reasoning="Below confidence threshold; escalating to supervisor.",
+                    is_fallback=True
+                )
+
+            return decision
+    ```
 
 ---
 
@@ -621,142 +680,144 @@ The Team Orchestrator uses the Planning pattern (p. 101) to decompose incoming t
 
 When the supervisor receives a task, it generates a structured plan using an LLM call. The plan is a DAG (Directed Acyclic Graph) of steps, each assigned to a specific worker agent.
 
-```python
-class PlanGenerator:
-    """Generates structured execution plans from high-level tasks.
-    Produces JSON plans with depends_on fields (p. 107).
-    Validates plan feasibility before execution (p. 111)."""
+??? example "View Python pseudocode"
 
-    def __init__(self, team_config: TeamDefinition, planner_model: str = "sonnet"):
-        self.team_config = team_config
-        self.planner_model = planner_model
-        self.router = IntraTeamRouter(team_config)
-        self.max_plan_steps = team_config.planning.max_plan_steps
+    ```python
+    class PlanGenerator:
+        """Generates structured execution plans from high-level tasks.
+        Produces JSON plans with depends_on fields (p. 107).
+        Validates plan feasibility before execution (p. 111)."""
 
-    async def generate_plan(
-        self, task: Task, trace_ctx: TraceContext
-    ) -> ExecutionPlan:
-        """Generate a structured plan for a given task."""
+        def __init__(self, team_config: TeamDefinition, planner_model: str = "sonnet"):
+            self.team_config = team_config
+            self.planner_model = planner_model
+            self.router = IntraTeamRouter(team_config)
+            self.max_plan_steps = team_config.planning.max_plan_steps
 
-        available_agents = [
-            {
-                "agent_id": a.agent_id,
-                "name": a.name,
-                "capabilities": a.capabilities,
-                "input_schema": a.input_schema,
-                "output_schema": a.output_schema,
-            }
-            for a in self.team_config.agents
-            if a.role == "worker"
-        ]
+        async def generate_plan(
+            self, task: Task, trace_ctx: TraceContext
+        ) -> ExecutionPlan:
+            """Generate a structured plan for a given task."""
 
-        planning_prompt = f"""Decompose the following task into a structured execution plan.
+            available_agents = [
+                {
+                    "agent_id": a.agent_id,
+                    "name": a.name,
+                    "capabilities": a.capabilities,
+                    "input_schema": a.input_schema,
+                    "output_schema": a.output_schema,
+                }
+                for a in self.team_config.agents
+                if a.role == "worker"
+            ]
 
-Task: {task.description}
-Goal: {task.goal.description}
-Success criteria: {task.goal.success_criteria}
+            planning_prompt = f"""Decompose the following task into a structured execution plan.
 
-Available worker agents:
-{json.dumps(available_agents, indent=2)}
+    Task: {task.description}
+    Goal: {task.goal.description}
+    Success criteria: {task.goal.success_criteria}
 
-Rules:
-- Each step must be assigned to exactly one agent.
-- Use "depends_on" to declare step dependencies (list of step_ids).
-- Steps with no dependencies can execute in parallel.
-- Maximum {self.max_plan_steps} steps.
-- Each step input must conform to the assigned agent's input_schema.
-- Include a final aggregation step that combines all results.
+    Available worker agents:
+    {json.dumps(available_agents, indent=2)}
 
-Respond with a JSON plan:
-{{
-  "plan_id": "plan-uuid",
-  "steps": [
+    Rules:
+    - Each step must be assigned to exactly one agent.
+    - Use "depends_on" to declare step dependencies (list of step_ids).
+    - Steps with no dependencies can execute in parallel.
+    - Maximum {self.max_plan_steps} steps.
+    - Each step input must conform to the assigned agent's input_schema.
+    - Include a final aggregation step that combines all results.
+
+    Respond with a JSON plan:
     {{
-      "step_id": "step-1",
-      "description": "...",
-      "agent_id": "...",
-      "input": {{ ... }},
-      "depends_on": [],
-      "expected_output": "...",
-      "timeout_ms": 30000
-    }}
-  ]
-}}"""
+      "plan_id": "plan-uuid",
+      "steps": [
+        {{
+          "step_id": "step-1",
+          "description": "...",
+          "agent_id": "...",
+          "input": {{ ... }},
+          "depends_on": [],
+          "expected_output": "...",
+          "timeout_ms": 30000
+        }}
+      ]
+    }}"""
 
-        response = await llm_call(
-            model=self.planner_model,
-            prompt=planning_prompt,
-            response_format="json"
-        )
-
-        plan = ExecutionPlan.parse(response)
-
-        # Validate plan feasibility (p. 111)
-        validation = await self._validate_plan(plan, task)
-        if not validation.is_feasible:
-            trace_ctx.log_event("plan_validation_failed", {
-                "plan_id": plan.plan_id,
-                "reasons": validation.failure_reasons
-            })
-            raise PlanInfeasibleError(
-                f"Plan {plan.plan_id} failed feasibility check: "
-                f"{validation.failure_reasons}"
+            response = await llm_call(
+                model=self.planner_model,
+                prompt=planning_prompt,
+                response_format="json"
             )
 
-        trace_ctx.log_event("plan_generated", {
-            "plan_id": plan.plan_id,
-            "step_count": len(plan.steps),
-            "parallel_groups": plan.get_parallel_groups()
-        })
+            plan = ExecutionPlan.parse(response)
 
-        return plan
-
-    async def _validate_plan(
-        self, plan: ExecutionPlan, task: Task
-    ) -> PlanValidation:
-        """Validate plan feasibility before execution (p. 111).
-        Checks: agent availability, schema compatibility, dependency
-        acyclicity, goal coverage, step count limits."""
-
-        errors = []
-
-        # 1. Check all referenced agents exist in the team
-        team_agent_ids = {a.agent_id for a in self.team_config.agents}
-        for step in plan.steps:
-            if step.agent_id not in team_agent_ids:
-                errors.append(f"Step {step.step_id} references unknown agent {step.agent_id}")
-
-        # 2. Check dependency graph is acyclic
-        if plan.has_cycle():
-            errors.append("Plan dependency graph contains a cycle")
-
-        # 3. Check step count within limits
-        if len(plan.steps) > self.max_plan_steps:
-            errors.append(
-                f"Plan has {len(plan.steps)} steps, exceeding max of {self.max_plan_steps}"
-            )
-
-        # 4. Validate input schemas match agent expectations
-        for step in plan.steps:
-            agent = self._get_agent(step.agent_id)
-            if agent and not schema_compatible(step.input, agent.input_schema):
-                errors.append(
-                    f"Step {step.step_id} input does not match "
-                    f"{agent.name} input_schema"
+            # Validate plan feasibility (p. 111)
+            validation = await self._validate_plan(plan, task)
+            if not validation.is_feasible:
+                trace_ctx.log_event("plan_validation_failed", {
+                    "plan_id": plan.plan_id,
+                    "reasons": validation.failure_reasons
+                })
+                raise PlanInfeasibleError(
+                    f"Plan {plan.plan_id} failed feasibility check: "
+                    f"{validation.failure_reasons}"
                 )
 
-        # 5. Check goal coverage: plan steps should address all success criteria
-        coverage = self._check_goal_coverage(plan, task.goal)
-        if coverage < 0.8:
-            errors.append(
-                f"Plan covers only {coverage:.0%} of goal success criteria"
-            )
+            trace_ctx.log_event("plan_generated", {
+                "plan_id": plan.plan_id,
+                "step_count": len(plan.steps),
+                "parallel_groups": plan.get_parallel_groups()
+            })
 
-        return PlanValidation(
-            is_feasible=len(errors) == 0,
-            failure_reasons=errors
-        )
-```
+            return plan
+
+        async def _validate_plan(
+            self, plan: ExecutionPlan, task: Task
+        ) -> PlanValidation:
+            """Validate plan feasibility before execution (p. 111).
+            Checks: agent availability, schema compatibility, dependency
+            acyclicity, goal coverage, step count limits."""
+
+            errors = []
+
+            # 1. Check all referenced agents exist in the team
+            team_agent_ids = {a.agent_id for a in self.team_config.agents}
+            for step in plan.steps:
+                if step.agent_id not in team_agent_ids:
+                    errors.append(f"Step {step.step_id} references unknown agent {step.agent_id}")
+
+            # 2. Check dependency graph is acyclic
+            if plan.has_cycle():
+                errors.append("Plan dependency graph contains a cycle")
+
+            # 3. Check step count within limits
+            if len(plan.steps) > self.max_plan_steps:
+                errors.append(
+                    f"Plan has {len(plan.steps)} steps, exceeding max of {self.max_plan_steps}"
+                )
+
+            # 4. Validate input schemas match agent expectations
+            for step in plan.steps:
+                agent = self._get_agent(step.agent_id)
+                if agent and not schema_compatible(step.input, agent.input_schema):
+                    errors.append(
+                        f"Step {step.step_id} input does not match "
+                        f"{agent.name} input_schema"
+                    )
+
+            # 5. Check goal coverage: plan steps should address all success criteria
+            coverage = self._check_goal_coverage(plan, task.goal)
+            if coverage < 0.8:
+                errors.append(
+                    f"Plan covers only {coverage:.0%} of goal success criteria"
+                )
+
+            return PlanValidation(
+                is_feasible=len(errors) == 0,
+                failure_reasons=errors
+            )
+    ```
 
 ### 5.2 Plan Data Structure
 
@@ -771,184 +832,195 @@ Example plan for: "Research renewable energy and produce a report"
   step-4: Synthesize(step-1, step-2 results)        depends_on: [step-1, step-2]
   step-5: AnalyzeData(step-3 results)               depends_on: [step-3]
   step-6: WriteReport(step-4, step-5 results)       depends_on: [step-4, step-5]
+```
 
 DAG visualization:
 
-  ┌────────┐   ┌────────┐   ┌────────┐
-  │ step-1 │   │ step-2 │   │ step-3 │    Parallel: no dependencies
-  └───┬────┘   └───┬────┘   └───┬────┘
-      │            │            │
-      └─────┬──────┘            │
-            │                   │
-       ┌────┴────┐          ┌───┴─────┐
-       │ step-4  │          │ step-5  │    Parallel: independent groups
-       └────┬────┘          └───┬─────┘
-            │                   │
-            └─────────┬─────────┘
-                      │
-                 ┌────┴────┐
-                 │ step-6  │               Sequential: waits for 4 and 5
-                 └─────────┘
+```mermaid
+graph TD
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+
+    S1["step-1<br/><small>Parallel: no deps</small>"]
+    S2["step-2<br/><small>Parallel: no deps</small>"]
+    S3["step-3<br/><small>Parallel: no deps</small>"]
+    S4["step-4<br/><small>Parallel: independent group</small>"]
+    S5["step-5<br/><small>Parallel: independent group</small>"]
+    S6["step-6<br/><small>Sequential: waits for 4 and 5</small>"]
+
+    S1 --> S4
+    S2 --> S4
+    S3 --> S5
+    S4 --> S6
+    S5 --> S6
+
+    class S1,S2,S3 core
+    class S4,S5 infra
+    class S6 core
 ```
 
-```json
-{
-  "plan_id": "plan-a1b2c3",
-  "task_id": "task-xyz",
-  "steps": [
+??? example "View JSON example"
+
+    ```json
     {
-      "step_id": "step-1",
-      "description": "Search for solar energy market trends",
-      "agent_id": "agent-web-researcher",
-      "input": { "query": "solar energy market trends 2026", "max_results": 10 },
-      "depends_on": [],
-      "expected_output": "List of search results with summaries",
-      "timeout_ms": 30000
-    },
-    {
-      "step_id": "step-2",
-      "description": "Search for wind energy market data",
-      "agent_id": "agent-web-researcher",
-      "input": { "query": "wind energy investment outlook 2026", "max_results": 10 },
-      "depends_on": [],
-      "expected_output": "List of search results with summaries",
-      "timeout_ms": 30000
-    },
-    {
-      "step_id": "step-3",
-      "description": "Analyze historical energy investment data",
-      "agent_id": "agent-data-analyst",
-      "input": { "dataset": "energy_investments", "time_range": "2020-2026" },
-      "depends_on": [],
-      "expected_output": "Statistical analysis with trends and projections",
-      "timeout_ms": 60000
-    },
-    {
-      "step_id": "step-4",
-      "description": "Synthesize web research findings",
-      "agent_id": "agent-web-researcher",
-      "input": { "task": "synthesize", "sources": "$ref:step-1.output,$ref:step-2.output" },
-      "depends_on": ["step-1", "step-2"],
-      "expected_output": "Synthesized research summary with key findings",
-      "timeout_ms": 45000
-    },
-    {
-      "step_id": "step-5",
-      "description": "Produce data analysis summary",
-      "agent_id": "agent-data-analyst",
-      "input": { "task": "summarize", "data": "$ref:step-3.output" },
-      "depends_on": ["step-3"],
-      "expected_output": "Analysis summary with charts and key metrics",
-      "timeout_ms": 45000
-    },
-    {
-      "step_id": "step-6",
-      "description": "Write final research report",
-      "agent_id": "agent-report-writer",
-      "input": {
-        "research_findings": "$ref:step-4.output",
-        "data_analysis": "$ref:step-5.output",
-        "format": "markdown",
-        "citation_style": "APA"
-      },
-      "depends_on": ["step-4", "step-5"],
-      "expected_output": "Complete research report with citations",
-      "timeout_ms": 60000
+      "plan_id": "plan-a1b2c3",
+      "task_id": "task-xyz",
+      "steps": [
+        {
+          "step_id": "step-1",
+          "description": "Search for solar energy market trends",
+          "agent_id": "agent-web-researcher",
+          "input": { "query": "solar energy market trends 2026", "max_results": 10 },
+          "depends_on": [],
+          "expected_output": "List of search results with summaries",
+          "timeout_ms": 30000
+        },
+        {
+          "step_id": "step-2",
+          "description": "Search for wind energy market data",
+          "agent_id": "agent-web-researcher",
+          "input": { "query": "wind energy investment outlook 2026", "max_results": 10 },
+          "depends_on": [],
+          "expected_output": "List of search results with summaries",
+          "timeout_ms": 30000
+        },
+        {
+          "step_id": "step-3",
+          "description": "Analyze historical energy investment data",
+          "agent_id": "agent-data-analyst",
+          "input": { "dataset": "energy_investments", "time_range": "2020-2026" },
+          "depends_on": [],
+          "expected_output": "Statistical analysis with trends and projections",
+          "timeout_ms": 60000
+        },
+        {
+          "step_id": "step-4",
+          "description": "Synthesize web research findings",
+          "agent_id": "agent-web-researcher",
+          "input": { "task": "synthesize", "sources": "$ref:step-1.output,$ref:step-2.output" },
+          "depends_on": ["step-1", "step-2"],
+          "expected_output": "Synthesized research summary with key findings",
+          "timeout_ms": 45000
+        },
+        {
+          "step_id": "step-5",
+          "description": "Produce data analysis summary",
+          "agent_id": "agent-data-analyst",
+          "input": { "task": "summarize", "data": "$ref:step-3.output" },
+          "depends_on": ["step-3"],
+          "expected_output": "Analysis summary with charts and key metrics",
+          "timeout_ms": 45000
+        },
+        {
+          "step_id": "step-6",
+          "description": "Write final research report",
+          "agent_id": "agent-report-writer",
+          "input": {
+            "research_findings": "$ref:step-4.output",
+            "data_analysis": "$ref:step-5.output",
+            "format": "markdown",
+            "citation_style": "APA"
+          },
+          "depends_on": ["step-4", "step-5"],
+          "expected_output": "Complete research report with citations",
+          "timeout_ms": 60000
+        }
+      ]
     }
-  ]
-}
-```
+    ```
 
 ### 5.3 Dynamic Re-Planning
 
 When a step fails or produces output that invalidates downstream steps, the orchestrator triggers dynamic re-planning (p. 109). Re-planning generates a revised plan that accounts for what has already been completed and what has failed.
 
-```python
-class DynamicRePlanner:
-    """Handles re-planning when plan execution encounters failures
-    or when intermediate results invalidate the current plan (p. 109).
-    Preserves completed step results; re-plans only the remaining DAG."""
+??? example "View Python pseudocode"
 
-    def __init__(self, plan_generator: PlanGenerator, max_replans: int = 3):
-        self.plan_generator = plan_generator
-        self.max_replans = max_replans
-        self.replan_count = 0
+    ```python
+    class DynamicRePlanner:
+        """Handles re-planning when plan execution encounters failures
+        or when intermediate results invalidate the current plan (p. 109).
+        Preserves completed step results; re-plans only the remaining DAG."""
 
-    async def replan(
-        self,
-        original_plan: ExecutionPlan,
-        execution_state: ExecutionState,
-        failure_context: FailureContext,
-        trace_ctx: TraceContext,
-    ) -> ExecutionPlan:
-        """Generate a revised plan incorporating completed results
-        and working around the failure."""
+        def __init__(self, plan_generator: PlanGenerator, max_replans: int = 3):
+            self.plan_generator = plan_generator
+            self.max_replans = max_replans
+            self.replan_count = 0
 
-        if self.replan_count >= self.max_replans:
-            trace_ctx.log_event("replan_limit_reached", {
-                "plan_id": original_plan.plan_id,
-                "replan_count": self.replan_count
+        async def replan(
+            self,
+            original_plan: ExecutionPlan,
+            execution_state: ExecutionState,
+            failure_context: FailureContext,
+            trace_ctx: TraceContext,
+        ) -> ExecutionPlan:
+            """Generate a revised plan incorporating completed results
+            and working around the failure."""
+
+            if self.replan_count >= self.max_replans:
+                trace_ctx.log_event("replan_limit_reached", {
+                    "plan_id": original_plan.plan_id,
+                    "replan_count": self.replan_count
+                })
+                raise ReplanLimitExceeded(
+                    f"Reached maximum re-plan attempts ({self.max_replans}). "
+                    f"Escalating to human review."
+                )
+
+            self.replan_count += 1
+
+            completed_steps = execution_state.get_completed_steps()
+            failed_step = failure_context.failed_step
+            pending_steps = execution_state.get_pending_steps()
+
+            replan_prompt = f"""A plan step has failed. Generate a revised plan for the remaining work.
+
+    Original goal: {original_plan.goal}
+
+    Completed steps (results available):
+    {json.dumps([s.to_summary() for s in completed_steps], indent=2)}
+
+    Failed step:
+      Step ID: {failed_step.step_id}
+      Agent: {failed_step.agent_id}
+      Error: {failure_context.error_message}
+      Error type: {failure_context.error_type}
+
+    Pending steps (not yet started):
+    {json.dumps([s.to_summary() for s in pending_steps], indent=2)}
+
+    Generate a revised plan that:
+    1. Reuses all completed step results (do not re-execute them).
+    2. Works around the failure (use alternative agents/approaches).
+    3. Still achieves the original goal.
+    4. References completed results via $ref:step-N.output syntax."""
+
+            response = await llm_call(
+                model=self.plan_generator.planner_model,
+                prompt=replan_prompt,
+                response_format="json"
+            )
+
+            revised_plan = ExecutionPlan.parse(response)
+
+            # Validate the revised plan
+            validation = await self.plan_generator._validate_plan(
+                revised_plan, execution_state.task
+            )
+            if not validation.is_feasible:
+                raise ReplanFailed(
+                    f"Revised plan failed feasibility check: {validation.failure_reasons}"
+                )
+
+            trace_ctx.log_event("replan_generated", {
+                "original_plan_id": original_plan.plan_id,
+                "revised_plan_id": revised_plan.plan_id,
+                "replan_number": self.replan_count,
+                "steps_reused": len(completed_steps),
+                "new_steps": len(revised_plan.steps)
             })
-            raise ReplanLimitExceeded(
-                f"Reached maximum re-plan attempts ({self.max_replans}). "
-                f"Escalating to human review."
-            )
 
-        self.replan_count += 1
-
-        completed_steps = execution_state.get_completed_steps()
-        failed_step = failure_context.failed_step
-        pending_steps = execution_state.get_pending_steps()
-
-        replan_prompt = f"""A plan step has failed. Generate a revised plan for the remaining work.
-
-Original goal: {original_plan.goal}
-
-Completed steps (results available):
-{json.dumps([s.to_summary() for s in completed_steps], indent=2)}
-
-Failed step:
-  Step ID: {failed_step.step_id}
-  Agent: {failed_step.agent_id}
-  Error: {failure_context.error_message}
-  Error type: {failure_context.error_type}
-
-Pending steps (not yet started):
-{json.dumps([s.to_summary() for s in pending_steps], indent=2)}
-
-Generate a revised plan that:
-1. Reuses all completed step results (do not re-execute them).
-2. Works around the failure (use alternative agents/approaches).
-3. Still achieves the original goal.
-4. References completed results via $ref:step-N.output syntax."""
-
-        response = await llm_call(
-            model=self.plan_generator.planner_model,
-            prompt=replan_prompt,
-            response_format="json"
-        )
-
-        revised_plan = ExecutionPlan.parse(response)
-
-        # Validate the revised plan
-        validation = await self.plan_generator._validate_plan(
-            revised_plan, execution_state.task
-        )
-        if not validation.is_feasible:
-            raise ReplanFailed(
-                f"Revised plan failed feasibility check: {validation.failure_reasons}"
-            )
-
-        trace_ctx.log_event("replan_generated", {
-            "original_plan_id": original_plan.plan_id,
-            "revised_plan_id": revised_plan.plan_id,
-            "replan_number": self.replan_count,
-            "steps_reused": len(completed_steps),
-            "new_steps": len(revised_plan.steps)
-        })
-
-        return revised_plan
-```
+            return revised_plan
+    ```
 
 ---
 
@@ -970,192 +1042,206 @@ Execution waves:
   Wave 0: [step-1, step-2, step-3]   ← all independent, run in parallel
   Wave 1: [step-4, step-5]           ← step-4 waits for 1,2; step-5 waits for 3
   Wave 2: [step-6]                   ← waits for 4,5
+```
 
 Timeline:
-  t=0   ┌─step-1─┐  ┌──step-2──┐  ┌─step-3────────────┐
-  t=1   └────────┘  └──────────┘  │                   │
-  t=2                             └───────────────────┘
-  t=3            ┌──step-4──┐           ┌──step-5──┐
-  t=4            └──────────┘           └──────────┘
-  t=5                    ┌─────step-6─────┐
-  t=6                    └────────────────┘
+
+```mermaid
+gantt
+    title Parallel Execution Timeline
+    dateFormat X
+    axisFormat %s
+
+    section Wave 0
+    step-1           :s1, 0, 2
+    step-2           :s2, 0, 2
+    step-3           :s3, 0, 3
+
+    section Wave 1
+    step-4           :s4, 3, 5
+    step-5           :s5, 3, 5
+
+    section Wave 2
+    step-6           :s6, 5, 7
 ```
 
 ### 6.2 Execution Engine
 
-```python
-class ParallelExecutionEngine:
-    """Executes plan steps in parallel waves, respecting dependency ordering.
-    Verifies task independence before parallel dispatch (p. 46).
-    Handles partial failures in aggregation (p. 47)."""
+??? example "View Python pseudocode"
 
-    def __init__(
-        self,
-        team_config: TeamDefinition,
-        max_concurrency: int = 10,
-        replanner: DynamicRePlanner = None,
-    ):
-        self.team_config = team_config
-        self.max_concurrency = max_concurrency
-        self.replanner = replanner
-        self.semaphore = asyncio.Semaphore(max_concurrency)
+    ```python
+    class ParallelExecutionEngine:
+        """Executes plan steps in parallel waves, respecting dependency ordering.
+        Verifies task independence before parallel dispatch (p. 46).
+        Handles partial failures in aggregation (p. 47)."""
 
-    async def execute_plan(
-        self, plan: ExecutionPlan, trace_ctx: TraceContext
-    ) -> ExecutionResult:
-        """Execute a plan, running independent steps in parallel."""
+        def __init__(
+            self,
+            team_config: TeamDefinition,
+            max_concurrency: int = 10,
+            replanner: DynamicRePlanner = None,
+        ):
+            self.team_config = team_config
+            self.max_concurrency = max_concurrency
+            self.replanner = replanner
+            self.semaphore = asyncio.Semaphore(max_concurrency)
 
-        state = ExecutionState(plan=plan)
-        waves = self._compute_execution_waves(plan)
+        async def execute_plan(
+            self, plan: ExecutionPlan, trace_ctx: TraceContext
+        ) -> ExecutionResult:
+            """Execute a plan, running independent steps in parallel."""
 
-        trace_ctx.log_event("execution_started", {
-            "plan_id": plan.plan_id,
-            "total_waves": len(waves),
-            "total_steps": len(plan.steps)
-        })
+            state = ExecutionState(plan=plan)
+            waves = self._compute_execution_waves(plan)
 
-        for wave_index, wave in enumerate(waves):
-            trace_ctx.log_event("wave_started", {
-                "wave_index": wave_index,
-                "step_ids": [s.step_id for s in wave]
+            trace_ctx.log_event("execution_started", {
+                "plan_id": plan.plan_id,
+                "total_waves": len(waves),
+                "total_steps": len(plan.steps)
             })
 
-            # Verify independence: steps in a wave share no mutable state (p. 46)
-            self._verify_wave_independence(wave)
+            for wave_index, wave in enumerate(waves):
+                trace_ctx.log_event("wave_started", {
+                    "wave_index": wave_index,
+                    "step_ids": [s.step_id for s in wave]
+                })
 
-            # Execute all steps in the wave concurrently
-            results = await asyncio.gather(
-                *[self._execute_step(step, state, trace_ctx) for step in wave],
-                return_exceptions=True
+                # Verify independence: steps in a wave share no mutable state (p. 46)
+                self._verify_wave_independence(wave)
+
+                # Execute all steps in the wave concurrently
+                results = await asyncio.gather(
+                    *[self._execute_step(step, state, trace_ctx) for step in wave],
+                    return_exceptions=True
+                )
+
+                # Process results and handle partial failures (p. 47)
+                wave_failed = False
+                for step, result in zip(wave, results):
+                    if isinstance(result, Exception):
+                        state.mark_failed(step.step_id, result)
+                        trace_ctx.log_event("step_failed", {
+                            "step_id": step.step_id,
+                            "error": str(result),
+                            "error_type": type(result).__name__
+                        })
+                        wave_failed = True
+                    else:
+                        state.mark_completed(step.step_id, result)
+                        trace_ctx.log_event("step_completed", {
+                            "step_id": step.step_id,
+                            "output_size": len(str(result))
+                        })
+
+                # If any step in the wave failed, attempt re-planning (p. 109)
+                if wave_failed and self.replanner:
+                    try:
+                        revised_plan = await self.replanner.replan(
+                            original_plan=plan,
+                            execution_state=state,
+                            failure_context=state.get_failure_context(),
+                            trace_ctx=trace_ctx,
+                        )
+                        # Restart execution with revised plan, reusing completed results
+                        return await self.execute_plan(revised_plan, trace_ctx)
+                    except (ReplanLimitExceeded, ReplanFailed) as e:
+                        trace_ctx.log_event("replan_abandoned", {"reason": str(e)})
+                        # Fall through to partial result aggregation
+
+            return ExecutionResult(
+                plan_id=plan.plan_id,
+                state=state,
+                completed_steps=state.get_completed_steps(),
+                failed_steps=state.get_failed_steps(),
+                is_complete=state.all_steps_completed()
             )
 
-            # Process results and handle partial failures (p. 47)
-            wave_failed = False
-            for step, result in zip(wave, results):
-                if isinstance(result, Exception):
-                    state.mark_failed(step.step_id, result)
-                    trace_ctx.log_event("step_failed", {
-                        "step_id": step.step_id,
-                        "error": str(result),
-                        "error_type": type(result).__name__
-                    })
-                    wave_failed = True
-                else:
-                    state.mark_completed(step.step_id, result)
-                    trace_ctx.log_event("step_completed", {
-                        "step_id": step.step_id,
-                        "output_size": len(str(result))
-                    })
+        async def _execute_step(
+            self,
+            step: PlanStep,
+            state: ExecutionState,
+            trace_ctx: TraceContext,
+        ) -> StepResult:
+            """Execute a single plan step with concurrency control."""
 
-            # If any step in the wave failed, attempt re-planning (p. 109)
-            if wave_failed and self.replanner:
-                try:
-                    revised_plan = await self.replanner.replan(
-                        original_plan=plan,
-                        execution_state=state,
-                        failure_context=state.get_failure_context(),
-                        trace_ctx=trace_ctx,
-                    )
-                    # Restart execution with revised plan, reusing completed results
-                    return await self.execute_plan(revised_plan, trace_ctx)
-                except (ReplanLimitExceeded, ReplanFailed) as e:
-                    trace_ctx.log_event("replan_abandoned", {"reason": str(e)})
-                    # Fall through to partial result aggregation
+            async with self.semaphore:
+                # Resolve input references ($ref:step-N.output)
+                resolved_input = state.resolve_references(step.input)
 
-        return ExecutionResult(
-            plan_id=plan.plan_id,
-            state=state,
-            completed_steps=state.get_completed_steps(),
-            failed_steps=state.get_failed_steps(),
-            is_complete=state.all_steps_completed()
-        )
+                # Validate resolved input against agent schema (p. 126)
+                agent = self._get_agent(step.agent_id)
+                validate_schema(resolved_input, agent.input_schema)
 
-    async def _execute_step(
-        self,
-        step: PlanStep,
-        state: ExecutionState,
-        trace_ctx: TraceContext,
-    ) -> StepResult:
-        """Execute a single plan step with concurrency control."""
+                # Build message envelope
+                message = AgentMessage(
+                    from_agent_id=self.team_config.topology.supervisor_agent_id,
+                    to_agent_id=step.agent_id,
+                    mode=self._get_comm_mode(step.agent_id),
+                    payload=TaskPayload(
+                        task_type=step.description,
+                        input=resolved_input,
+                        context={
+                            "original_goal": state.plan.goal,
+                            "plan_step_id": step.step_id,
+                        }
+                    ),
+                    timeout_ms=step.timeout_ms,
+                    trace_ctx=trace_ctx.new_child_span(f"step:{step.step_id}")
+                )
 
-        async with self.semaphore:
-            # Resolve input references ($ref:step-N.output)
-            resolved_input = state.resolve_references(step.input)
+                # Dispatch to worker agent
+                raw_result = await self._dispatch_to_agent(message)
 
-            # Validate resolved input against agent schema (p. 126)
-            agent = self._get_agent(step.agent_id)
-            validate_schema(resolved_input, agent.input_schema)
+                # Validate output against agent's output_schema (p. 126)
+                # Treat sub-agent output as untrusted (p. 126)
+                validated_result = self._validate_and_sanitize_output(
+                    raw_result, agent.output_schema
+                )
 
-            # Build message envelope
-            message = AgentMessage(
-                from_agent_id=self.team_config.topology.supervisor_agent_id,
-                to_agent_id=step.agent_id,
-                mode=self._get_comm_mode(step.agent_id),
-                payload=TaskPayload(
-                    task_type=step.description,
-                    input=resolved_input,
-                    context={
-                        "original_goal": state.plan.goal,
-                        "plan_step_id": step.step_id,
-                    }
-                ),
-                timeout_ms=step.timeout_ms,
-                trace_ctx=trace_ctx.new_child_span(f"step:{step.step_id}")
-            )
+                return StepResult(
+                    step_id=step.step_id,
+                    output=validated_result,
+                    tokens_used=raw_result.token_usage,
+                    latency_ms=raw_result.latency_ms,
+                )
 
-            # Dispatch to worker agent
-            raw_result = await self._dispatch_to_agent(message)
+        def _compute_execution_waves(self, plan: ExecutionPlan) -> list[list[PlanStep]]:
+            """Topological sort of plan steps into parallel execution waves."""
+            waves = []
+            completed = set()
+            remaining = list(plan.steps)
 
-            # Validate output against agent's output_schema (p. 126)
-            # Treat sub-agent output as untrusted (p. 126)
-            validated_result = self._validate_and_sanitize_output(
-                raw_result, agent.output_schema
-            )
+            while remaining:
+                # Find all steps whose dependencies are fully satisfied
+                wave = [
+                    step for step in remaining
+                    if all(dep in completed for dep in step.depends_on)
+                ]
+                if not wave:
+                    raise CyclicDependencyError("Plan contains unsatisfiable dependencies")
 
-            return StepResult(
-                step_id=step.step_id,
-                output=validated_result,
-                tokens_used=raw_result.token_usage,
-                latency_ms=raw_result.latency_ms,
-            )
+                waves.append(wave)
+                for step in wave:
+                    completed.add(step.step_id)
+                    remaining.remove(step)
 
-    def _compute_execution_waves(self, plan: ExecutionPlan) -> list[list[PlanStep]]:
-        """Topological sort of plan steps into parallel execution waves."""
-        waves = []
-        completed = set()
-        remaining = list(plan.steps)
+            return waves
 
-        while remaining:
-            # Find all steps whose dependencies are fully satisfied
-            wave = [
-                step for step in remaining
-                if all(dep in completed for dep in step.depends_on)
-            ]
-            if not wave:
-                raise CyclicDependencyError("Plan contains unsatisfiable dependencies")
-
-            waves.append(wave)
+        def _verify_wave_independence(self, wave: list[PlanStep]) -> None:
+            """Verify steps in a wave do not share mutable state (p. 46).
+            Steps targeting the same agent are allowed (agent handles
+            concurrency internally), but steps sharing output references
+            within the same wave are not."""
+            output_refs = set()
             for step in wave:
-                completed.add(step.step_id)
-                remaining.remove(step)
-
-        return waves
-
-    def _verify_wave_independence(self, wave: list[PlanStep]) -> None:
-        """Verify steps in a wave do not share mutable state (p. 46).
-        Steps targeting the same agent are allowed (agent handles
-        concurrency internally), but steps sharing output references
-        within the same wave are not."""
-        output_refs = set()
-        for step in wave:
-            refs = self._extract_refs(step.input)
-            for ref in refs:
-                if ref in output_refs:
-                    raise IndependenceViolation(
-                        f"Steps in wave share mutable reference: {ref}"
-                    )
-            output_refs.update(refs)
-```
+                refs = self._extract_refs(step.input)
+                for ref in refs:
+                    if ref in output_refs:
+                        raise IndependenceViolation(
+                            f"Steps in wave share mutable reference: {ref}"
+                        )
+                output_refs.update(refs)
+    ```
 
 ---
 
@@ -1165,199 +1251,203 @@ After all plan steps complete (or after partial completion with failures), the o
 
 ### 7.1 Aggregation Strategies
 
-```python
-class ResultAggregator:
-    """Aggregates results from completed plan steps into a final output.
-    Handles partial failures gracefully (p. 47).
-    Validates final output against goal success criteria (p. 188)."""
+??? example "View Python pseudocode"
 
-    def __init__(self, team_config: TeamDefinition, aggregator_model: str = "sonnet"):
-        self.team_config = team_config
-        self.aggregator_model = aggregator_model
+    ```python
+    class ResultAggregator:
+        """Aggregates results from completed plan steps into a final output.
+        Handles partial failures gracefully (p. 47).
+        Validates final output against goal success criteria (p. 188)."""
 
-    async def aggregate(
-        self,
-        execution_result: ExecutionResult,
-        task: Task,
-        trace_ctx: TraceContext,
-    ) -> AggregatedResult:
-        """Aggregate step results into final output."""
+        def __init__(self, team_config: TeamDefinition, aggregator_model: str = "sonnet"):
+            self.team_config = team_config
+            self.aggregator_model = aggregator_model
 
-        completed = execution_result.completed_steps
-        failed = execution_result.failed_steps
+        async def aggregate(
+            self,
+            execution_result: ExecutionResult,
+            task: Task,
+            trace_ctx: TraceContext,
+        ) -> AggregatedResult:
+            """Aggregate step results into final output."""
 
-        # Handle partial failure scenario (p. 47)
-        if failed:
-            trace_ctx.log_event("partial_failure_aggregation", {
-                "completed_count": len(completed),
-                "failed_count": len(failed),
-                "failed_step_ids": [s.step_id for s in failed]
+            completed = execution_result.completed_steps
+            failed = execution_result.failed_steps
+
+            # Handle partial failure scenario (p. 47)
+            if failed:
+                trace_ctx.log_event("partial_failure_aggregation", {
+                    "completed_count": len(completed),
+                    "failed_count": len(failed),
+                    "failed_step_ids": [s.step_id for s in failed]
+                })
+
+            # Use LLM to synthesize results into coherent output
+            aggregation_prompt = f"""Synthesize the following step results into a final output.
+
+    Original task: {task.description}
+    Goal: {task.goal.description}
+    Success criteria: {task.goal.success_criteria}
+
+    Completed step results:
+    {self._format_step_results(completed)}
+
+    {"Failed steps (incorporate workarounds if possible):" if failed else ""}
+    {self._format_failed_steps(failed) if failed else ""}
+
+    Produce a final output that:
+    1. Addresses all success criteria that can be met with available results.
+    2. Clearly indicates if any criteria could not be met due to failures.
+    3. Cites which step produced each piece of information.
+    4. Follows the team's output schema."""
+
+            response = await llm_call(
+                model=self.aggregator_model,
+                prompt=aggregation_prompt
+            )
+
+            aggregated = AggregatedResult(
+                task_id=task.task_id,
+                plan_id=execution_result.plan_id,
+                output=response,
+                steps_completed=len(completed),
+                steps_failed=len(failed),
+                is_partial=len(failed) > 0,
+            )
+
+            return aggregated
+
+        async def validate_against_goal(
+            self,
+            result: AggregatedResult,
+            task: Task,
+            trace_ctx: TraceContext,
+        ) -> GoalValidation:
+            """Check if the aggregated result meets the defined SMART goal (p. 185).
+            Uses goals_met() checker pattern (p. 188)."""
+
+            validation_prompt = f"""Evaluate whether the following output meets the specified goal criteria.
+
+    Goal: {task.goal.description}
+    Success criteria:
+    {json.dumps(task.goal.success_criteria, indent=2)}
+
+    Output to evaluate:
+    {result.output}
+
+    For each criterion, respond with:
+    {{
+      "criteria_results": [
+        {{
+          "criterion": "...",
+          "met": true/false,
+          "confidence": 0.0-1.0,
+          "evidence": "..."
+        }}
+      ],
+      "overall_met": true/false,
+      "quality_score": 0.0-1.0,
+      "improvement_suggestions": ["..."]
+    }}"""
+
+            response = await llm_call(
+                model=self.aggregator_model,
+                prompt=validation_prompt,
+                response_format="json"
+            )
+
+            validation = GoalValidation.parse(response)
+
+            trace_ctx.log_event("goal_validation", {
+                "task_id": task.task_id,
+                "overall_met": validation.overall_met,
+                "quality_score": validation.quality_score,
+                "criteria_met": sum(1 for c in validation.criteria_results if c.met),
+                "criteria_total": len(validation.criteria_results),
             })
 
-        # Use LLM to synthesize results into coherent output
-        aggregation_prompt = f"""Synthesize the following step results into a final output.
-
-Original task: {task.description}
-Goal: {task.goal.description}
-Success criteria: {task.goal.success_criteria}
-
-Completed step results:
-{self._format_step_results(completed)}
-
-{"Failed steps (incorporate workarounds if possible):" if failed else ""}
-{self._format_failed_steps(failed) if failed else ""}
-
-Produce a final output that:
-1. Addresses all success criteria that can be met with available results.
-2. Clearly indicates if any criteria could not be met due to failures.
-3. Cites which step produced each piece of information.
-4. Follows the team's output schema."""
-
-        response = await llm_call(
-            model=self.aggregator_model,
-            prompt=aggregation_prompt
-        )
-
-        aggregated = AggregatedResult(
-            task_id=task.task_id,
-            plan_id=execution_result.plan_id,
-            output=response,
-            steps_completed=len(completed),
-            steps_failed=len(failed),
-            is_partial=len(failed) > 0,
-        )
-
-        return aggregated
-
-    async def validate_against_goal(
-        self,
-        result: AggregatedResult,
-        task: Task,
-        trace_ctx: TraceContext,
-    ) -> GoalValidation:
-        """Check if the aggregated result meets the defined SMART goal (p. 185).
-        Uses goals_met() checker pattern (p. 188)."""
-
-        validation_prompt = f"""Evaluate whether the following output meets the specified goal criteria.
-
-Goal: {task.goal.description}
-Success criteria:
-{json.dumps(task.goal.success_criteria, indent=2)}
-
-Output to evaluate:
-{result.output}
-
-For each criterion, respond with:
-{{
-  "criteria_results": [
-    {{
-      "criterion": "...",
-      "met": true/false,
-      "confidence": 0.0-1.0,
-      "evidence": "..."
-    }}
-  ],
-  "overall_met": true/false,
-  "quality_score": 0.0-1.0,
-  "improvement_suggestions": ["..."]
-}}"""
-
-        response = await llm_call(
-            model=self.aggregator_model,
-            prompt=validation_prompt,
-            response_format="json"
-        )
-
-        validation = GoalValidation.parse(response)
-
-        trace_ctx.log_event("goal_validation", {
-            "task_id": task.task_id,
-            "overall_met": validation.overall_met,
-            "quality_score": validation.quality_score,
-            "criteria_met": sum(1 for c in validation.criteria_results if c.met),
-            "criteria_total": len(validation.criteria_results),
-        })
-
-        return validation
-```
+            return validation
+    ```
 
 ### 7.2 Voting Aggregation (for Voting Topology)
 
 When using the Voting topology (p. 48), multiple agents produce independent outputs for the same input. The aggregator reconciles them:
 
-```python
-class VotingAggregator:
-    """Aggregates outputs from voting topology agents.
-    Supports majority vote, weighted scoring, and unanimous modes (p. 48)."""
+??? example "View Python pseudocode"
 
-    async def aggregate_votes(
-        self,
-        votes: list[AgentVote],
-        strategy: str,
-        min_agreement: float,
-        trace_ctx: TraceContext,
-    ) -> VotingResult:
+    ```python
+    class VotingAggregator:
+        """Aggregates outputs from voting topology agents.
+        Supports majority vote, weighted scoring, and unanimous modes (p. 48)."""
 
-        if strategy == "majority_vote":
-            return self._majority_vote(votes, min_agreement, trace_ctx)
-        elif strategy == "weighted_score":
-            return self._weighted_score(votes, trace_ctx)
-        elif strategy == "unanimous":
-            return self._unanimous(votes, trace_ctx)
-        else:
-            raise ValueError(f"Unknown voting strategy: {strategy}")
+        async def aggregate_votes(
+            self,
+            votes: list[AgentVote],
+            strategy: str,
+            min_agreement: float,
+            trace_ctx: TraceContext,
+        ) -> VotingResult:
 
-    def _majority_vote(
-        self,
-        votes: list[AgentVote],
-        min_agreement: float,
-        trace_ctx: TraceContext,
-    ) -> VotingResult:
-        """Select the output chosen by the majority of voters."""
+            if strategy == "majority_vote":
+                return self._majority_vote(votes, min_agreement, trace_ctx)
+            elif strategy == "weighted_score":
+                return self._weighted_score(votes, trace_ctx)
+            elif strategy == "unanimous":
+                return self._unanimous(votes, trace_ctx)
+            else:
+                raise ValueError(f"Unknown voting strategy: {strategy}")
 
-        # Group votes by normalized answer
-        vote_groups = defaultdict(list)
-        for vote in votes:
-            normalized = self._normalize_answer(vote.output)
-            vote_groups[normalized].append(vote)
+        def _majority_vote(
+            self,
+            votes: list[AgentVote],
+            min_agreement: float,
+            trace_ctx: TraceContext,
+        ) -> VotingResult:
+            """Select the output chosen by the majority of voters."""
 
-        # Find majority
-        total = len(votes)
-        for answer, group in sorted(
-            vote_groups.items(), key=lambda x: len(x[1]), reverse=True
-        ):
-            agreement = len(group) / total
-            if agreement >= min_agreement:
-                trace_ctx.log_event("voting_result", {
-                    "strategy": "majority_vote",
-                    "agreement": agreement,
-                    "winner_agents": [v.agent_id for v in group],
-                    "dissenting_agents": [
-                        v.agent_id for v in votes if v not in group
-                    ],
-                })
-                return VotingResult(
-                    output=group[0].output,  # representative answer
-                    agreement=agreement,
-                    is_unanimous=agreement == 1.0,
-                    voter_details=votes,
-                )
+            # Group votes by normalized answer
+            vote_groups = defaultdict(list)
+            for vote in votes:
+                normalized = self._normalize_answer(vote.output)
+                vote_groups[normalized].append(vote)
 
-        # No majority reached -- fall back to highest confidence
-        best = max(votes, key=lambda v: v.confidence)
-        trace_ctx.log_event("voting_no_majority", {
-            "fallback": "highest_confidence",
-            "selected_agent": best.agent_id,
-            "confidence": best.confidence,
-        })
-        return VotingResult(
-            output=best.output,
-            agreement=1 / total,
-            is_unanimous=False,
-            voter_details=votes,
-            is_fallback=True,
-        )
-```
+            # Find majority
+            total = len(votes)
+            for answer, group in sorted(
+                vote_groups.items(), key=lambda x: len(x[1]), reverse=True
+            ):
+                agreement = len(group) / total
+                if agreement >= min_agreement:
+                    trace_ctx.log_event("voting_result", {
+                        "strategy": "majority_vote",
+                        "agreement": agreement,
+                        "winner_agents": [v.agent_id for v in group],
+                        "dissenting_agents": [
+                            v.agent_id for v in votes if v not in group
+                        ],
+                    })
+                    return VotingResult(
+                        output=group[0].output,  # representative answer
+                        agreement=agreement,
+                        is_unanimous=agreement == 1.0,
+                        voter_details=votes,
+                    )
+
+            # No majority reached -- fall back to highest confidence
+            best = max(votes, key=lambda v: v.confidence)
+            trace_ctx.log_event("voting_no_majority", {
+                "fallback": "highest_confidence",
+                "selected_agent": best.agent_id,
+                "confidence": best.confidence,
+            })
+            return VotingResult(
+                output=best.output,
+                agreement=1 / total,
+                is_unanimous=False,
+                voter_details=votes,
+                is_fallback=True,
+            )
+    ```
 
 ---
 
@@ -1369,136 +1459,138 @@ When a team needs capabilities beyond its own agent roster, it communicates with
 
 Every team publishes an Agent Card at `/.well-known/agent.json` (p. 243):
 
-```json
-{
-  "name": "Research & Analysis Team",
-  "description": "Conducts multi-source research and produces cited reports.",
-  "url": "https://agentforge.internal/teams/team-alpha-research",
-  "version": "1.4.0",
-  "capabilities": {
-    "inputs": ["research_query", "analysis_request"],
-    "outputs": ["research_report", "data_analysis"],
-    "streaming": true
-  },
-  "authentication": {
-    "schemes": ["oauth2", "mtls"]
-  },
-  "interaction_modes": ["sync", "async", "streaming", "webhook"],
-  "endpoints": {
-    "task_submit": "/a2a/tasks",
-    "task_status": "/a2a/tasks/{task_id}",
-    "task_cancel": "/a2a/tasks/{task_id}/cancel",
-    "stream": "/a2a/tasks/{task_id}/stream"
-  }
-}
-```
+??? example "View JSON example"
+
+    ```json
+    {
+      "name": "Research & Analysis Team",
+      "description": "Conducts multi-source research and produces cited reports.",
+      "url": "https://agentforge.internal/teams/team-alpha-research",
+      "version": "1.4.0",
+      "capabilities": {
+        "inputs": ["research_query", "analysis_request"],
+        "outputs": ["research_report", "data_analysis"],
+        "streaming": true
+      },
+      "authentication": {
+        "schemes": ["oauth2", "mtls"]
+      },
+      "interaction_modes": ["sync", "async", "streaming", "webhook"],
+      "endpoints": {
+        "task_submit": "/a2a/tasks",
+        "task_status": "/a2a/tasks/{task_id}",
+        "task_cancel": "/a2a/tasks/{task_id}/cancel",
+        "stream": "/a2a/tasks/{task_id}/stream"
+      }
+    }
+    ```
 
 ### 8.2 A2A Task Lifecycle
 
 Tasks exchanged between teams follow the A2A state machine (p. 245):
 
+```mermaid
+stateDiagram-v2
+    submitted --> working : Team accepts and begins processing
+    working --> completed : Task finishes successfully
+    working --> failed : Unrecoverable error during processing
+    submitted --> cancelled : Requester cancels
+    working --> cancelled : Requester cancels
 ```
-  ┌───────────┐      ┌───────────┐      ┌───────────────┐
-  │ submitted │─────►│  working  │─────►│   completed   │
-  └───────────┘      └─────┬─────┘      └───────────────┘
-                           │
-                           │ (on error)
-                           ▼
-                     ┌───────────┐
-                     │  failed   │
-                     └───────────┘
 
-  State transitions:
-    submitted  → working     : Team accepts and begins processing
-    working    → completed   : Task finishes successfully
-    working    → failed      : Unrecoverable error during processing
-    Any state  → cancelled   : Requester cancels the task
-```
+State transitions:
+
+- `submitted` --> `working`: Team accepts and begins processing
+- `working` --> `completed`: Task finishes successfully
+- `working` --> `failed`: Unrecoverable error during processing
+- Any state --> `cancelled`: Requester cancels the task
 
 ### 8.3 Inter-Team Communication Flow
 
-```python
-class InterTeamClient:
-    """Communicates with other teams via A2A protocol (p. 240).
-    Discovers teams via Agent Cards (p. 243).
-    Uses mTLS + OAuth2 authentication (p. 248)."""
+??? example "View Python pseudocode"
 
-    def __init__(self, auth_provider: AuthProvider, team_registry: TeamRegistry):
-        self.auth_provider = auth_provider
-        self.team_registry = team_registry
+    ```python
+    class InterTeamClient:
+        """Communicates with other teams via A2A protocol (p. 240).
+        Discovers teams via Agent Cards (p. 243).
+        Uses mTLS + OAuth2 authentication (p. 248)."""
 
-    async def discover_team(self, required_capability: str) -> AgentCard:
-        """Discover a team that can handle the required capability."""
-        cards = await self.team_registry.list_agent_cards()
-        for card in cards:
-            if required_capability in card.capabilities.inputs:
-                return card
-        raise TeamNotFound(f"No team found with capability: {required_capability}")
+        def __init__(self, auth_provider: AuthProvider, team_registry: TeamRegistry):
+            self.auth_provider = auth_provider
+            self.team_registry = team_registry
 
-    async def submit_task(
-        self,
-        target_card: AgentCard,
-        task_input: dict,
-        interaction_mode: str,
-        trace_ctx: TraceContext,
-    ) -> A2ATask:
-        """Submit a task to another team via A2A protocol (p. 245)."""
+        async def discover_team(self, required_capability: str) -> AgentCard:
+            """Discover a team that can handle the required capability."""
+            cards = await self.team_registry.list_agent_cards()
+            for card in cards:
+                if required_capability in card.capabilities.inputs:
+                    return card
+            raise TeamNotFound(f"No team found with capability: {required_capability}")
 
-        # Obtain OAuth2 token for target team (p. 248)
-        token = await self.auth_provider.get_token(
-            audience=target_card.url,
-            scopes=["task:submit"]
-        )
+        async def submit_task(
+            self,
+            target_card: AgentCard,
+            task_input: dict,
+            interaction_mode: str,
+            trace_ctx: TraceContext,
+        ) -> A2ATask:
+            """Submit a task to another team via A2A protocol (p. 245)."""
 
-        task_payload = {
-            "task_id": str(uuid4()),
-            "input": task_input,
-            "interaction_mode": interaction_mode,  # one of four modes (p. 246)
-            "callback_url": f"{self.self_url}/a2a/callbacks",
-            "trace_context": trace_ctx.to_propagation_headers(),
-        }
+            # Obtain OAuth2 token for target team (p. 248)
+            token = await self.auth_provider.get_token(
+                audience=target_card.url,
+                scopes=["task:submit"]
+            )
 
-        response = await http_post(
-            url=f"{target_card.url}{target_card.endpoints['task_submit']}",
-            json=task_payload,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-            },
-            mtls_cert=self.auth_provider.get_mtls_cert(),  # mTLS (p. 248)
-        )
+            task_payload = {
+                "task_id": str(uuid4()),
+                "input": task_input,
+                "interaction_mode": interaction_mode,  # one of four modes (p. 246)
+                "callback_url": f"{self.self_url}/a2a/callbacks",
+                "trace_context": trace_ctx.to_propagation_headers(),
+            }
 
-        a2a_task = A2ATask.parse(response)
+            response = await http_post(
+                url=f"{target_card.url}{target_card.endpoints['task_submit']}",
+                json=task_payload,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+                mtls_cert=self.auth_provider.get_mtls_cert(),  # mTLS (p. 248)
+            )
 
-        trace_ctx.log_event("a2a_task_submitted", {
-            "task_id": a2a_task.task_id,
-            "target_team": target_card.name,
-            "interaction_mode": interaction_mode,
-            "state": a2a_task.state,  # should be "submitted"
-        })
+            a2a_task = A2ATask.parse(response)
 
-        return a2a_task
+            trace_ctx.log_event("a2a_task_submitted", {
+                "task_id": a2a_task.task_id,
+                "target_team": target_card.name,
+                "interaction_mode": interaction_mode,
+                "state": a2a_task.state,  # should be "submitted"
+            })
 
-    async def poll_task(
-        self,
-        target_card: AgentCard,
-        task_id: str,
-        trace_ctx: TraceContext,
-    ) -> A2ATask:
-        """Poll task status for async interaction mode (p. 246)."""
+            return a2a_task
 
-        token = await self.auth_provider.get_token(
-            audience=target_card.url, scopes=["task:read"]
-        )
+        async def poll_task(
+            self,
+            target_card: AgentCard,
+            task_id: str,
+            trace_ctx: TraceContext,
+        ) -> A2ATask:
+            """Poll task status for async interaction mode (p. 246)."""
 
-        response = await http_get(
-            url=f"{target_card.url}/a2a/tasks/{task_id}",
-            headers={"Authorization": f"Bearer {token}"},
-            mtls_cert=self.auth_provider.get_mtls_cert(),
-        )
+            token = await self.auth_provider.get_token(
+                audience=target_card.url, scopes=["task:read"]
+            )
 
-        return A2ATask.parse(response)
-```
+            response = await http_get(
+                url=f"{target_card.url}/a2a/tasks/{task_id}",
+                headers={"Authorization": f"Bearer {token}"},
+                mtls_cert=self.auth_provider.get_mtls_cert(),
+            )
+
+            return A2ATask.parse(response)
+    ```
 
 ### 8.4 Four Interaction Modes (p. 246)
 
@@ -1517,27 +1609,31 @@ The Team Orchestrator exposes the following REST API endpoints for platform cons
 
 ### 9.1 Team Management
 
-```
-POST   /api/v1/teams                      Create a new team
-GET    /api/v1/teams                      List all teams (paginated)
-GET    /api/v1/teams/{team_id}            Get team definition
-PUT    /api/v1/teams/{team_id}            Update team definition
-DELETE /api/v1/teams/{team_id}            Delete team (HITL required)
-GET    /api/v1/teams/{team_id}/agents     List agents in a team
-POST   /api/v1/teams/{team_id}/agents     Add agent to team
-DELETE /api/v1/teams/{team_id}/agents/{agent_id}  Remove agent from team
-```
+??? example "View API example"
+
+    ```
+    POST   /api/v1/teams                      Create a new team
+    GET    /api/v1/teams                      List all teams (paginated)
+    GET    /api/v1/teams/{team_id}            Get team definition
+    PUT    /api/v1/teams/{team_id}            Update team definition
+    DELETE /api/v1/teams/{team_id}            Delete team (HITL required)
+    GET    /api/v1/teams/{team_id}/agents     List agents in a team
+    POST   /api/v1/teams/{team_id}/agents     Add agent to team
+    DELETE /api/v1/teams/{team_id}/agents/{agent_id}  Remove agent from team
+    ```
 
 ### 9.2 Task Execution
 
-```
-POST   /api/v1/teams/{team_id}/tasks              Submit a task to a team
-GET    /api/v1/teams/{team_id}/tasks/{task_id}     Get task status and result
-POST   /api/v1/teams/{team_id}/tasks/{task_id}/cancel  Cancel a running task
-GET    /api/v1/teams/{team_id}/tasks/{task_id}/plan    Get the execution plan
-GET    /api/v1/teams/{team_id}/tasks/{task_id}/steps   List step statuses
-GET    /api/v1/teams/{team_id}/tasks/{task_id}/stream  SSE stream of progress
-```
+??? example "View API example"
+
+    ```
+    POST   /api/v1/teams/{team_id}/tasks              Submit a task to a team
+    GET    /api/v1/teams/{team_id}/tasks/{task_id}     Get task status and result
+    POST   /api/v1/teams/{team_id}/tasks/{task_id}/cancel  Cancel a running task
+    GET    /api/v1/teams/{team_id}/tasks/{task_id}/plan    Get the execution plan
+    GET    /api/v1/teams/{team_id}/tasks/{task_id}/steps   List step statuses
+    GET    /api/v1/teams/{team_id}/tasks/{task_id}/stream  SSE stream of progress
+    ```
 
 ### 9.3 Plan Inspection
 
@@ -1549,59 +1645,65 @@ GET    /api/v1/plans/{plan_id}/steps/{step_id} Get individual step details
 
 ### 9.4 Inter-Team (A2A)
 
-```
-GET    /.well-known/agent.json                 Agent Card for team discovery (p. 243)
-POST   /a2a/tasks                              Receive task from another team
-GET    /a2a/tasks/{task_id}                    Task status query
-POST   /a2a/tasks/{task_id}/cancel             Cancel task from external team
-GET    /a2a/tasks/{task_id}/stream             SSE stream for external consumers
-POST   /a2a/callbacks                          Receive webhook callbacks
-```
+??? example "View API example"
+
+    ```
+    GET    /.well-known/agent.json                 Agent Card for team discovery (p. 243)
+    POST   /a2a/tasks                              Receive task from another team
+    GET    /a2a/tasks/{task_id}                    Task status query
+    POST   /a2a/tasks/{task_id}/cancel             Cancel task from external team
+    GET    /a2a/tasks/{task_id}/stream             SSE stream for external consumers
+    POST   /a2a/callbacks                          Receive webhook callbacks
+    ```
 
 ### 9.5 Key Request/Response Examples
 
 **Submit a task**:
 
-```
-POST /api/v1/teams/team-alpha-research/tasks
-Content-Type: application/json
+??? example "View API example"
 
-{
-  "description": "Research the current state of renewable energy investment",
-  "input": {
-    "query": "Renewable energy investment trends and outlook for 2026-2030",
-    "depth": "comprehensive",
-    "required_sources": 5
-  },
-  "goal": {
-    "success_criteria": [
-      "report contains >= 5 cited sources",
-      "includes data analysis with projections",
-      "quality_score >= 0.85"
-    ]
-  },
-  "priority": "normal",
-  "timeout_s": 300
-}
-```
+    ```
+    POST /api/v1/teams/team-alpha-research/tasks
+    Content-Type: application/json
+
+    {
+      "description": "Research the current state of renewable energy investment",
+      "input": {
+        "query": "Renewable energy investment trends and outlook for 2026-2030",
+        "depth": "comprehensive",
+        "required_sources": 5
+      },
+      "goal": {
+        "success_criteria": [
+          "report contains >= 5 cited sources",
+          "includes data analysis with projections",
+          "quality_score >= 0.85"
+        ]
+      },
+      "priority": "normal",
+      "timeout_s": 300
+    }
+    ```
 
 **Response**:
 
-```json
-{
-  "task_id": "task-abc123",
-  "team_id": "team-alpha-research",
-  "state": "submitted",
-  "plan_id": null,
-  "created_at": "2026-02-27T10:15:30Z",
-  "estimated_completion_s": 120,
-  "links": {
-    "self": "/api/v1/teams/team-alpha-research/tasks/task-abc123",
-    "plan": "/api/v1/teams/team-alpha-research/tasks/task-abc123/plan",
-    "stream": "/api/v1/teams/team-alpha-research/tasks/task-abc123/stream"
-  }
-}
-```
+??? example "View JSON example"
+
+    ```json
+    {
+      "task_id": "task-abc123",
+      "team_id": "team-alpha-research",
+      "state": "submitted",
+      "plan_id": null,
+      "created_at": "2026-02-27T10:15:30Z",
+      "estimated_completion_s": 120,
+      "links": {
+        "self": "/api/v1/teams/team-alpha-research/tasks/task-abc123",
+        "plan": "/api/v1/teams/team-alpha-research/tasks/task-abc123/plan",
+        "stream": "/api/v1/teams/team-alpha-research/tasks/task-abc123/stream"
+      }
+    }
+    ```
 
 ---
 
@@ -1630,100 +1732,102 @@ The Team Orchestrator implements the Error Triad (p. 203): **Detect** errors at 
 
 The orchestrator checkpoints execution state after each completed wave (p. 209). If a failure occurs mid-execution, the system resumes from the last checkpoint rather than restarting from scratch.
 
-```python
-class CheckpointManager:
-    """Persists execution state at wave boundaries for crash recovery (p. 209).
-    Enables resume-from-checkpoint after transient failures."""
+??? example "View Python pseudocode"
 
-    def __init__(self, state_store: StateStore):
-        self.state_store = state_store
+    ```python
+    class CheckpointManager:
+        """Persists execution state at wave boundaries for crash recovery (p. 209).
+        Enables resume-from-checkpoint after transient failures."""
 
-    async def save_checkpoint(
-        self,
-        plan_id: str,
-        wave_index: int,
-        execution_state: ExecutionState,
-    ) -> str:
-        """Save checkpoint after a wave completes successfully."""
-        checkpoint = Checkpoint(
-            checkpoint_id=f"ckpt-{plan_id}-wave-{wave_index}",
-            plan_id=plan_id,
-            wave_index=wave_index,
-            completed_steps={
-                s.step_id: s.output for s in execution_state.get_completed_steps()
-            },
-            failed_steps={
-                s.step_id: s.error for s in execution_state.get_failed_steps()
-            },
-            timestamp=datetime.utcnow(),
-        )
-        await self.state_store.put(
-            key=f"checkpoint:{plan_id}:latest",
-            value=checkpoint.to_json(),
-            ttl_s=3600  # checkpoints expire after 1 hour
-        )
-        return checkpoint.checkpoint_id
+        def __init__(self, state_store: StateStore):
+            self.state_store = state_store
 
-    async def load_checkpoint(self, plan_id: str) -> Checkpoint | None:
-        """Load the latest checkpoint for a plan, if one exists."""
-        data = await self.state_store.get(f"checkpoint:{plan_id}:latest")
-        if data is None:
-            return None
-        return Checkpoint.from_json(data)
-
-    async def resume_from_checkpoint(
-        self,
-        plan: ExecutionPlan,
-        checkpoint: Checkpoint,
-        engine: ParallelExecutionEngine,
-        trace_ctx: TraceContext,
-    ) -> ExecutionResult:
-        """Resume plan execution from a checkpoint."""
-        trace_ctx.log_event("resuming_from_checkpoint", {
-            "checkpoint_id": checkpoint.checkpoint_id,
-            "wave_index": checkpoint.wave_index,
-            "completed_steps": list(checkpoint.completed_steps.keys()),
-        })
-
-        # Reconstruct execution state from checkpoint
-        state = ExecutionState(plan=plan)
-        for step_id, output in checkpoint.completed_steps.items():
-            state.mark_completed(step_id, output)
-        for step_id, error in checkpoint.failed_steps.items():
-            state.mark_failed(step_id, error)
-
-        # Continue execution from next wave
-        remaining_waves = engine._compute_execution_waves(plan)
-        # Filter to waves that have not been completed
-        remaining_waves = [
-            wave for wave in remaining_waves
-            if any(s.step_id not in checkpoint.completed_steps for s in wave)
-        ]
-
-        for wave in remaining_waves:
-            # Filter out already-completed steps in partially completed waves
-            pending_steps = [
-                s for s in wave if s.step_id not in checkpoint.completed_steps
-            ]
-            if not pending_steps:
-                continue
-
-            results = await asyncio.gather(
-                *[engine._execute_step(s, state, trace_ctx) for s in pending_steps],
-                return_exceptions=True
+        async def save_checkpoint(
+            self,
+            plan_id: str,
+            wave_index: int,
+            execution_state: ExecutionState,
+        ) -> str:
+            """Save checkpoint after a wave completes successfully."""
+            checkpoint = Checkpoint(
+                checkpoint_id=f"ckpt-{plan_id}-wave-{wave_index}",
+                plan_id=plan_id,
+                wave_index=wave_index,
+                completed_steps={
+                    s.step_id: s.output for s in execution_state.get_completed_steps()
+                },
+                failed_steps={
+                    s.step_id: s.error for s in execution_state.get_failed_steps()
+                },
+                timestamp=datetime.utcnow(),
             )
+            await self.state_store.put(
+                key=f"checkpoint:{plan_id}:latest",
+                value=checkpoint.to_json(),
+                ttl_s=3600  # checkpoints expire after 1 hour
+            )
+            return checkpoint.checkpoint_id
 
-            for step, result in zip(pending_steps, results):
-                if isinstance(result, Exception):
-                    state.mark_failed(step.step_id, result)
-                else:
-                    state.mark_completed(step.step_id, result)
+        async def load_checkpoint(self, plan_id: str) -> Checkpoint | None:
+            """Load the latest checkpoint for a plan, if one exists."""
+            data = await self.state_store.get(f"checkpoint:{plan_id}:latest")
+            if data is None:
+                return None
+            return Checkpoint.from_json(data)
 
-            # Checkpoint after each wave
-            await self.save_checkpoint(plan.plan_id, wave.index, state)
+        async def resume_from_checkpoint(
+            self,
+            plan: ExecutionPlan,
+            checkpoint: Checkpoint,
+            engine: ParallelExecutionEngine,
+            trace_ctx: TraceContext,
+        ) -> ExecutionResult:
+            """Resume plan execution from a checkpoint."""
+            trace_ctx.log_event("resuming_from_checkpoint", {
+                "checkpoint_id": checkpoint.checkpoint_id,
+                "wave_index": checkpoint.wave_index,
+                "completed_steps": list(checkpoint.completed_steps.keys()),
+            })
 
-        return ExecutionResult(plan_id=plan.plan_id, state=state)
-```
+            # Reconstruct execution state from checkpoint
+            state = ExecutionState(plan=plan)
+            for step_id, output in checkpoint.completed_steps.items():
+                state.mark_completed(step_id, output)
+            for step_id, error in checkpoint.failed_steps.items():
+                state.mark_failed(step_id, error)
+
+            # Continue execution from next wave
+            remaining_waves = engine._compute_execution_waves(plan)
+            # Filter to waves that have not been completed
+            remaining_waves = [
+                wave for wave in remaining_waves
+                if any(s.step_id not in checkpoint.completed_steps for s in wave)
+            ]
+
+            for wave in remaining_waves:
+                # Filter out already-completed steps in partially completed waves
+                pending_steps = [
+                    s for s in wave if s.step_id not in checkpoint.completed_steps
+                ]
+                if not pending_steps:
+                    continue
+
+                results = await asyncio.gather(
+                    *[engine._execute_step(s, state, trace_ctx) for s in pending_steps],
+                    return_exceptions=True
+                )
+
+                for step, result in zip(pending_steps, results):
+                    if isinstance(result, Exception):
+                        state.mark_failed(step.step_id, result)
+                    else:
+                        state.mark_completed(step.step_id, result)
+
+                # Checkpoint after each wave
+                await self.save_checkpoint(plan.plan_id, wave.index, state)
+
+            return ExecutionResult(plan_id=plan.plan_id, state=state)
+    ```
 
 ### 10.3 Escalation Hierarchy
 
@@ -1852,24 +1956,26 @@ The following metrics are emitted as OpenTelemetry instruments:
 
 All log entries follow a structured JSON format with consistent fields:
 
-```json
-{
-  "timestamp": "2026-02-27T10:15:30.123Z",
-  "level": "INFO",
-  "service": "team-orchestrator",
-  "team_id": "team-alpha-research",
-  "task_id": "task-abc123",
-  "trace_id": "trace-xyz",
-  "span_id": "span-abc",
-  "event": "plan_generated",
-  "attributes": {
-    "plan_id": "plan-a1b2c3",
-    "step_count": 6,
-    "parallel_groups": 3,
-    "estimated_duration_ms": 8000
-  }
-}
-```
+??? example "View JSON example"
+
+    ```json
+    {
+      "timestamp": "2026-02-27T10:15:30.123Z",
+      "level": "INFO",
+      "service": "team-orchestrator",
+      "team_id": "team-alpha-research",
+      "task_id": "task-abc123",
+      "trace_id": "trace-xyz",
+      "span_id": "span-abc",
+      "event": "plan_generated",
+      "attributes": {
+        "plan_id": "plan-a1b2c3",
+        "step_count": 6,
+        "parallel_groups": 3,
+        "estimated_duration_ms": 8000
+      }
+    }
+    ```
 
 **Required log events** (minimum set for auditability):
 

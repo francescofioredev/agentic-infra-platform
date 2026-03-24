@@ -1,0 +1,117 @@
+site_name: AgentForge
+site_description: Agentic Orchestration & Monitoring Platform — Architecture Documentation
+site_url: https://francescofioredev.github.io/agentic-infra-platform/
+repo_url: https://github.com/francescofioredev/agentic-infra-platform
+repo_name: francescofioredev/agentic-infra-platform
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.top
+    - navigation.indexes
+    - navigation.path
+    - navigation.instant
+    - navigation.instant.progress
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - System Overview: architecture/00-system-overview.md
+      - ADR-001 — Master Decision Record: ADR-001-agentic-orchestration-platform.md
+      - Architecture Diagrams: architecture/24-architecture-diagrams.md
+  - Core Subsystems:
+      - Agent Builder: architecture/01-agent-builder.md
+      - Team Orchestrator: architecture/02-team-orchestrator.md
+      - Tool & MCP Manager: architecture/03-tool-mcp-manager.md
+      - Guardrail System: architecture/04-guardrail-system.md
+      - Observability Platform: architecture/05-observability-platform.md
+      - Code Generation Tools: architecture/06-code-generation-tools.md
+      - Prompt Registry: architecture/07-prompt-registry.md
+      - Evaluation Framework: architecture/08-evaluation-framework.md
+      - Cost & Resource Manager: architecture/09-cost-resource-manager.md
+  - Infrastructure:
+      - Memory & Context Management: architecture/11-memory-context-management.md
+      - External Integrations Hub: architecture/12-external-integrations-hub.md
+      - IAM & Access Control: architecture/13-iam-access-control.md
+      - Agent Deployment Pipeline: architecture/14-agent-deployment-pipeline.md
+      - Event Bus: architecture/15-event-bus.md
+      - Testing & Simulation: architecture/16-testing-simulation.md
+  - User-Facing:
+      - Conversation & Session Management: architecture/17-conversation-session-management.md
+      - Replay & Debugging: architecture/18-replay-debugging.md
+      - Scheduling & Background Jobs: architecture/19-scheduling-background-jobs.md
+      - Multi-Provider LLM Management: architecture/20-multi-provider-llm-management.md
+  - Runtime & Ops:
+      - Runtime & Deployment Environment: architecture/21-runtime-deployment-environment.md
+      - Cost Analysis: architecture/22-cost-analysis.md
+      - Open-Source Technology Map: architecture/23-open-source-technology-map.md
+      - Design Review Assessment: architecture/10-review-checklist-assessment.md
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.mark
+  - pymdownx.critic
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+      toc_depth: 3
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - def_list
+  - footnotes
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/extra.js
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/francescofioredev/agentic-infra-platform

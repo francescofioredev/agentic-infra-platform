@@ -43,24 +43,19 @@ ADK provides native primitives for **every** pattern in this architecture:
 - Allow future migration to LangGraph or custom engine
 - Inject platform concerns (tenant context, guardrail callbacks, trace context)
 
-```
-┌─────────────────────────────────────────────┐
-│           AgentForge Platform               │
-│                                             │
-│  ┌───────────────────────────────────────┐  │
-│  │         AgentRuntime (abstraction)    │  │
-│  │  - create_agent(spec) -> Agent        │  │
-│  │  - execute(agent, input) -> Output    │  │
-│  │  - inject_guardrails(callbacks)       │  │
-│  │  - inject_trace_context(span)         │  │
-│  └───────────────┬───────────────────────┘  │
-│                  │ wraps                    │
-│  ┌───────────────▼───────────────────────┐  │
-│  │         Google ADK Engine             │  │
-│  │  LlmAgent / LoopAgent / AgentTool /   │  │
-│  │  MCPToolset / SequentialAgent         │  │
-│  └───────────────────────────────────────┘  │
-└─────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph AFP["AgentForge Platform"]
+        direction TB
+        AR["AgentRuntime (abstraction)<br/><small>create_agent(spec) → Agent<br/>execute(agent, input) → Output<br/>inject_guardrails(callbacks)<br/>inject_trace_context(span)</small>"]
+        AR -->|"wraps"| ADK
+        ADK["Google ADK Engine<br/><small>LlmAgent / LoopAgent / AgentTool /<br/>MCPToolset / SequentialAgent</small>"]
+    end
+
+    classDef platform fill:#1ABC9C,stroke:#148F77,color:#fff
+    classDef runtime fill:#E67E22,stroke:#CA6F1E,color:#fff
+    class AR platform
+    class ADK runtime
 ```
 
 **Alternatives rejected**:
@@ -146,41 +141,43 @@ This is the most architecturally critical decision — how agents map to OS proc
 
 ### 3.1 Process Topology
 
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                          Kubernetes Cluster                                  │
-│                                                                              │
-│  ┌─────────────────────────────────────────────────────────────────────────┐ │
-│  │  Namespace: agentforge-platform (control plane)                         │ │
-│  │                                                                         │ │
-│  │  ┌──────────────────────┐   ┌──────────────────────────────────────┐   │  │
-│  │  │ Platform Orchestrator │   │ API Gateway (FastAPI)                 │   │ │
-│  │  │ Deployment (2 pods)  │   │ Deployment (3 pods, HPA)             │   │  │
-│  │  │ Python / ADK LlmAgent│   │ Handles REST, WebSocket, SSE         │   │  │
-│  │  └──────────────────────┘   └──────────────────────────────────────┘   │  │
-│  └─────────────────────────────────────────────────────────────────────────┘ │
-│                                                                              │
-│  ┌─────────────────────────────────────────────────────────────────────────┐ │
-│  │  Namespace: tenant-{id} (one per tenant)                                │ │
-│  │                                                                         │ │
-│  │  ┌────────────────────────────────────────────────────────┐             │ │
-│  │  │ Team-Alpha Pod (Team Supervisor + Workers in-process)   │             │ │
-│  │  │                                                         │             │ │
-│  │  │  ┌───────────────────────────────────────────────────┐  │             │ │
-│  │  │  │  Team Supervisor (ADK LoopAgent)                  │  │             │ │
-│  │  │  │  ├── Worker A1 (LlmAgent + MCPToolset) [in-proc] │  │             │ │
-│  │  │  │  ├── Worker A2 (LlmAgent + MCPToolset) [in-proc] │  │             │ │
-│  │  │  │  └── Worker A3 (LlmAgent + MCPToolset) [in-proc] │  │             │ │
-│  │  │  └───────────────────────────────────────────────────┘  │             │ │
-│  │  └────────────────────────────────────────────────────────┘             │ │
-│  │                                                                         │ │
-│  │  ┌─────────────────────────────────────────┐  ┌──────────────────────┐  │ │
-│  │  │ Guardrail Agent Pod                     │  │ MCP Server Pods      │  │ │
-│  │  │ (sidecar or dedicated Deployment)        │  │ (1 per tool category)│  │ │
-│  │  │ Monitors via before_tool_callback        │  │ FastMCP, stateless   │  │ │
-│  │  └─────────────────────────────────────────┘  └──────────────────────┘  │ │
-│  └─────────────────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph K8S["Kubernetes Cluster"]
+        direction TB
+        subgraph CP["Namespace: agentforge-platform (control plane)"]
+            direction LR
+            PO["Platform Orchestrator<br/><small>Deployment (2 pods)<br/>Python / ADK LlmAgent</small>"]
+            AG["API Gateway (FastAPI)<br/><small>Deployment (3 pods, HPA)<br/>REST, WebSocket, SSE</small>"]
+        end
+
+        subgraph TN["Namespace: tenant-id (one per tenant)"]
+            direction TB
+            subgraph TA["Team-Alpha Pod<br/><small>Team Supervisor + Workers in-process</small>"]
+                direction TB
+                TS["Team Supervisor (ADK LoopAgent)"]
+                W1["Worker A1<br/><small>LlmAgent + MCPToolset [in-proc]</small>"]
+                W2["Worker A2<br/><small>LlmAgent + MCPToolset [in-proc]</small>"]
+                W3["Worker A3<br/><small>LlmAgent + MCPToolset [in-proc]</small>"]
+                TS --> W1
+                TS --> W2
+                TS --> W3
+            end
+            GP["Guardrail Agent Pod<br/><small>sidecar or dedicated Deployment<br/>Monitors via before_tool_callback</small>"]
+            MCP["MCP Server Pods<br/><small>1 per tool category<br/>FastMCP, stateless</small>"]
+        end
+    end
+
+    classDef platform fill:#1ABC9C,stroke:#148F77,color:#fff
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef guardrail fill:#E74C3C,stroke:#C0392B,color:#fff
+    classDef runtime fill:#E67E22,stroke:#CA6F1E,color:#fff
+    class PO,AG platform
+    class TS core
+    class W1,W2,W3 infra
+    class GP guardrail
+    class MCP runtime
 ```
 
 ### 3.2 Intra-team vs. Inter-team Communication
@@ -189,20 +186,22 @@ This is the key split defined by the pattern book (p. 133 vs. p. 240):
 
 **Intra-team (Level 1 → Level 2)**: Direct function calls via ADK `AgentTool`
 
-```python
-# All in the SAME Python process / SAME K8s Pod
-worker_a1 = LlmAgent(name="researcher", tools=[MCPToolset(...)])
-worker_a2 = LlmAgent(name="writer", tools=[MCPToolset(...)])
+??? example "View Python pseudocode"
 
-supervisor = LoopAgent(
-    name="team_alpha_supervisor",
-    sub_agents=[
-        worker_a1,
-        LlmAgent(name="writer", tools=[AgentTool(agent=worker_a1)])
-    ],
-    max_iterations=10,
-)
-```
+    ```python
+    # All in the SAME Python process / SAME K8s Pod
+    worker_a1 = LlmAgent(name="researcher", tools=[MCPToolset(...)])
+    worker_a2 = LlmAgent(name="writer", tools=[MCPToolset(...)])
+
+    supervisor = LoopAgent(
+        name="team_alpha_supervisor",
+        sub_agents=[
+            worker_a1,
+            LlmAgent(name="writer", tools=[AgentTool(agent=worker_a1)])
+        ],
+        max_iterations=10,
+    )
+    ```
 
 - No serialization, no network overhead
 - Shared Python process memory for intermediate results
@@ -225,15 +224,17 @@ Platform Orchestrator Pod  →  A2A HTTP (mTLS + OAuth2)  →  Team-Alpha Pod
 
 MCP servers run as **separate stateless K8s Deployments**, not as STDIO subprocesses in production:
 
-```
-Development:   Team Pod spawns MCP server as STDIO subprocess (p. 160)
-               Fast iteration, no network overhead
+??? example "View details"
 
-Production:    MCP server runs as standalone K8s Deployment (HTTP+SSE transport, p. 160)
-               Team Pod connects via MCPToolset(SseServerParameters(url="http://mcp-search:8080"))
-               Stateless → HPA enabled
-               Shared across multiple Team Pods (one MCP server for search tools, etc.)
-```
+    ```
+    Development:   Team Pod spawns MCP server as STDIO subprocess (p. 160)
+                   Fast iteration, no network overhead
+
+    Production:    MCP server runs as standalone K8s Deployment (HTTP+SSE transport, p. 160)
+                   Team Pod connects via MCPToolset(SseServerParameters(url="http://mcp-search:8080"))
+                   Stateless → HPA enabled
+                   Shared across multiple Team Pods (one MCP server for search tools, etc.)
+    ```
 
 **MCP server categories and deployment**:
 
@@ -269,55 +270,73 @@ For standard tenants: Option A. For regulated industries (finance, healthcare): 
 
 ## 4. Full Deployment Architecture
 
-```
-                    ┌──────────────────────────────────────┐
-                    │         Cloud Provider               │
-                    │  (AWS EKS / GKE / Azure AKS)        │
-                    └──────────────────┬───────────────────┘
-                                       │
-                    ┌──────────────────▼───────────────────┐
-                    │           Ingress / API Gateway       │
-                    │    (Nginx Ingress or Istio Gateway)  │
-                    │    REST / WebSocket / SSE             │
-                    └──────────────────┬───────────────────┘
-                                       │
-          ┌────────────────────────────┼────────────────────────────┐
-          │                            │                            │
-          ▼                            ▼                            ▼
-┌─────────────────┐          ┌─────────────────┐          ┌─────────────────┐
-│ Platform Control│          │ NATS JetStream  │          │ Observability   │
-│ Plane Namespace │          │ Cluster         │          │ Stack           │
-│                 │          │ (Event Bus)     │          │                 │
-│ - API Gateway   │          │                 │          │ - Prometheus    │
-│ - Orchestrator  │          │                 │          │ - Jaeger/Tempo  │
-│ - IAM service   │          │                 │          │ - Grafana       │
-│ - LLM Gateway   │          │                 │          │ - Loki          │
-│ - Prompt Reg.   │          │                 │          │                 │
-└────────┬────────┘          └─────────────────┘          └─────────────────┘
-         │
-         │  A2A HTTP (mTLS via Istio)
-         │
-┌────────▼────────────────────────────────────────────────┐
-│  Tenant Namespaces (one per tenant)                     │
-│                                                         │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │ Team-Alpha   │  │ Team-Beta    │  │ Team-Gamma   │  │
-│  │ Deployment   │  │ Deployment   │  │ Deployment   │  │
-│  │ (HPA 1-10)   │  │ (HPA 1-10)   │  │ (HPA 1-10)   │  │
-│  └──────────────┘  └──────────────┘  └──────────────┘  │
-│                                                         │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │ mcp-search   │  │ mcp-code     │  │ mcp-data     │  │
-│  │ (HPA 2-10)   │  │ (sandboxed)  │  │ (per-tenant) │  │
-│  └──────────────┘  └──────────────┘  └──────────────┘  │
-└─────────────────────────────────────────────────────────┘
-         │
-┌────────▼────────────────────────────────────────────────┐
-│  Shared Data Layer                                      │
-│  PostgreSQL (RDS/CloudSQL)   Redis Cluster              │
-│  pgvector (RAG)              ClickHouse (time-series)   │
-│  HashiCorp Vault             Object Store (S3/GCS)      │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    CP["Cloud Provider<br/><small>AWS EKS / GKE / Azure AKS</small>"]
+    IG["Ingress / API Gateway<br/><small>Nginx Ingress or Istio Gateway<br/>REST / WebSocket / SSE</small>"]
+
+    CP --> IG
+
+    IG --> PCN
+    IG --> NATS
+    IG --> OBS
+
+    subgraph PCN["Platform Control Plane Namespace"]
+        direction TB
+        P1["API Gateway"]
+        P2["Orchestrator"]
+        P3["IAM service"]
+        P4["LLM Gateway"]
+        P5["Prompt Registry"]
+    end
+
+    NATS["NATS JetStream Cluster<br/><small>(Event Bus)</small>"]
+
+    subgraph OBS["Observability Stack"]
+        direction TB
+        O1["Prometheus"]
+        O2["Jaeger / Tempo"]
+        O3["Grafana"]
+        O4["Loki"]
+    end
+
+    PCN -->|"A2A HTTP (mTLS via Istio)"| TN
+
+    subgraph TN["Tenant Namespaces (one per tenant)"]
+        direction TB
+        TA["Team-Alpha<br/><small>HPA 1-10</small>"]
+        TB["Team-Beta<br/><small>HPA 1-10</small>"]
+        TG["Team-Gamma<br/><small>HPA 1-10</small>"]
+        MS["mcp-search<br/><small>HPA 2-10</small>"]
+        MC["mcp-code<br/><small>sandboxed</small>"]
+        MD["mcp-data<br/><small>per-tenant</small>"]
+    end
+
+    TN --> SDL
+
+    subgraph SDL["Shared Data Layer"]
+        direction LR
+        PG["PostgreSQL<br/><small>RDS/CloudSQL</small>"]
+        PGV["pgvector<br/><small>RAG</small>"]
+        RD["Redis Cluster"]
+        CH["ClickHouse<br/><small>time-series</small>"]
+        HV["HashiCorp Vault"]
+        OS["Object Store<br/><small>S3/GCS</small>"]
+    end
+
+    classDef platform fill:#1ABC9C,stroke:#148F77,color:#fff
+    classDef foundational fill:#F39C12,stroke:#D68910,color:#fff
+    classDef core fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef infra fill:#7B68EE,stroke:#5A4FCF,color:#fff
+    classDef runtime fill:#E67E22,stroke:#CA6F1E,color:#fff
+    classDef external fill:#95A5A6,stroke:#7F8C8D,color:#fff
+    class CP,IG external
+    class P1,P2,P3,P4,P5 platform
+    class NATS foundational
+    class O1,O2,O3,O4 foundational
+    class TA,TB,TG core
+    class MS,MC,MD runtime
+    class PG,PGV,RD,CH,HV,OS infra
 ```
 
 ---
@@ -339,22 +358,24 @@ For standard tenants: Option A. For regulated industries (finance, healthcare): 
 
 Within a Team Supervisor Pod, ADK uses Python `asyncio` for concurrency:
 
-```python
-# Parallel worker execution within a team (Parallelization pattern, p. 41)
-import asyncio
+??? example "View Python pseudocode"
 
-async def execute_team_task(task: Task) -> TeamResult:
-    # Decompose task into parallel subtasks
-    subtasks = supervisor.decompose(task)
+    ```python
+    # Parallel worker execution within a team (Parallelization pattern, p. 41)
+    import asyncio
 
-    # Execute workers concurrently (within same process, non-blocking)
-    results = await asyncio.gather(
-        *[worker.execute(subtask) for worker, subtask in zip(workers, subtasks)],
-        return_exceptions=True  # Don't let one failure cancel others
-    )
+    async def execute_team_task(task: Task) -> TeamResult:
+        # Decompose task into parallel subtasks
+        subtasks = supervisor.decompose(task)
 
-    return supervisor.aggregate(results)
-```
+        # Execute workers concurrently (within same process, non-blocking)
+        results = await asyncio.gather(
+            *[worker.execute(subtask) for worker, subtask in zip(workers, subtasks)],
+            return_exceptions=True  # Don't let one failure cancel others
+        )
+
+        return supervisor.aggregate(results)
+    ```
 
 This provides concurrent agent execution without thread overhead, aligned with the Parallelization pattern (p. 41).
 
@@ -424,22 +445,24 @@ Production
 
 ### Dockerfile (Python agent service)
 
-```dockerfile
-FROM python:3.12-slim AS builder
-WORKDIR /app
-COPY pyproject.toml .
-RUN pip install uv && uv sync --no-dev
+??? example "View Dockerfile"
 
-FROM python:3.12-slim
-WORKDIR /app
-COPY --from=builder /app/.venv /app/.venv
-COPY src/ ./src/
-ENV PATH="/app/.venv/bin:$PATH"
-# Non-root user for security
-RUN adduser --disabled-password --gecos '' appuser
-USER appuser
-ENTRYPOINT ["python", "-m", "agentforge.team_supervisor"]
-```
+    ```dockerfile
+    FROM python:3.12-slim AS builder
+    WORKDIR /app
+    COPY pyproject.toml .
+    RUN pip install uv && uv sync --no-dev
+
+    FROM python:3.12-slim
+    WORKDIR /app
+    COPY --from=builder /app/.venv /app/.venv
+    COPY src/ ./src/
+    ENV PATH="/app/.venv/bin:$PATH"
+    # Non-root user for security
+    RUN adduser --disabled-password --gecos '' appuser
+    USER appuser
+    ENTRYPOINT ["python", "-m", "agentforge.team_supervisor"]
+    ```
 
 ### Helm chart structure
 
