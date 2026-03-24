@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "pip3 install -r requirements.txt",
-  "buildCommand": "if [ -n \"$SITE_URL\" ]; then export SITE_URL; elif [ -n \"$VERCEL_PROJECT_PRODUCTION_URL\" ]; then export SITE_URL=\"https://$VERCEL_PROJECT_PRODUCTION_URL\"; fi; mkdocs build --strict",
+  "installCommand": "python3 -m venv .vercel-venv && ./.vercel-venv/bin/pip install -r requirements.txt",
+  "buildCommand": "if [ -n \"$SITE_URL\" ]; then export SITE_URL; elif [ -n \"$VERCEL_PROJECT_PRODUCTION_URL\" ]; then export SITE_URL=\"https://$VERCEL_PROJECT_PRODUCTION_URL\"; fi; ./.vercel-venv/bin/mkdocs build --strict",
   "outputDirectory": "site"
 }

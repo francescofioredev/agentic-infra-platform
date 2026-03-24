@@ -24,6 +24,7 @@ graph TD
             EF["Evaluation<br/>Framework"]
             CG["Code<br/>Gen"]
             CR["Cost &<br/>Resource Mgr"]
+            AB ~~~ TO ~~~ TM ~~~ GS ~~~ PR ~~~ EF ~~~ CG ~~~ CR
         end
 
         subgraph INFRA["Infrastructure"]
@@ -34,6 +35,7 @@ graph TD
             IA["IAM & Access<br/>Control"]
             SJ["Scheduling &<br/>Background Jobs"]
             RD["Replay &<br/>Debugging"]
+            MC ~~~ ML ~~~ EB ~~~ IA ~~~ SJ ~~~ RD
         end
 
         subgraph UF["User-Facing"]
@@ -41,12 +43,14 @@ graph TD
             CS["Conversation &<br/>Session Mgmt"]
             EI["External<br/>Integrations"]
             TS["Testing &<br/>Simulation"]
+            CS ~~~ EI ~~~ TS
         end
 
         subgraph DO["Deployment & Observability"]
             direction LR
             DP["Agent Deployment<br/>Pipeline (CI/CD)"]
             OP["Observability Platform<br/>(Tracing/Metrics/Dashboards)"]
+            DP ~~~ OP
         end
     end
 
@@ -186,29 +190,31 @@ Key design rules:
 
 ### 3.4 Defense-in-Depth Security Model
 
-The platform implements all six guardrail layers (p. 286):
+The platform implements seven guardrail layers:
 
 ```mermaid
 graph TD
-    classDef security fill:#E74C3C,stroke:#C0392B,color:#fff
-    classDef external fill:#95A5A6,stroke:#7F8C8D,color:#fff
+    classDef security fill:#E74C3C,stroke:#C0392B,color:#fff,stroke-width:2px
+    classDef external fill:#95A5A6,stroke:#7F8C8D,color:#fff,stroke-width:2px
+    classDef io fill:#EEF4FF,stroke:#5B6CFF,color:#243447,stroke-width:2px
 
-    UI["User Input"]
-    L1["Layer 1: Input Validation<br/><small>Validation, sanitization, PII detection,<br/>prompt injection detection (p. 286)</small>"]
-    L2["Layer 2: Behavioral Constraints<br/><small>System prompt constraints, role boundaries,<br/>forbidden action lists (p. 286)</small>"]
-    L3["Layer 3: Tool Restrictions<br/><small>Least Privilege tool assignment,<br/>before_tool_callback validation (p. 288, p. 295)</small>"]
-    L4["Layer 4: Guardrail Agents<br/><small>Dedicated guardrail agents evaluate<br/>actions against policy (p. 292)</small>"]
-    L5["Layer 5: External Moderation<br/><small>Content safety APIs, moderation<br/>classifiers (p. 286)</small>"]
-    L6["Layer 6: Output Filtering<br/><small>PII redaction, format validation,<br/>safety check before delivery (p. 286)</small>"]
-    L7["Layer 7: HITL Escalation<br/><small>Human escalation for high-stakes<br/>decisions (p. 207)</small>"]
-    UO["User Output"]
-
-    UI --> L1 --> L2 --> L3 --> L4 --> L5 --> L6 --> L7 --> UO
-
-    class L1,L2,L3,L4,L6 security
-    class L5 external
-    class L7 security
+    UI([User Input]):::io --> L1["L1<br/>Input Validation"]:::security
+    L1 --> L2["L2<br/>Behavioral Constraints"]:::security
+    L2 --> L3["L3<br/>Tool Restrictions"]:::security
+    L3 --> L4["L4<br/>Guardrail Agents"]:::security
+    L4 --> L5["L5<br/>External Moderation"]:::external
+    L5 --> L6["L6<br/>Output Filtering"]:::security
+    L6 --> L7["L7<br/>HITL Escalation"]:::security
+    L7 --> UO([User Output]):::io
 ```
+
+- **L1 - Input Validation**: validation, sanitization, PII detection, prompt injection detection (p. 286)
+- **L2 - Behavioral Constraints**: system prompt constraints, role boundaries, forbidden action lists (p. 286)
+- **L3 - Tool Restrictions**: least-privilege tool assignment, `before_tool_callback` validation (p. 288, p. 295)
+- **L4 - Guardrail Agents**: dedicated agents evaluate actions against policy (p. 292)
+- **L5 - External Moderation**: content safety APIs and moderation classifiers (p. 286)
+- **L6 - Output Filtering**: PII redaction, format validation, final safety check before delivery (p. 286)
+- **L7 - HITL Escalation**: human escalation for high-stakes decisions (p. 207)
 
 ### 3.5 Observability Architecture
 
